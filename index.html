@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Carnet — Suivi d'entraînement</title>
+
+  <!-- Polices Google Fonts : Space Grotesk pour les titres/chiffres, Manrope pour le texte courant -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- ===== BARRE LATÉRALE (navigation) ===== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">◆</span>
+        <span class="brand-name">Carnet</span>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item is-active" data-section="dashboard">
+          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M3 13h4v8H3v-8Zm7-9h4v17h-4V4Zm7 5h4v12h-4V9Z"/></svg>
+          Tableau de bord
+        </button>
+        <button class="nav-item" data-section="musculation">
+          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M2 10h2v4H2v-4Zm3-3h2v10H5V7Zm3 2h8v6H8V9Zm11-2h2v10h-2V7Zm3 3h2v4h-2v-4Z"/></svg>
+          Musculation
+        </button>
+        <button class="nav-item" data-section="crossfit">
+          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>
+          CrossFit
+        </button>
+        <button class="nav-item" data-section="mensurations">
+          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M4 4h16v6h-2V6H6v12h2v2H4V4Zm14 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM8 8h2v2H8V8Zm4 0h2v2h-2V8ZM8 12h2v2H8v-2Z"/></svg>
+          Mensurations
+        </button>
+        <button class="nav-item" data-section="records">
+          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>
+          Records
+        </button>
+        <button class="nav-item" data-section="statistiques">
+          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M4 20V4h2v14h14v2H4Zm3-4 4-5 3 3 5-7 1.5 1-6.5 9-3-3-3 4-1.5-1Z"/></svg>
+          Statistiques
+        </button>
+        <button class="nav-item" data-section="reglages">
+          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm8.6 1c0 .34-.03.67-.07 1l2.11 1.65-2 3.46-2.49-1a7.9 7.9 0 0 1-1.73 1l-.38 2.65h-4l-.38-2.65a7.9 7.9 0 0 1-1.73-1l-2.49 1-2-3.46L5.47 12a8 8 0 0 1 0-2L3.36 8.35l2-3.46 2.49 1a7.9 7.9 0 0 1 1.73-1L9.96 2.24h4l.38 2.65a7.9 7.9 0 0 1 1.73 1l2.49-1 2 3.46L18.53 10c.04.33.07.66.07 1Z"/></svg>
+          Réglages
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="hint">Version locale — vos données restent sur cet ordinateur</span>
+      </div>
+    </aside>
+
+    <!-- ===== CONTENU PRINCIPAL ===== -->
+    <main class="main">
+
+      <!-- En-tête commun à toutes les pages -->
+      <header class="topbar">
+        <h1 class="page-title" id="page-title">Tableau de bord</h1>
+        <button class="btn btn-primary" id="btn-add-session">+ Ajouter une séance</button>
+      </header>
+
+      <!-- ---------- SECTION : DASHBOARD ---------- -->
+      <section class="section is-active" id="section-dashboard">
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="stat-label">Poids actuel</span>
+            <span class="stat-value" id="stat-weight">—</span>
+            <span class="stat-trend" id="stat-weight-trend">—</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Séances cette semaine</span>
+            <span class="stat-value" id="stat-sessions">—</span>
+            <span class="stat-trend" id="stat-sessions-trend">—</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Volume d'entraînement</span>
+            <span class="stat-value" id="stat-volume">—</span>
+            <span class="stat-trend" id="stat-volume-trend">Cette semaine</span>
+          </div>
+          <div class="stat-card stat-card-accent">
+            <span class="stat-label">Records personnels</span>
+            <span class="stat-value" id="stat-pr">—</span>
+            <span class="stat-trend">ce mois-ci</span>
+          </div>
+        </div>
+
+        <div class="panel-grid">
+          <div class="panel">
+            <h2 class="panel-title">Progression récente</h2>
+            <div class="chart-container"><canvas id="chart-dashboard-recent" height="90"></canvas></div>
+          </div>
+          <div class="panel">
+            <h2 class="panel-title">Dernières séances</h2>
+            <ul class="session-list" id="recent-sessions-list">
+              <!-- Rempli automatiquement par js/app.js -->
+            </ul>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ---------- SECTION : MUSCULATION ---------- -->
+      <section class="section" id="section-musculation">
+        <div class="muscu-layout">
+
+          <div class="panel form-panel">
+            <h2 class="panel-title">Ajouter une séance</h2>
+            <form id="muscu-form">
+
+              <div class="form-row">
+                <label for="muscu-date">Date</label>
+                <input type="date" id="muscu-date" required>
+              </div>
+
+              <div class="form-row">
+                <label for="muscu-exercise-select">Exercice</label>
+                <select id="muscu-exercise-select"></select>
+                <input type="text" id="muscu-exercise-custom" class="form-input-spaced"
+                       placeholder="Nom de l'exercice" style="display:none;">
+              </div>
+
+              <div class="form-row">
+                <label>Séries</label>
+                <div id="muscu-sets-list" class="sets-list"></div>
+                <button type="button" id="muscu-add-set" class="btn btn-secondary btn-small">+ Ajouter une série</button>
+              </div>
+
+              <div class="form-row">
+                <label for="muscu-rpe">RPE <span class="label-optional">(optionnel)</span></label>
+                <input type="number" id="muscu-rpe" min="1" max="10" step="0.5" placeholder="ex : 8">
+              </div>
+
+              <div class="form-row">
+                <label for="muscu-notes">Notes</label>
+                <textarea id="muscu-notes" rows="2" placeholder="Sensations, technique..."></textarea>
+              </div>
+
+              <div class="form-row-buttons">
+                <button type="submit" class="btn btn-primary" id="muscu-submit-btn">Enregistrer la séance</button>
+                <button type="button" class="btn btn-secondary" id="muscu-cancel-edit" style="display:none;">Annuler la modification</button>
+              </div>
+              <p class="form-feedback" id="muscu-feedback"></p>
+            </form>
+          </div>
+
+          <div class="panel history-panel">
+            <div class="history-header">
+              <h2 class="panel-title">Historique</h2>
+              <select id="muscu-filter-exercise"></select>
+            </div>
+            <div id="muscu-history-list" class="history-list"></div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ---------- SECTION : CROSSFIT ---------- -->
+      <section class="section" id="section-crossfit">
+        <div class="muscu-layout">
+
+          <div class="panel form-panel">
+            <h2 class="panel-title">Ajouter un WOD</h2>
+            <form id="cf-form">
+
+              <div class="form-row">
+                <label for="cf-date">Date</label>
+                <input type="date" id="cf-date" required>
+              </div>
+
+              <div class="form-row">
+                <label for="cf-wod-select">Nom du WOD</label>
+                <select id="cf-wod-select"></select>
+                <input type="text" id="cf-wod-custom" class="form-input-spaced"
+                       placeholder="Nom du WOD" style="display:none;">
+              </div>
+
+              <div class="form-row">
+                <label for="cf-type">Type de WOD</label>
+                <select id="cf-type">
+                  <option value="For Time">For Time</option>
+                  <option value="AMRAP">AMRAP</option>
+                  <option value="EMOM">EMOM</option>
+                  <option value="Chipper">Chipper</option>
+                  <option value="Tabata">Tabata</option>
+                  <option value="Autre">Autre</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label for="cf-rx">RX / Scaled</label>
+                <select id="cf-rx">
+                  <option value="RX">RX</option>
+                  <option value="Scaled">Scaled</option>
+                </select>
+              </div>
+
+              <div class="form-row form-row-inline">
+                <div>
+                  <label for="cf-time">Temps <span class="label-optional">(mm:ss, si "For Time")</span></label>
+                  <input type="text" id="cf-time" placeholder="ex : 6:42">
+                </div>
+              </div>
+
+              <div class="form-row form-row-inline">
+                <div>
+                  <label for="cf-rounds">Rounds complets <span class="label-optional">(si AMRAP)</span></label>
+                  <input type="number" id="cf-rounds" min="0">
+                </div>
+                <div>
+                  <label for="cf-extra-reps">Reps en plus</label>
+                  <input type="number" id="cf-extra-reps" min="0">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <label>Mouvements</label>
+                <div id="cf-exercises-list" class="sets-list"></div>
+                <button type="button" id="cf-add-exercise" class="btn btn-secondary btn-small">+ Ajouter un mouvement</button>
+              </div>
+
+              <div class="form-row">
+                <label for="cf-notes">Notes</label>
+                <textarea id="cf-notes" rows="2" placeholder="Sensations, stratégie..."></textarea>
+              </div>
+
+              <div class="form-row-buttons">
+                <button type="submit" class="btn btn-primary" id="cf-submit-btn">Enregistrer le WOD</button>
+                <button type="button" class="btn btn-secondary" id="cf-cancel-edit" style="display:none;">Annuler la modification</button>
+              </div>
+              <p class="form-feedback" id="cf-feedback"></p>
+            </form>
+          </div>
+
+          <div class="panel history-panel">
+            <div class="history-header">
+              <h2 class="panel-title">Historique</h2>
+              <select id="cf-filter-wod"></select>
+            </div>
+            <div id="cf-history-list" class="history-list"></div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ---------- SECTION : MENSURATIONS ---------- -->
+      <section class="section" id="section-mensurations">
+        <div class="muscu-layout">
+
+          <div class="panel form-panel">
+            <h2 class="panel-title">Ajouter une mesure</h2>
+            <form id="weight-form">
+
+              <div class="form-row">
+                <label for="weight-date">Date</label>
+                <input type="date" id="weight-date" required>
+              </div>
+
+              <div class="form-row">
+                <label for="weight-value">Poids (kg)</label>
+                <input type="number" id="weight-value" min="0" step="0.1" required>
+              </div>
+
+              <div class="form-row-buttons">
+                <button type="submit" class="btn btn-primary" id="weight-submit-btn">Enregistrer</button>
+                <button type="button" class="btn btn-secondary" id="weight-cancel-edit" style="display:none;">Annuler la modification</button>
+              </div>
+              <p class="form-feedback" id="weight-feedback"></p>
+            </form>
+          </div>
+
+          <div class="panel history-panel">
+            <h2 class="panel-title">Historique du poids</h2>
+            <div id="weight-history-list" class="history-list"></div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ---------- SECTION : RECORDS ---------- -->
+      <section class="section" id="section-records">
+
+        <div class="panel">
+          <div class="records-header">
+            <h2 class="panel-title">Musculation</h2>
+            <button type="button" class="btn btn-secondary btn-small" id="btn-toggle-1rm-form">+ Noter un 1RM connu</button>
+          </div>
+
+          <form id="manual-1rm-form" class="manual-record-form" style="display:none;">
+            <div class="form-row">
+              <label for="manual-1rm-exercise-select">Exercice</label>
+              <select id="manual-1rm-exercise-select"></select>
+              <input type="text" id="manual-1rm-exercise-custom" class="form-input-spaced"
+                     placeholder="Nom de l'exercice" style="display:none;">
+            </div>
+            <div class="form-row form-row-inline">
+              <div>
+                <label for="manual-1rm-weight">Poids (kg)</label>
+                <input type="number" id="manual-1rm-weight" min="0" step="0.5" required>
+              </div>
+              <div>
+                <label for="manual-1rm-date">Date <span class="label-optional">(optionnel)</span></label>
+                <input type="date" id="manual-1rm-date">
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="manual-1rm-notes">Notes <span class="label-optional">(optionnel)</span></label>
+              <input type="text" id="manual-1rm-notes" placeholder="ex : compétition, testé en salle...">
+            </div>
+            <div class="form-row-buttons">
+              <button type="submit" class="btn btn-primary btn-small">Enregistrer ce 1RM</button>
+              <button type="button" class="btn btn-secondary btn-small" id="btn-cancel-1rm-form">Annuler</button>
+            </div>
+          </form>
+
+          <div id="records-muscu-grid" class="records-grid"></div>
+          <p class="records-footnote">* Le 1RM (charge maximale sur une répétition) est soit saisi directement par toi, soit estimé à partir de tes séries — c'est toujours précisé sur la carte. Une estimation n'est jamais une valeur mesurée.</p>
+        </div>
+
+        <div class="panel" style="margin-top: 16px;">
+          <div class="records-header">
+            <h2 class="panel-title">CrossFit</h2>
+            <button type="button" class="btn btn-secondary btn-small" id="btn-toggle-cf-record-form">+ Noter un résultat connu</button>
+          </div>
+
+          <form id="manual-cf-record-form" class="manual-record-form" style="display:none;">
+            <div class="form-row">
+              <label for="manual-cf-wod-select">Nom du WOD</label>
+              <select id="manual-cf-wod-select"></select>
+              <input type="text" id="manual-cf-wod-custom" class="form-input-spaced"
+                     placeholder="Nom du WOD" style="display:none;">
+            </div>
+            <div class="form-row form-row-inline">
+              <div>
+                <label for="manual-cf-time">Temps <span class="label-optional">(mm:ss)</span></label>
+                <input type="text" id="manual-cf-time" placeholder="ex : 5:48">
+              </div>
+              <div>
+                <label for="manual-cf-date">Date <span class="label-optional">(optionnel)</span></label>
+                <input type="date" id="manual-cf-date">
+              </div>
+            </div>
+            <div class="form-row form-row-inline">
+              <div>
+                <label for="manual-cf-rounds">Rounds <span class="label-optional">(si pas de temps)</span></label>
+                <input type="number" id="manual-cf-rounds" min="0">
+              </div>
+              <div>
+                <label for="manual-cf-extra-reps">Reps en plus</label>
+                <input type="number" id="manual-cf-extra-reps" min="0">
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="manual-cf-notes">Notes <span class="label-optional">(optionnel)</span></label>
+              <input type="text" id="manual-cf-notes" placeholder="ex : compétition, avant l'application...">
+            </div>
+            <div class="form-row-buttons">
+              <button type="submit" class="btn btn-primary btn-small">Enregistrer ce résultat</button>
+              <button type="button" class="btn btn-secondary btn-small" id="btn-cancel-cf-record-form">Annuler</button>
+            </div>
+          </form>
+
+          <div id="records-cf-grid" class="records-grid"></div>
+        </div>
+
+      </section>
+
+      <!-- ---------- SECTION : STATISTIQUES ---------- -->
+      <section class="section" id="section-statistiques">
+
+        <div class="panel">
+          <h2 class="panel-title">Poids de corps</h2>
+          <div class="chart-container"><canvas id="chart-bodyweight" height="90"></canvas></div>
+        </div>
+
+        <div class="panel" style="margin-top: 16px;">
+          <div class="stats-chart-header">
+            <h2 class="panel-title">Progression d'un exercice (1RM estimé)</h2>
+            <select id="stats-exercise-select"></select>
+          </div>
+          <div class="chart-container"><canvas id="chart-exercise" height="90"></canvas></div>
+        </div>
+
+        <div class="panel-grid" style="margin-top: 16px;">
+          <div class="panel">
+            <h2 class="panel-title">Volume par semaine</h2>
+            <div class="chart-container"><canvas id="chart-volume" height="110"></canvas></div>
+          </div>
+          <div class="panel">
+            <h2 class="panel-title">Séances par semaine</h2>
+            <div class="chart-container"><canvas id="chart-sessions" height="110"></canvas></div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top: 16px;">
+          <div class="stats-chart-header">
+            <h2 class="panel-title">Progression sur un WOD</h2>
+            <select id="stats-wod-select"></select>
+          </div>
+          <div class="chart-container"><canvas id="chart-wod" height="90"></canvas></div>
+        </div>
+
+      </section>
+
+      <!-- ---------- SECTION : RÉGLAGES ---------- -->
+      <section class="section" id="section-reglages">
+
+        <div class="panel">
+          <h2 class="panel-title">Sauvegarde de tes données</h2>
+          <p class="settings-text">
+            Tes données sont stockées uniquement dans ce navigateur, sur cet ordinateur (c'est ce qu'on appelle le
+            <strong>stockage local</strong>). Elles ne sont copiées nulle part ailleurs automatiquement. Exporte
+            régulièrement une sauvegarde pour ne jamais les perdre — par exemple avant de changer d'ordinateur ou de
+            nettoyer ton navigateur.
+          </p>
+          <div class="settings-actions">
+            <button type="button" class="btn btn-primary" id="btn-export-data">Exporter mes données (.json)</button>
+            <button type="button" class="btn btn-secondary" id="btn-import-data">Importer une sauvegarde</button>
+            <input type="file" id="import-file-input" accept="application/json,.json" style="display:none;">
+          </div>
+          <p class="form-feedback" id="settings-feedback"></p>
+        </div>
+
+        <div class="panel panel-danger" style="margin-top: 16px;">
+          <h2 class="panel-title">Zone de danger</h2>
+          <p class="settings-text">
+            Supprime définitivement toutes tes séances, mesures de poids et records de cet appareil. Cette action est
+            irréversible — pense à faire un export juste avant si tu n'es pas sûr.
+          </p>
+          <button type="button" class="btn btn-danger" id="btn-reset-data">Réinitialiser toutes les données</button>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ===== FENÊTRE "NOUVELLE SÉANCE" (cachée par défaut) ===== -->
+  <div class="modal-overlay" id="add-session-modal">
+    <div class="modal">
+      <h2 class="modal-title">Nouvelle séance</h2>
+      <p class="modal-text">Quel type d'entraînement veux-tu enregistrer ?</p>
+      <div class="modal-choices">
+        <button class="modal-choice" data-choice="musculation">Musculation</button>
+        <button class="modal-choice" data-choice="crossfit">CrossFit</button>
+      </div>
+      <button class="modal-cancel" id="modal-cancel-btn">Annuler</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <script src="js/data.js"></script>
+  <script src="js/musculation.js"></script>
+  <script src="js/crossfit.js"></script>
+  <script src="js/mensurations.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
+

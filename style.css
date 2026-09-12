@@ -1,0 +1,748 @@
+/* ==========================================================================
+   VARIABLES DE DESIGN (couleurs, polices...)
+   Modifier ces valeurs change tout le thème de l'application.
+   ========================================================================== */
+:root {
+  /* Fond et surfaces */
+  --bg: #0B0C0E;             /* fond général, noir légèrement chaud */
+  --surface: #16181B;         /* fond des cartes */
+  --surface-raised: #1D2023;  /* survol / éléments actifs */
+  --border: #26292D;
+
+  /* Texte */
+  --text-primary: #F2F3F4;
+  --text-secondary: #90949B;
+  --text-muted: #5C6066;
+
+  /* Accent principal : laiton / métal, rappel des disques de fonte */
+  --accent: #D3A24E;
+  --accent-soft: rgba(211, 162, 78, 0.14);
+  --accent-strong: #E8B968;
+
+  /* Accents secondaires, utilisés avec parcimonie */
+  --success: #4CAF7D;
+  --danger: #E1584F;
+
+  /* Typographie */
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Manrope', sans-serif;
+
+  /* Rayons et ombres (utilisés sobrement, pas partout) */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; }
+
+/* ==========================================================================
+   MISE EN PAGE GÉNÉRALE
+   ========================================================================== */
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ----- Barre latérale ----- */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 28px 8px;
+}
+.brand-mark {
+  color: var(--accent);
+  font-size: 18px;
+}
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: 0.2px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-item:hover {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+.nav-item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 8px 0 8px;
+  border-top: 1px solid var(--border);
+}
+.hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ----- Zone principale ----- */
+.main {
+  flex: 1;
+  padding: 32px 40px;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+.page-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.btn {
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+.btn:active { transform: scale(0.98); }
+.btn-primary {
+  background: var(--accent);
+  color: #1A1200;
+}
+.btn-primary:hover { background: var(--accent-strong); }
+
+/* ==========================================================================
+   SECTIONS (une seule visible à la fois)
+   ========================================================================== */
+.section { display: none; }
+.section.is-active { display: block; }
+
+/* ----- Cartes statistiques (dashboard) ----- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+.stat-card-accent {
+  border-color: rgba(211, 162, 78, 0.35);
+}
+.stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+}
+.stat-value small {
+  font-size: 15px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.stat-trend {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.stat-trend-up { color: var(--success); }
+.stat-trend-down { color: var(--danger); }
+
+/* ----- Panneaux (graphiques, listes) ----- */
+.panel-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+}
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+.chart-placeholder {
+  height: 200px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+.session-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 100px;
+}
+.session-tag-muscu { background: var(--accent-soft); color: var(--accent-strong); }
+.session-tag-cf { background: rgba(76, 175, 125, 0.14); color: var(--success); }
+.session-name { flex: 1; font-weight: 500; }
+.session-meta { color: var(--text-muted); font-size: 12px; }
+
+/* ----- États vides (pages pas encore construites) ----- */
+.empty-state {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 60px 24px;
+  text-align: center;
+}
+.empty-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+}
+.empty-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0;
+}
+
+/* ==========================================================================
+   RESPONSIVE : tablette et mobile
+   ========================================================================== */
+@media (max-width: 960px) {
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .panel-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .app { flex-direction: column; }
+
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    padding: 12px 16px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { padding: 0 12px 0 0; }
+  .nav {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+  }
+  .nav-item { white-space: nowrap; }
+  .nav-item span { display: none; } /* on garde juste les icônes sur mobile */
+  .sidebar-footer { display: none; }
+
+  .main { padding: 20px 16px; }
+  .topbar { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .btn-primary { width: 100%; }
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+}
+
+/* ==========================================================================
+   PAGE MUSCULATION — formulaire + historique
+   ========================================================================== */
+
+.muscu-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+/* ----- Champs de formulaire, communs à toute l'app ----- */
+.form-row {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-row label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.label-optional { color: var(--text-muted); font-weight: 400; }
+
+.form-row input[type="text"],
+.form-row input[type="number"],
+.form-row input[type="date"],
+.form-row select,
+.form-row textarea {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  width: 100%;
+}
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.form-row textarea { resize: vertical; }
+.form-input-spaced { margin-top: 8px; }
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent-strong); }
+.btn-small { padding: 7px 12px; font-size: 13px; }
+
+.form-feedback {
+  margin: 10px 0 0 0;
+  font-size: 13px;
+  min-height: 18px;
+}
+.form-feedback-success { color: var(--success); }
+.form-feedback-error { color: var(--danger); }
+
+/* ----- Lignes de séries (reps × poids) ----- */
+.sets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.set-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.set-x { color: var(--text-muted); font-size: 13px; }
+.set-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+}
+.set-remove:hover { color: var(--danger); }
+
+/* Ligne de mouvement CrossFit : un seul champ texte + bouton supprimer */
+.set-row-single { grid-template-columns: 1fr auto; }
+
+/* Deux champs de formulaire côte à côte (ex : rounds + reps en plus) */
+.form-row-inline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.form-row-inline > div { display: flex; flex-direction: column; gap: 6px; }
+.form-row-inline label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+
+/* ----- Historique (cartes) ----- */
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.history-header select {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 560px;
+  overflow-y: auto;
+}
+.history-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.history-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.history-card-title { flex: 1; }
+.history-card-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+}
+.history-card-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.history-card-sets {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 6px 0;
+}
+.badge-rpe {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+.history-card-notes {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 8px 0 0 0;
+  font-style: italic;
+}
+
+@media (max-width: 960px) {
+  .muscu-layout { grid-template-columns: 1fr; }
+}
+
+/* ----- Groupe de boutons du formulaire (Enregistrer / Annuler la modification) ----- */
+.form-row-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+/* ==========================================================================
+   PAGE HISTORIQUE — filtres + liste complète
+   ========================================================================== */
+.hist-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.hist-filters select,
+.hist-filters input[type="text"] {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: var(--font-body);
+}
+.hist-filters input[type="text"] { flex: 1; min-width: 180px; }
+.hist-date-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.hist-date-label input[type="date"] {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.history-list-full {
+  max-height: none;
+}
+
+.history-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* ==========================================================================
+   PAGE RECORDS — grille de cartes 1RM / meilleurs temps
+   ========================================================================== */
+.records-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.record-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px;
+}
+.record-card-title {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 10px;
+}
+.record-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.record-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+.record-value small { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+.record-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.record-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.records-footnote {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.records-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.manual-record-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.record-manage {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+.record-link {
+  background: transparent;
+  border: none;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.record-link:hover { text-decoration: underline; }
+.record-link-danger { color: var(--danger); }
+
+/* ==========================================================================
+   PAGE RÉGLAGES — export / import / réinitialisation
+   ========================================================================== */
+.settings-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 18px 0;
+  max-width: 640px;
+}
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.panel-danger {
+  border-color: rgba(225, 88, 79, 0.35);
+}
+.btn-danger {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+.btn-danger:hover {
+  background: rgba(225, 88, 79, 0.1);
+}
+
+/* ==========================================================================
+   PAGE STATISTIQUES — en-têtes de graphique avec sélecteur
+   ========================================================================== */
+.stats-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.stats-chart-header select {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+/* Conteneur à hauteur fixe requis par Chart.js pour bien dimensionner
+   ses graphiques en mode responsive. Sans ça, un canvas placé dans une
+   grille flexible peut s'écraser à une hauteur de 0 pixel. */
+.chart-container {
+  position: relative;
+  height: 220px;
+  width: 100%;
+}
+.chart-container canvas { width: 100% !important; height: 100% !important; }
+
+/* ==========================================================================
+   FENÊTRE MODALE — choix du type de séance
+   ========================================================================== */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal-overlay.is-visible { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 28px;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+.modal-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0 0 20px 0;
+}
+.modal-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.modal-choice {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modal-choice:hover { border-color: var(--accent); color: var(--accent-strong); }
+.modal-cancel {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.modal-cancel:hover { color: var(--text-secondary); }
