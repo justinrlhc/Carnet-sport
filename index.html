@@ -121,27 +121,12 @@
                 <input type="date" id="muscu-date" required>
               </div>
 
-              <div class="form-row">
-                <label for="muscu-exercise-select">Exercice</label>
-                <select id="muscu-exercise-select"></select>
-                <input type="text" id="muscu-exercise-custom" class="form-input-spaced"
-                       placeholder="Nom de l'exercice" style="display:none;">
-              </div>
+              <div id="muscu-exercises-list"></div>
+              <button type="button" id="muscu-add-exercise-block" class="btn btn-secondary btn-small" style="margin-bottom: 16px;">+ Ajouter un exercice</button>
 
               <div class="form-row">
-                <label>Séries</label>
-                <div id="muscu-sets-list" class="sets-list"></div>
-                <button type="button" id="muscu-add-set" class="btn btn-secondary btn-small">+ Ajouter une série</button>
-              </div>
-
-              <div class="form-row">
-                <label for="muscu-rpe">RPE <span class="label-optional">(optionnel)</span></label>
-                <input type="number" id="muscu-rpe" min="1" max="10" step="0.5" placeholder="ex : 8">
-              </div>
-
-              <div class="form-row">
-                <label for="muscu-notes">Notes</label>
-                <textarea id="muscu-notes" rows="2" placeholder="Sensations, technique..."></textarea>
+                <label for="muscu-notes">Notes de la séance <span class="label-optional">(optionnel)</span></label>
+                <textarea id="muscu-notes" rows="2" placeholder="Sensations, ressenti général..."></textarea>
               </div>
 
               <div class="form-row-buttons">
@@ -377,6 +362,11 @@
       <section class="section" id="section-statistiques">
 
         <div class="panel">
+          <h2 class="panel-title">Régularité</h2>
+          <div id="attendance-heatmap"></div>
+        </div>
+
+        <div class="panel" style="margin-top: 16px;">
           <h2 class="panel-title">Poids de corps</h2>
           <div class="chart-container"><canvas id="chart-bodyweight" height="90"></canvas></div>
         </div>

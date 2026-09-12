@@ -175,8 +175,18 @@ cfForm.addEventListener("submit", (event) => {
     updateSession(cfEditingId, sessionData);
     showCfFeedback("WOD mis à jour !", false);
   } else {
+    const recordsBefore = typeof computeCfRecords === "function" ? computeCfRecords() : {};
     addSession(sessionData);
-    showCfFeedback("WOD enregistré !", false);
+
+    const newRecord = typeof detectCfNewRecords === "function"
+      ? detectCfNewRecords(recordsBefore, wodName, sessionData.date)
+      : null;
+
+    if (newRecord) {
+      showCfRecordBadge(wodName, newRecord);
+    } else {
+      showCfFeedback("WOD enregistré !", false);
+    }
   }
 
   cancelCfEdit();
@@ -185,6 +195,46 @@ cfForm.addEventListener("submit", (event) => {
   if (typeof renderDashboard === "function") renderDashboard();
   if (typeof renderHistorique === "function") renderHistorique();
 });
+
+/**
+ * Pré-remplit le formulaire avec les valeurs d'un WOD existant, mais SANS
+ * passer en mode édition : la validation créera un tout nouveau WOD,
+ * daté d'aujourd'hui.
+ */
+function duplicateCfSession(session) {
+  cfEditingId = null;
+
+  cfDateInput.value = new Date().toISOString().split("T")[0];
+
+  populateWodSelects();
+  const exists = [...cfWodSelect.options].some((o) => o.value === session.wodName);
+  if (exists) {
+    cfWodSelect.value = session.wodName;
+    cfWodCustom.style.display = "none";
+  } else {
+    cfWodSelect.value = "__custom__";
+    cfWodCustom.style.display = "block";
+    cfWodCustom.value = session.wodName;
+  }
+
+  cfTypeSelect.value = session.wodType || "For Time";
+  cfRxSelect.value = session.rxOrScaled || "RX";
+  cfTimeInput.value = "";
+  cfRoundsInput.value = "";
+  cfExtraRepsInput.value = "";
+
+  cfExercisesList.innerHTML = "";
+  (session.exercises && session.exercises.length ? session.exercises : ["", ""]).forEach((ex) => {
+    const row = createExerciseRow();
+    row.querySelector(".cf-exercise-input").value = ex;
+    cfExercisesList.appendChild(row);
+  });
+
+  cfNotesInput.value = "";
+
+  cfSubmitBtn.textContent = "Enregistrer le WOD";
+  cfCancelEditBtn.style.display = "none";
+}
 
 /**
  * Remplit le formulaire avec les valeurs d'un WOD existant et bascule
@@ -245,6 +295,18 @@ function showCfFeedback(message, isError) {
   setTimeout(() => { cfFeedback.textContent = ""; }, 3000);
 }
 
+/** Affiche un badge mis en avant quand le WOD qu'on vient d'enregistrer bat un record. */
+function showCfRecordBadge(wodName, record) {
+  const label = record.type === "time" ? "meilleur temps" : "meilleure performance";
+  cfFeedback.innerHTML = `
+    <span class="record-badge">
+      <svg viewBox="0 0 24 24" class="record-badge-icon"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>
+      Nouveau record ! ${wodName} — ${label} : ${record.value}
+    </span>`;
+  cfFeedback.className = "form-feedback";
+  setTimeout(() => { cfFeedback.innerHTML = ""; }, 5000);
+}
+
 // --------------------------------------------------------------------------
 // HISTORIQUE (liste des WOD, filtrable par nom)
 // --------------------------------------------------------------------------
@@ -294,10 +356,15 @@ function renderCfHistory() {
       <span class="badge-rpe">${session.rxOrScaled}</span>
       ${session.notes ? `<p class="history-card-notes">${session.notes}</p>` : ""}
       <div class="history-card-actions">
+        <button type="button" class="btn btn-secondary btn-small hist-repeat-btn">Refaire ce WOD</button>
         <button type="button" class="btn btn-secondary btn-small hist-edit-btn">Modifier</button>
         <button type="button" class="btn btn-secondary btn-small hist-delete-btn">Supprimer</button>
       </div>
     `;
+    card.querySelector(".hist-repeat-btn").addEventListener("click", () => {
+      duplicateCfSession(session);
+      document.querySelector("#section-crossfit .form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
     card.querySelector(".hist-edit-btn").addEventListener("click", () => {
       startEditCfSession(session);
       document.querySelector("#section-crossfit .form-panel").scrollIntoView({ behavior: "smooth", block: "start" });

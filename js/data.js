@@ -23,14 +23,15 @@ const STORAGE_KEY_MANUAL_CF_BEST = "carnet_manual_cf_best";
 // --------------------------------------------------------------------------
 // FORME D'UNE SÉANCE (à titre indicatif, ce n'est pas du code exécuté)
 //
-// Séance de musculation :
+// Séance de musculation (une séance peut contenir PLUSIEURS exercices) :
 // {
 //   id: "s1",
 //   type: "musculation",
 //   date: "2026-09-10",
-//   exercise: "Back Squat",
-//   sets: [ { reps: 5, weight: 120 }, { reps: 5, weight: 120 } ],
-//   rpe: 8,
+//   exercises: [
+//     { exercise: "Back Squat", sets: [{ reps: 5, weight: 120 }], rpe: 8 },
+//     { exercise: "Bench Press", sets: [{ reps: 5, weight: 80 }], rpe: 7 }
+//   ],
 //   notes: "Bonne séance"
 // }
 //
@@ -234,29 +235,35 @@ function ensureDemoData() {
   }
 
   const demoSessions = [
-    { type: "musculation", date: daysAgo(1), exercise: "Back Squat",
-      sets: [{ reps: 5, weight: 120 }, { reps: 5, weight: 120 }, { reps: 4, weight: 120 }],
-      rpe: 8, notes: "Bonne séance, technique stable" },
+    { type: "musculation", date: daysAgo(1), notes: "Bonne séance, technique stable",
+      exercises: [
+        { exercise: "Back Squat", sets: [{ reps: 5, weight: 120 }, { reps: 5, weight: 120 }, { reps: 4, weight: 120 }], rpe: 8 },
+        { exercise: "Romanian Deadlift", sets: [{ reps: 8, weight: 80 }, { reps: 8, weight: 80 }], rpe: 6 },
+      ] },
 
     { type: "crossfit", date: daysAgo(2), wodName: "Fran", scheme: "21-15-9",
       exercises: ["Thrusters 42,5 kg", "Pull-ups"], rxOrScaled: "RX",
       timeSeconds: 402, notes: "" },
 
-    { type: "musculation", date: daysAgo(4), exercise: "Bench Press",
-      sets: [{ reps: 5, weight: 85 }, { reps: 5, weight: 85 }, { reps: 3, weight: 90 }],
-      rpe: 9, notes: "" },
+    { type: "musculation", date: daysAgo(4), notes: "",
+      exercises: [
+        { exercise: "Bench Press", sets: [{ reps: 5, weight: 85 }, { reps: 5, weight: 85 }, { reps: 3, weight: 90 }], rpe: 9 },
+        { exercise: "Incline Bench Press", sets: [{ reps: 8, weight: 60 }, { reps: 8, weight: 60 }], rpe: 7 },
+      ] },
 
-    { type: "musculation", date: daysAgo(6), exercise: "Deadlift",
-      sets: [{ reps: 3, weight: 150 }, { reps: 3, weight: 150 }],
-      rpe: 8, notes: "" },
+    { type: "musculation", date: daysAgo(6), notes: "",
+      exercises: [
+        { exercise: "Deadlift", sets: [{ reps: 3, weight: 150 }, { reps: 3, weight: 150 }], rpe: 8 },
+      ] },
 
     { type: "crossfit", date: daysAgo(9), wodName: "Cindy", scheme: "AMRAP 20",
       exercises: ["Pull-ups", "Push-ups", "Air Squats"], rxOrScaled: "RX",
       timeSeconds: null, rounds: 18, notes: "" },
 
-    { type: "musculation", date: daysAgo(11), exercise: "Back Squat",
-      sets: [{ reps: 5, weight: 115 }, { reps: 5, weight: 115 }, { reps: 5, weight: 115 }],
-      rpe: 7, notes: "" },
+    { type: "musculation", date: daysAgo(11), notes: "",
+      exercises: [
+        { exercise: "Back Squat", sets: [{ reps: 5, weight: 115 }, { reps: 5, weight: 115 }, { reps: 5, weight: 115 }], rpe: 7 },
+      ] },
   ];
 
   demoSessions.forEach((s) => addSession(s));
@@ -266,6 +273,30 @@ function ensureDemoData() {
   addBodyweightEntry(daysAgo(20), 82.8);
   addBodyweightEntry(daysAgo(10), 82.6);
   addBodyweightEntry(daysAgo(1), 82.4);
+}
+
+/**
+ * Les séances de musculation créées avant cette mise à jour n'avaient
+ * qu'un seul exercice chacune (champs "exercise", "sets", "rpe" directement
+ * sur la séance). Cette fonction les transforme, une seule fois, vers le
+ * nouveau format où une séance contient un tableau "exercises" — pour
+ * pouvoir enregistrer plusieurs exercices dans la même séance sans perdre
+ * tes anciennes données.
+ */
+function ensureMuscuSessionsMigrated() {
+  const sessions = getAllSessions();
+  let changed = false;
+
+  const migrated = sessions.map((session) => {
+    if (session.type === "musculation" && !session.exercises) {
+      changed = true;
+      const { exercise, sets, rpe, ...rest } = session;
+      return { ...rest, exercises: [{ exercise, sets, rpe }] };
+    }
+    return session;
+  });
+
+  if (changed) saveAllSessions(migrated);
 }
 
 /**
@@ -331,3 +362,4 @@ function importAllData(jsonString) {
 // premier dans index.html.
 ensureDemoData();
 ensureBodyweightIds();
+ensureMuscuSessionsMigrated();

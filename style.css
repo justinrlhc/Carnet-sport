@@ -347,11 +347,11 @@ button { font-family: inherit; }
 }
 .label-optional { color: var(--text-muted); font-weight: 400; }
 
-.form-row input[type="text"],
-.form-row input[type="number"],
-.form-row input[type="date"],
-.form-row select,
-.form-row textarea {
+.app input[type="text"],
+.app input[type="number"],
+.app input[type="date"],
+.app select,
+.app textarea {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -361,13 +361,13 @@ button { font-family: inherit; }
   font-family: var(--font-body);
   width: 100%;
 }
-.form-row input:focus,
-.form-row select:focus,
-.form-row textarea:focus {
+.app input:focus,
+.app select:focus,
+.app textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
-.form-row textarea { resize: vertical; }
+.app textarea { resize: vertical; }
 .form-input-spaced { margin-top: 8px; }
 
 .btn-secondary {
@@ -385,6 +385,24 @@ button { font-family: inherit; }
 }
 .form-feedback-success { color: var(--success); }
 .form-feedback-error { color: var(--danger); }
+
+.record-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 100px;
+}
+.record-badge-icon {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
 
 /* ----- Lignes de séries (reps × poids) ----- */
 .sets-list {
@@ -421,6 +439,55 @@ button { font-family: inherit; }
 }
 .form-row-inline > div { display: flex; flex-direction: column; gap: 6px; }
 .form-row-inline label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+
+/* ----- Blocs exercice (une séance peut contenir plusieurs exercices) ----- */
+.exercise-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 14px;
+  background: var(--surface-raised);
+}
+.exercise-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.exercise-block-header select.exercise-block-select {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 9px 10px;
+  font-size: 14px;
+  font-family: var(--font-body);
+}
+.exercise-block-custom { flex: 1; }
+.exercise-block-header .exercise-block-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+.exercise-block-header .exercise-block-remove:hover { color: var(--danger); }
+
+/* ----- Historique : plusieurs exercices affichés dans une même carte de séance ----- */
+.history-card-exercise {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.history-card-exercise:first-of-type { border-top: none; padding-top: 0; }
+.history-card-exercise-name {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
 
 /* ----- Historique (cartes) ----- */
 .history-header {
@@ -675,6 +742,41 @@ button { font-family: inherit; }
   border-radius: var(--radius-sm);
   padding: 7px 12px;
   font-size: 13px;
+}
+
+/* ----- Calendrier d'assiduité (heatmap) ----- */
+.hm-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.hm-grid {
+  display: flex;
+  gap: 3px;
+  width: fit-content;
+}
+.hm-column {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.hm-cell {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+}
+.hm-level-0 { background: var(--surface-raised); border: 1px solid var(--border); }
+.hm-level-1 { background: rgba(211, 162, 78, 0.45); }
+.hm-level-2 { background: var(--accent); }
+.hm-future { background: transparent; }
+.hm-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 /* Conteneur à hauteur fixe requis par Chart.js pour bien dimensionner

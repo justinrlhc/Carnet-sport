@@ -1,35 +1,43 @@
 // ==========================================================================
-// musculation.js — tout ce qui concerne la page Musculation :
-//   - remplir la liste déroulante d'exercices
-//   - ajouter/enlever des lignes de séries dans le formulaire
-//   - enregistrer une séance (via addSession, fourni par data.js)
-//   - afficher l'historique, filtrable par exercice
+// musculation.js — tout ce qui concerne la page Musculation.
+//
+// Point important sur la structure : une séance peut désormais contenir
+// PLUSIEURS exercices (ex : une séance "pecs" avec Bench Press, Incline
+// Bench Press et Dumbbell Floor Press le même jour). Le formulaire affiche
+// donc une liste de "blocs exercice" qu'on peut ajouter/enlever, chacun
+// avec son propre choix d'exercice, ses séries et son RPE.
 // ==========================================================================
 
 // Liste des exercices proposés par défaut. Le joueur peut aussi taper
 // le nom d'un exercice personnalisé grâce à l'option "Autre".
 const DEFAULT_EXERCISES = [
-  "Back Squat",
-  "Front Squat",
-  "Bench Press",
-  "Deadlift",
-  "Overhead Press",
-  "Pull-up",
-  "Barbell Row",
-  "Romanian Deadlift",
+  "Back Squat", "Front Squat", "Overhead Squat", "Air Squat",
+  "Deadlift", "Sumo Deadlift", "Romanian Deadlift",
+  "Bench Press", "Incline Bench Press",
+  "Strict Press", "Push Press", "Push Jerk", "Split Jerk",
+  "Bent-Over Row",
+  "Barbell Lunge", "Barbell Reverse Lunge", "Walking Lunge",
+  "Snatch", "Power Snatch", "Snatch Pull", "Snatch Balance",
+  "Clean", "Power Clean", "Clean & Jerk", "Squat Clean", "Hang Power Clean", "Clean Pull",
+  "Barbell Thruster",
+  "Dumbbell Bench Press", "Dumbbell Incline Bench Press", "Dumbbell Floor Press",
+  "Dumbbell Shoulder Press", "Dumbbell Clean & Jerk", "Dumbbell Snatch",
+  "Dumbbell Thruster", "Dumbbell Walking Lunge",
+  "Pull-up", "Bar Muscle-Up", "Ring Muscle-Up", "Chest-to-Bar Pull-Up",
+  "Toes-to-Bar", "Push-Up", "Handstand Push-Up",
+  "Burpee", "Burpee Box Jump-Over", "Box Jump", "Box Step-Up",
+  "V-Up", "Sit-Up",
+  "Farmer Carry", "Hip Thrust",
 ];
 
 // --------------------------------------------------------------------------
-// ÉLÉMENTS DU FORMULAIRE
+// ÉLÉMENTS GÉNÉRAUX DU FORMULAIRE
 // --------------------------------------------------------------------------
 
 const muscuForm = document.getElementById("muscu-form");
 const muscuDateInput = document.getElementById("muscu-date");
-const muscuExerciseSelect = document.getElementById("muscu-exercise-select");
-const muscuExerciseCustom = document.getElementById("muscu-exercise-custom");
-const muscuSetsList = document.getElementById("muscu-sets-list");
-const muscuAddSetBtn = document.getElementById("muscu-add-set");
-const muscuRpeInput = document.getElementById("muscu-rpe");
+const muscuExercisesList = document.getElementById("muscu-exercises-list");
+const muscuAddExerciseBlockBtn = document.getElementById("muscu-add-exercise-block");
 const muscuNotesInput = document.getElementById("muscu-notes");
 const muscuFeedback = document.getElementById("muscu-feedback");
 const muscuFilterSelect = document.getElementById("muscu-filter-exercise");
@@ -37,64 +45,53 @@ const muscuHistoryList = document.getElementById("muscu-history-list");
 const muscuSubmitBtn = document.getElementById("muscu-submit-btn");
 const muscuCancelEditBtn = document.getElementById("muscu-cancel-edit");
 
-// Quand cette variable contient un id, le formulaire est en mode "édition"
-// plutôt qu'en mode "ajout" : la soumission met à jour la séance existante
-// au lieu d'en créer une nouvelle.
+// Quand cette variable contient un id, le formulaire est en mode "édition".
 let muscuEditingId = null;
 
 /**
- * Renvoie la liste des exercices déjà utilisés dans l'historique,
- * fusionnée avec la liste par défaut (sans doublons).
- * Ça permet aux exercices "personnalisés" ajoutés une fois de
- * réapparaître ensuite dans les listes déroulantes.
+ * Renvoie la liste des exercices déjà utilisés dans l'historique, fusionnée
+ * avec la liste par défaut (sans doublons). Ça permet aux exercices
+ * "personnalisés" ajoutés une fois de réapparaître dans les listes déroulantes.
  */
 function getAllKnownExercises() {
   const used = getAllSessions()
     .filter((s) => s.type === "musculation")
-    .map((s) => s.exercise);
+    .flatMap((s) => (s.exercises || []).map((ex) => ex.exercise));
   return Array.from(new Set([...DEFAULT_EXERCISES, ...used])).sort();
 }
 
-/**
- * Remplit une balise <select> avec la liste des exercices connus,
- * plus une option "Autre" à la fin pour en saisir un nouveau.
- */
-function populateExerciseSelects() {
-  const exercises = getAllKnownExercises();
-
-  // ----- Select du formulaire -----
-  muscuExerciseSelect.innerHTML = "";
-  exercises.forEach((ex) => {
+/** Remplit un <select> donné avec la liste des exercices connus + option "Autre". */
+function populateExerciseSelectElement(selectEl) {
+  selectEl.innerHTML = "";
+  getAllKnownExercises().forEach((ex) => {
     const opt = document.createElement("option");
     opt.value = ex;
     opt.textContent = ex;
-    muscuExerciseSelect.appendChild(opt);
+    selectEl.appendChild(opt);
   });
   const customOpt = document.createElement("option");
   customOpt.value = "__custom__";
   customOpt.textContent = "+ Autre exercice…";
-  muscuExerciseSelect.appendChild(customOpt);
+  selectEl.appendChild(customOpt);
+}
 
-  // ----- Select du filtre d'historique -----
+function populateExerciseSelects() {
+  populateExerciseFilterSelect();
+}
+
+function populateExerciseFilterSelect() {
   muscuFilterSelect.innerHTML = "";
   const allOpt = document.createElement("option");
   allOpt.value = "all";
   allOpt.textContent = "Tous les exercices";
   muscuFilterSelect.appendChild(allOpt);
-  exercises.forEach((ex) => {
+  getAllKnownExercises().forEach((ex) => {
     const opt = document.createElement("option");
     opt.value = ex;
     opt.textContent = ex;
     muscuFilterSelect.appendChild(opt);
   });
 }
-
-// Affiche/cache le champ texte "Autre exercice" selon le choix du select
-muscuExerciseSelect.addEventListener("change", () => {
-  const isCustom = muscuExerciseSelect.value === "__custom__";
-  muscuExerciseCustom.style.display = isCustom ? "block" : "none";
-  if (isCustom) muscuExerciseCustom.focus();
-});
 
 // --------------------------------------------------------------------------
 // SÉRIES DYNAMIQUES (ajouter / enlever des lignes reps x poids)
@@ -113,17 +110,86 @@ function createSetRow() {
   return row;
 }
 
-function resetSetRows() {
-  muscuSetsList.innerHTML = "";
-  // On propose 3 lignes vides par défaut, un bon point de départ pour la plupart des séances
-  for (let i = 0; i < 3; i++) {
-    muscuSetsList.appendChild(createSetRow());
+// --------------------------------------------------------------------------
+// BLOCS EXERCICE (un bloc = un exercice avec ses séries et son RPE)
+// --------------------------------------------------------------------------
+
+/** Crée un nouveau bloc exercice, vide ou pré-rempli si prefill est fourni. */
+function createExerciseBlock(prefill) {
+  const block = document.createElement("div");
+  block.className = "exercise-block";
+  block.innerHTML = `
+    <div class="exercise-block-header">
+      <select class="exercise-block-select"></select>
+      <input type="text" class="exercise-block-custom form-input-spaced" placeholder="Nom de l'exercice" style="display:none;">
+      <button type="button" class="exercise-block-remove" title="Supprimer cet exercice">✕</button>
+    </div>
+    <div class="exercise-block-sets sets-list"></div>
+    <button type="button" class="exercise-block-add-set btn btn-secondary btn-small">+ Ajouter une série</button>
+    <div class="form-row" style="margin-top: 10px;">
+      <label>RPE <span class="label-optional">(optionnel)</span></label>
+      <input type="number" class="exercise-block-rpe" min="1" max="10" step="0.5" placeholder="ex : 8">
+    </div>
+  `;
+
+  const select = block.querySelector(".exercise-block-select");
+  const customInput = block.querySelector(".exercise-block-custom");
+  const setsList = block.querySelector(".exercise-block-sets");
+  const addSetBtn = block.querySelector(".exercise-block-add-set");
+  const removeBtn = block.querySelector(".exercise-block-remove");
+  const rpeInput = block.querySelector(".exercise-block-rpe");
+
+  populateExerciseSelectElement(select);
+
+  select.addEventListener("change", () => {
+    const isCustom = select.value === "__custom__";
+    customInput.style.display = isCustom ? "block" : "none";
+    if (isCustom) customInput.focus();
+  });
+
+  addSetBtn.addEventListener("click", () => setsList.appendChild(createSetRow()));
+
+  removeBtn.addEventListener("click", () => {
+    if (muscuExercisesList.children.length <= 1) {
+      showMuscuFeedback("Une séance doit contenir au moins un exercice.", true);
+      return;
+    }
+    block.remove();
+  });
+
+  // Pré-remplissage (mode édition) ou lignes vides par défaut (mode ajout)
+  if (prefill) {
+    const exists = getAllKnownExercises().includes(prefill.exercise);
+    if (exists) {
+      select.value = prefill.exercise;
+    } else {
+      select.value = "__custom__";
+      customInput.style.display = "block";
+      customInput.value = prefill.exercise;
+    }
+    prefill.sets.forEach((set) => {
+      const row = createSetRow();
+      row.querySelector(".set-reps").value = set.reps;
+      row.querySelector(".set-weight").value = set.weight;
+      setsList.appendChild(row);
+    });
+    rpeInput.value = prefill.rpe || "";
+  } else {
+    for (let i = 0; i < 3; i++) setsList.appendChild(createSetRow());
   }
+
+  return block;
 }
 
-muscuAddSetBtn.addEventListener("click", () => {
-  muscuSetsList.appendChild(createSetRow());
+muscuAddExerciseBlockBtn.addEventListener("click", () => {
+  muscuExercisesList.appendChild(createExerciseBlock(null));
 });
+
+/** Vide la liste des blocs et en remet un seul, vide. */
+function resetExerciseBlocks() {
+  muscuExercisesList.innerHTML = "";
+  muscuExercisesList.appendChild(createExerciseBlock(null));
+}
 
 // --------------------------------------------------------------------------
 // SOUMISSION DU FORMULAIRE
@@ -132,38 +198,45 @@ muscuAddSetBtn.addEventListener("click", () => {
 muscuForm.addEventListener("submit", (event) => {
   event.preventDefault(); // empêche la page de se recharger, comportement par défaut d'un formulaire
 
-  // 1. Déterminer le nom de l'exercice (liste ou saisie personnalisée)
-  const isCustom = muscuExerciseSelect.value === "__custom__";
-  const exerciseName = isCustom
-    ? muscuExerciseCustom.value.trim()
-    : muscuExerciseSelect.value;
+  const blocks = [...muscuExercisesList.querySelectorAll(".exercise-block")];
+  const exercises = [];
 
-  if (!exerciseName) {
-    showMuscuFeedback("Merci d'indiquer un nom d'exercice.", true);
+  for (const block of blocks) {
+    const select = block.querySelector(".exercise-block-select");
+    const customInput = block.querySelector(".exercise-block-custom");
+    const isCustom = select.value === "__custom__";
+    const exerciseName = isCustom ? customInput.value.trim() : select.value;
+
+    if (!exerciseName) {
+      showMuscuFeedback("Merci d'indiquer un nom pour chaque exercice de la séance.", true);
+      return;
+    }
+
+    const sets = [...block.querySelectorAll(".set-row")]
+      .map((row) => ({
+        reps: Number(row.querySelector(".set-reps").value) || 0,
+        weight: Number(row.querySelector(".set-weight").value) || 0,
+      }))
+      .filter((set) => set.reps > 0 && set.weight > 0);
+
+    if (sets.length === 0) {
+      showMuscuFeedback(`Merci de renseigner au moins une série pour ${exerciseName}.`, true);
+      return;
+    }
+
+    const rpeValue = block.querySelector(".exercise-block-rpe").value;
+    exercises.push({ exercise: exerciseName, sets, rpe: rpeValue ? Number(rpeValue) : null });
+  }
+
+  if (exercises.length === 0) {
+    showMuscuFeedback("Ajoute au moins un exercice à ta séance.", true);
     return;
   }
 
-  // 2. Récupérer les séries remplies (on ignore les lignes vides)
-  const sets = [...muscuSetsList.querySelectorAll(".set-row")]
-    .map((row) => ({
-      reps: Number(row.querySelector(".set-reps").value) || 0,
-      weight: Number(row.querySelector(".set-weight").value) || 0,
-    }))
-    .filter((set) => set.reps > 0 && set.weight > 0);
-
-  if (sets.length === 0) {
-    showMuscuFeedback("Merci de renseigner au moins une série (répétitions et poids).", true);
-    return;
-  }
-
-  // 3. Enregistrer la séance : mise à jour si on est en mode édition,
-  //    sinon création d'une nouvelle séance.
   const sessionData = {
     type: "musculation",
     date: muscuDateInput.value || new Date().toISOString().split("T")[0],
-    exercise: exerciseName,
-    sets: sets,
-    rpe: muscuRpeInput.value ? Number(muscuRpeInput.value) : null,
+    exercises,
     notes: muscuNotesInput.value.trim(),
   };
 
@@ -171,49 +244,80 @@ muscuForm.addEventListener("submit", (event) => {
     updateSession(muscuEditingId, sessionData);
     showMuscuFeedback("Séance mise à jour !", false);
   } else {
+    const recordsBefore = typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {};
     addSession(sessionData);
-    showMuscuFeedback("Séance enregistrée !", false);
+
+    const newRecords = typeof detectMuscuNewRecords === "function"
+      ? detectMuscuNewRecords(recordsBefore, exercises, sessionData.date)
+      : [];
+
+    if (newRecords.length > 0) {
+      showMuscuRecordBadge(newRecords);
+    } else {
+      showMuscuFeedback("Séance enregistrée !", false);
+    }
   }
 
-  // 4. Réinitialiser le formulaire et rafraîchir tout ce qui dépend des données
   cancelMuscuEdit(); // remet le formulaire à zéro et sort du mode édition
-  populateExerciseSelects();
+  populateExerciseFilterSelect();
   renderMuscuHistory();
   if (typeof renderDashboard === "function") renderDashboard();
-  if (typeof renderHistorique === "function") renderHistorique();
+  if (typeof renderRecords === "function") renderRecords();
 });
 
+function showMuscuFeedback(message, isError) {
+  muscuFeedback.textContent = message;
+  muscuFeedback.className = "form-feedback " + (isError ? "form-feedback-error" : "form-feedback-success");
+  setTimeout(() => { muscuFeedback.textContent = ""; }, 3500);
+}
+
+/** Affiche un badge mis en avant quand la séance qu'on vient d'enregistrer bat un record. */
+function showMuscuRecordBadge(newRecords) {
+  const list = newRecords.map((r) => `${r.exercise} : ${r.value} kg`).join(" · ");
+  muscuFeedback.innerHTML = `
+    <span class="record-badge">
+      <svg viewBox="0 0 24 24" class="record-badge-icon"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>
+      Nouveau record ! ${list}
+    </span>`;
+  muscuFeedback.className = "form-feedback";
+  setTimeout(() => { muscuFeedback.innerHTML = ""; }, 5000);
+}
+
 /**
- * Remplit le formulaire avec les valeurs d'une séance existante et bascule
- * en mode édition. Appelée depuis la page Historique quand on clique
- * sur "Modifier".
+ * Pré-remplit le formulaire avec les exercices d'une séance existante, mais
+ * SANS passer en mode édition : la validation créera une toute nouvelle
+ * séance, datée d'aujourd'hui. Pratique pour un programme qui revient
+ * régulièrement, où seules les charges changent d'une fois sur l'autre.
+ */
+function duplicateMuscuSession(session) {
+  muscuEditingId = null; // on s'assure de bien être en mode "ajout", pas "édition"
+
+  muscuDateInput.value = new Date().toISOString().split("T")[0];
+  muscuNotesInput.value = "";
+
+  muscuExercisesList.innerHTML = "";
+  session.exercises.forEach((entry) => {
+    muscuExercisesList.appendChild(createExerciseBlock(entry));
+  });
+
+  muscuSubmitBtn.textContent = "Enregistrer la séance";
+  muscuCancelEditBtn.style.display = "none";
+}
+
+/**
+ * Remplit le formulaire avec les valeurs d'une séance existante (tous ses
+ * exercices) et bascule en mode édition. Appelée depuis l'historique.
  */
 function startEditMuscuSession(session) {
   muscuEditingId = session.id;
 
   muscuDateInput.value = session.date;
-
-  populateExerciseSelects(); // s'assure que l'exercice de la séance est bien dans la liste
-  const exists = [...muscuExerciseSelect.options].some((o) => o.value === session.exercise);
-  if (exists) {
-    muscuExerciseSelect.value = session.exercise;
-    muscuExerciseCustom.style.display = "none";
-  } else {
-    muscuExerciseSelect.value = "__custom__";
-    muscuExerciseCustom.style.display = "block";
-    muscuExerciseCustom.value = session.exercise;
-  }
-
-  muscuSetsList.innerHTML = "";
-  session.sets.forEach((set) => {
-    const row = createSetRow();
-    row.querySelector(".set-reps").value = set.reps;
-    row.querySelector(".set-weight").value = set.weight;
-    muscuSetsList.appendChild(row);
-  });
-
-  muscuRpeInput.value = session.rpe || "";
   muscuNotesInput.value = session.notes || "";
+
+  muscuExercisesList.innerHTML = "";
+  session.exercises.forEach((entry) => {
+    muscuExercisesList.appendChild(createExerciseBlock(entry));
+  });
 
   muscuSubmitBtn.textContent = "Mettre à jour la séance";
   muscuCancelEditBtn.style.display = "inline-block";
@@ -222,21 +326,14 @@ function startEditMuscuSession(session) {
 /** Sort du mode édition et remet le formulaire à son état "ajout". */
 function cancelMuscuEdit() {
   muscuEditingId = null;
-  muscuForm.reset();
-  resetSetRows();
-  muscuExerciseCustom.style.display = "none";
   muscuDateInput.value = new Date().toISOString().split("T")[0];
+  muscuNotesInput.value = "";
+  resetExerciseBlocks();
   muscuSubmitBtn.textContent = "Enregistrer la séance";
   muscuCancelEditBtn.style.display = "none";
 }
 
 muscuCancelEditBtn.addEventListener("click", cancelMuscuEdit);
-
-function showMuscuFeedback(message, isError) {
-  muscuFeedback.textContent = message;
-  muscuFeedback.className = "form-feedback " + (isError ? "form-feedback-error" : "form-feedback-success");
-  setTimeout(() => { muscuFeedback.textContent = ""; }, 3000);
-}
 
 // --------------------------------------------------------------------------
 // HISTORIQUE (liste des séances de musculation, filtrable par exercice)
@@ -249,13 +346,13 @@ function renderMuscuHistory() {
 
   const sessions = getAllSessions()
     .filter((s) => s.type === "musculation")
-    .filter((s) => filter === "all" || s.exercise === filter)
+    .filter((s) => filter === "all" || s.exercises.some((ex) => ex.exercise === filter))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   muscuHistoryList.innerHTML = "";
 
   if (sessions.length === 0) {
-    muscuHistoryList.innerHTML = `<p class="empty-text">Aucune séance enregistrée pour cet exercice.</p>`;
+    muscuHistoryList.innerHTML = `<p class="empty-text">Aucune séance enregistrée pour ce filtre.</p>`;
     return;
   }
 
@@ -263,23 +360,35 @@ function renderMuscuHistory() {
     const card = document.createElement("div");
     card.className = "history-card";
 
-    const setsText = session.sets
-      .map((s) => `${s.weight} kg × ${s.reps}`)
-      .join(" · ");
+    const exercisesHtml = session.exercises
+      .map((entry) => {
+        const setsText = entry.sets.map((s) => `${s.weight} kg × ${s.reps}`).join(" · ");
+        return `
+          <div class="history-card-exercise">
+            <span class="history-card-exercise-name">${entry.exercise}</span>
+            <span class="history-card-sets">${setsText}</span>
+            ${entry.rpe ? `<span class="badge-rpe">RPE ${entry.rpe}</span>` : ""}
+          </div>`;
+      })
+      .join("");
 
     card.innerHTML = `
       <div class="history-card-header">
-        <span class="history-card-title">${session.exercise}</span>
+        <span class="history-card-title">Séance</span>
         <span class="history-card-date">${new Date(session.date).toLocaleDateString("fr-FR")}</span>
       </div>
-      <p class="history-card-sets">${setsText}</p>
-      ${session.rpe ? `<span class="badge-rpe">RPE ${session.rpe}</span>` : ""}
+      ${exercisesHtml}
       ${session.notes ? `<p class="history-card-notes">${session.notes}</p>` : ""}
       <div class="history-card-actions">
+        <button type="button" class="btn btn-secondary btn-small hist-repeat-btn">Refaire cette séance</button>
         <button type="button" class="btn btn-secondary btn-small hist-edit-btn">Modifier</button>
         <button type="button" class="btn btn-secondary btn-small hist-delete-btn">Supprimer</button>
       </div>
     `;
+    card.querySelector(".hist-repeat-btn").addEventListener("click", () => {
+      duplicateMuscuSession(session);
+      document.querySelector("#section-musculation .form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
     card.querySelector(".hist-edit-btn").addEventListener("click", () => {
       startEditMuscuSession(session);
       document.querySelector("#section-musculation .form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -301,6 +410,6 @@ function renderMuscuHistory() {
 // --------------------------------------------------------------------------
 
 muscuDateInput.value = new Date().toISOString().split("T")[0]; // aujourd'hui par défaut
-populateExerciseSelects();
-resetSetRows();
+populateExerciseFilterSelect();
+resetExerciseBlocks();
 renderMuscuHistory();

@@ -20,7 +20,7 @@ function showSettingsFeedback(message, isError) {
  */
 function refreshEntireApp() {
   if (typeof populateExerciseSelects === "function") populateExerciseSelects();
-  if (typeof resetSetRows === "function") resetSetRows();
+  if (typeof resetExerciseBlocks === "function") resetExerciseBlocks();
   if (typeof renderMuscuHistory === "function") renderMuscuHistory();
 
   if (typeof populateWodSelects === "function") populateWodSelects();

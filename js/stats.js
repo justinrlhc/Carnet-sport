@@ -12,8 +12,11 @@
  * Utilisée par le dashboard ET par les graphiques de statistiques.
  */
 function computeSessionVolume(session) {
-  if (session.type !== "musculation" || !session.sets) return 0;
-  return session.sets.reduce((total, set) => total + set.reps * set.weight, 0);
+  if (session.type !== "musculation" || !session.exercises) return 0;
+  return session.exercises.reduce(
+    (total, ex) => total + ex.sets.reduce((t, set) => t + set.reps * set.weight, 0),
+    0
+  );
 }
 
 /** Renvoie true si une date (format "AAAA-MM-JJ") tombe dans les X derniers jours. */
@@ -51,23 +54,25 @@ function computeMuscuRecords() {
   const records = {}; // { "Back Squat": { oneRM: {...}, maxWeight: {...}, maxReps: {...} } }
 
   sessions.forEach((session) => {
-    if (!records[session.exercise]) {
-      records[session.exercise] = { oneRM: null, maxWeight: null, maxReps: null };
-    }
-    const rec = records[session.exercise];
+    (session.exercises || []).forEach((entry) => {
+      if (!records[entry.exercise]) {
+        records[entry.exercise] = { oneRM: null, maxWeight: null, maxReps: null };
+      }
+      const rec = records[entry.exercise];
 
-    session.sets.forEach((set) => {
-      const estimated1RM = estimateOneRepMax(set.weight, set.reps);
+      entry.sets.forEach((set) => {
+        const estimated1RM = estimateOneRepMax(set.weight, set.reps);
 
-      if (!rec.oneRM || estimated1RM > rec.oneRM.value) {
-        rec.oneRM = { value: estimated1RM, weight: set.weight, reps: set.reps, date: session.date };
-      }
-      if (!rec.maxWeight || set.weight > rec.maxWeight.value) {
-        rec.maxWeight = { value: set.weight, reps: set.reps, date: session.date };
-      }
-      if (!rec.maxReps || set.reps > rec.maxReps.value) {
-        rec.maxReps = { value: set.reps, weight: set.weight, date: session.date };
-      }
+        if (!rec.oneRM || estimated1RM > rec.oneRM.value) {
+          rec.oneRM = { value: estimated1RM, weight: set.weight, reps: set.reps, date: session.date };
+        }
+        if (!rec.maxWeight || set.weight > rec.maxWeight.value) {
+          rec.maxWeight = { value: set.weight, reps: set.reps, date: session.date };
+        }
+        if (!rec.maxReps || set.reps > rec.maxReps.value) {
+          rec.maxReps = { value: set.reps, weight: set.weight, date: session.date };
+        }
+      });
     });
   });
 
@@ -109,6 +114,58 @@ function computeCfRecords() {
   });
 
   return records;
+}
+
+/**
+ * Compare les records d'AVANT et d'APRÈS l'ajout d'une séance de musculation
+ * pour détecter si l'un des exercices de cette séance vient de battre un
+ * record de 1RM estimé. Utilisée juste après addSession() pour afficher
+ * un petit badge "Nouveau record !" à l'utilisateur.
+ */
+function detectMuscuNewRecords(recordsBeforeSave, newExercises, sessionDate) {
+  const recordsAfterSave = computeMuscuRecords();
+  const hits = [];
+
+  newExercises.forEach((entry) => {
+    const before = recordsBeforeSave[entry.exercise];
+    const after = recordsAfterSave[entry.exercise];
+    if (!after || !after.oneRM || after.oneRM.date !== sessionDate) return;
+
+    const isNewRecord = !before || !before.oneRM || after.oneRM.value > before.oneRM.value;
+    if (isNewRecord) {
+      hits.push({ exercise: entry.exercise, value: Math.round(after.oneRM.value) });
+    }
+  });
+
+  return hits;
+}
+
+/**
+ * Même principe pour le CrossFit : détecte si le WOD qu'on vient d'enregistrer
+ * bat le meilleur temps ou la meilleure performance précédente.
+ */
+function detectCfNewRecords(recordsBeforeSave, wodName, sessionDate) {
+  const recordsAfterSave = computeCfRecords();
+  const before = recordsBeforeSave[wodName];
+  const after = recordsAfterSave[wodName];
+  if (!after) return null;
+
+  if (after.bestTime && after.bestTime.date === sessionDate) {
+    const isNewRecord = !before || !before.bestTime || after.bestTime.value < before.bestTime.value;
+    if (isNewRecord) return { type: "time", value: formatSecondsToTime(after.bestTime.value) };
+  }
+
+  if (after.bestPerformance && after.bestPerformance.date === sessionDate) {
+    const isNewRecord = !before || !before.bestPerformance ||
+      after.bestPerformance.rounds > before.bestPerformance.rounds ||
+      (after.bestPerformance.rounds === before.bestPerformance.rounds && after.bestPerformance.extraReps > before.bestPerformance.extraReps);
+    if (isNewRecord) {
+      const extra = after.bestPerformance.extraReps ? ` + ${after.bestPerformance.extraReps}` : "";
+      return { type: "performance", value: `${after.bestPerformance.rounds}${extra}` };
+    }
+  }
+
+  return null;
 }
 
 // --------------------------------------------------------------------------

@@ -136,11 +136,9 @@ function renderDashboard() {
   // ----- Records personnels (version simple pour l'instant) -----
   // Ici on compte juste le nombre d'exercices différents pratiqués comme
   // approximation temporaire. Le vrai calcul de PR (1RM estimé, etc.)
-  // arrive à l'étape 6, avec sa propre page dédiée.
-  const uniqueExercises = new Set(
-    sessions.filter((s) => s.type === "musculation").map((s) => s.exercise)
-  );
-  document.getElementById("stat-pr").textContent = uniqueExercises.size;
+  // se trouve sur la page Records, qui utilise cette même fonction.
+  const exerciseCount = typeof computeMuscuRecords === "function" ? Object.keys(computeMuscuRecords()).length : 0;
+  document.getElementById("stat-pr").textContent = exerciseCount;
 
   // ----- Dernières séances -----
   const recentList = document.getElementById("recent-sessions-list");
@@ -162,7 +160,7 @@ function renderDashboard() {
     const isMuscu = session.type === "musculation";
     const tagClass = isMuscu ? "session-tag-muscu" : "session-tag-cf";
     const tagLabel = isMuscu ? "Muscu" : "CrossFit";
-    const name = isMuscu ? session.exercise : session.wodName;
+    const name = isMuscu ? session.exercises.map((ex) => ex.exercise).join(", ") : session.wodName;
 
     li.innerHTML = `
       <span class="session-tag ${tagClass}">${tagLabel}</span>

@@ -171,11 +171,14 @@ function renderExerciseChart() {
   if (!canvas || !select || !select.value) return;
 
   const sessions = getAllSessions()
-    .filter((s) => s.type === "musculation" && s.exercise === select.value)
+    .filter((s) => s.type === "musculation" && (s.exercises || []).some((ex) => ex.exercise === select.value))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
   const labels = sessions.map((s) => new Date(s.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }));
-  const data = sessions.map((s) => Math.round(Math.max(...s.sets.map((set) => estimateOneRepMax(set.weight, set.reps)))));
+  const data = sessions.map((s) => {
+    const entry = s.exercises.find((ex) => ex.exercise === select.value);
+    return Math.round(Math.max(...entry.sets.map((set) => estimateOneRepMax(set.weight, set.reps))));
+  });
 
   if (exerciseChartInstance) exerciseChartInstance.destroy();
   exerciseChartInstance = new Chart(canvas, {
@@ -305,12 +308,75 @@ document.addEventListener("change", (event) => {
 });
 
 // --------------------------------------------------------------------------
+// CALENDRIER D'ASSIDUITÉ (façon "heatmap" GitHub)
+// Une grille d'un petit carré par jour, plus foncé si une séance a eu lieu
+// ce jour-là (musculation ET CrossFit comptent). Les colonnes sont des
+// semaines (lundi en haut), pour bien voir les habitudes de la semaine.
+// --------------------------------------------------------------------------
+
+function renderAttendanceHeatmap() {
+  const container = document.getElementById("attendance-heatmap");
+  if (!container) return;
+
+  const NB_WEEKS = 24; // environ 5-6 mois d'historique
+
+  // On compte le nombre de séances par jour (tous types confondus)
+  const countByDate = {};
+  getAllSessions().forEach((s) => {
+    countByDate[s.date] = (countByDate[s.date] || 0) + 1;
+  });
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const currentWeekStart = getWeekStartDate(today);
+  const firstWeekStart = new Date(currentWeekStart);
+  firstWeekStart.setDate(firstWeekStart.getDate() - (NB_WEEKS - 1) * 7);
+
+  // On construit la grille semaine par semaine, jour par jour (lundi à dimanche)
+  let columnsHtml = "";
+  for (let w = 0; w < NB_WEEKS; w++) {
+    let cellsHtml = "";
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(firstWeekStart);
+      date.setDate(date.getDate() + w * 7 + d);
+
+      if (date > today) {
+        cellsHtml += `<div class="hm-cell hm-future"></div>`;
+        continue;
+      }
+
+      const dateStr = date.toISOString().split("T")[0];
+      const count = countByDate[dateStr] || 0;
+      const level = count === 0 ? 0 : count === 1 ? 1 : 2;
+      const label = `${date.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} — ${count} séance${count > 1 ? "s" : ""}`;
+
+      cellsHtml += `<div class="hm-cell hm-level-${level}" title="${label}"></div>`;
+    }
+    columnsHtml += `<div class="hm-column">${cellsHtml}</div>`;
+  }
+
+  container.innerHTML = `
+    <div class="hm-wrapper">
+      <div class="hm-grid">${columnsHtml}</div>
+      <div class="hm-legend">
+        <span>Moins</span>
+        <div class="hm-cell hm-level-0"></div>
+        <div class="hm-cell hm-level-1"></div>
+        <div class="hm-cell hm-level-2"></div>
+        <span>Plus</span>
+      </div>
+    </div>
+  `;
+}
+
+// --------------------------------------------------------------------------
 // FONCTION GLOBALE : tout redessiner d'un coup (appelée en arrivant sur la page)
 // --------------------------------------------------------------------------
 
 function renderAllStatsCharts() {
   populateStatsExerciseSelect();
   populateStatsWodSelect();
+  renderAttendanceHeatmap();
   renderBodyweightChart();
   renderExerciseChart();
   renderVolumeChart();
