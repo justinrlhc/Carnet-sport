@@ -19,7 +19,7 @@
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-mark">◆</span>
-        <span class="brand-name">Carnet</span>
+        <span class="brand-name">Carnet d'entraînement</span>
       </div>
 
       <nav class="nav">
@@ -28,7 +28,13 @@
           Tableau de bord
         </button>
         <button class="nav-item" data-section="musculation">
-          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M2 10h2v4H2v-4Zm3-3h2v10H5V7Zm3 2h8v6H8V9Zm11-2h2v10h-2V7Zm3 3h2v4h-2v-4Z"/></svg>
+          <svg viewBox="0 0 24 24" class="nav-icon">
+            <rect x="1" y="7" width="3" height="10" rx="1"/>
+            <rect x="5" y="9" width="2" height="6" rx="1"/>
+            <rect x="7" y="11" width="10" height="2"/>
+            <rect x="17" y="9" width="2" height="6" rx="1"/>
+            <rect x="20" y="7" width="3" height="10" rx="1"/>
+          </svg>
           Musculation
         </button>
         <button class="nav-item" data-section="crossfit">
@@ -36,7 +42,10 @@
           CrossFit
         </button>
         <button class="nav-item" data-section="mensurations">
-          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M4 4h16v6h-2V6H6v12h2v2H4V4Zm14 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM8 8h2v2H8V8Zm4 0h2v2h-2V8ZM8 12h2v2H8v-2Z"/></svg>
+          <svg viewBox="0 0 24 24" class="nav-icon">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8v1H4v-1Z"/>
+          </svg>
           Mensurations
         </button>
         <button class="nav-item" data-section="records">
@@ -48,7 +57,14 @@
           Statistiques
         </button>
         <button class="nav-item" data-section="reglages">
-          <svg viewBox="0 0 24 24" class="nav-icon"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm8.6 1c0 .34-.03.67-.07 1l2.11 1.65-2 3.46-2.49-1a7.9 7.9 0 0 1-1.73 1l-.38 2.65h-4l-.38-2.65a7.9 7.9 0 0 1-1.73-1l-2.49 1-2-3.46L5.47 12a8 8 0 0 1 0-2L3.36 8.35l2-3.46 2.49 1a7.9 7.9 0 0 1 1.73-1L9.96 2.24h4l.38 2.65a7.9 7.9 0 0 1 1.73 1l2.49-1 2 3.46L18.53 10c.04.33.07.66.07 1Z"/></svg>
+          <svg viewBox="0 0 24 24" class="nav-icon">
+            <rect x="3" y="5" width="18" height="2" rx="1" opacity="0.35"/>
+            <circle cx="8" cy="6" r="2.5"/>
+            <rect x="3" y="11" width="18" height="2" rx="1" opacity="0.35"/>
+            <circle cx="15" cy="12" r="2.5"/>
+            <rect x="3" y="17" width="18" height="2" rx="1" opacity="0.35"/>
+            <circle cx="10" cy="18" r="2.5"/>
+          </svg>
           Réglages
         </button>
       </nav>
@@ -164,8 +180,6 @@
               <div class="form-row">
                 <label for="cf-wod-select">Nom du WOD</label>
                 <select id="cf-wod-select"></select>
-                <input type="text" id="cf-wod-custom" class="form-input-spaced"
-                       placeholder="Nom du WOD" style="display:none;">
               </div>
 
               <div class="form-row">
@@ -188,14 +202,19 @@
                 </select>
               </div>
 
-              <div class="form-row form-row-inline">
+              <div class="cf-timer">
+                <span class="cf-timer-display" id="cf-timer-display">00:00</span>
+                <button type="button" class="btn btn-secondary btn-small" id="cf-timer-toggle">Démarrer</button>
+              </div>
+
+              <div class="form-row form-row-inline" id="cf-time-row">
                 <div>
                   <label for="cf-time">Temps <span class="label-optional">(mm:ss, si "For Time")</span></label>
                   <input type="text" id="cf-time" placeholder="ex : 6:42">
                 </div>
               </div>
 
-              <div class="form-row form-row-inline">
+              <div class="form-row form-row-inline" id="cf-rounds-row">
                 <div>
                   <label for="cf-rounds">Rounds complets <span class="label-optional">(si AMRAP)</span></label>
                   <input type="number" id="cf-rounds" min="0">

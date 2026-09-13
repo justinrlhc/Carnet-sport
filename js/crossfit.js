@@ -7,9 +7,52 @@
 // ==========================================================================
 
 // Quelques WOD "benchmark" bien connus, proposés par défaut.
-// Comme pour les exercices de musculation, on peut aussi taper un nom
-// personnalisé grâce à l'option "Autre".
-const DEFAULT_WODS = ["Fran", "Grace", "Helen", "Cindy", "Annie", "Diane", "Murph", "Karen"];
+const DEFAULT_WODS = ["Fran", "Grace", "Helen", "Cindy", "Annie", "Diane", "Murph"];
+
+// Option toujours disponible pour un WOD "classique", sans nom particulier —
+// évite d'avoir à taper un nom pour les entraînements du quotidien.
+const DAILY_WOD_LABEL = "WOD du jour";
+
+// Détail de chaque benchmark : son format, son type de score (temps ou
+// rounds), et ses mouvements avec le schéma de répétitions/charges. Sert à
+// préremplir automatiquement le formulaire dès qu'on sélectionne son nom.
+const BENCHMARK_WODS = {
+  Helen: {
+    wodType: "For Time",
+    scoreType: "time",
+    movements: ["3 rounds for time", "400 m run", "21 kettlebell swings (24/16 kg)", "12 pull-ups"],
+  },
+  Annie: {
+    wodType: "For Time",
+    scoreType: "time",
+    movements: ["50-40-30-20-10 reps, for time", "Double-unders", "Sit-ups"],
+  },
+  Grace: {
+    wodType: "For Time",
+    scoreType: "time",
+    movements: ["30 reps, for time", "Clean & jerks (61/43 kg)"],
+  },
+  Fran: {
+    wodType: "For Time",
+    scoreType: "time",
+    movements: ["21-15-9 reps, for time", "Thrusters (43/30 kg)", "Pull-ups"],
+  },
+  Cindy: {
+    wodType: "AMRAP",
+    scoreType: "rounds",
+    movements: ["AMRAP 20 minutes", "5 pull-ups", "10 push-ups", "15 air squats"],
+  },
+  Diane: {
+    wodType: "For Time",
+    scoreType: "time",
+    movements: ["21-15-9 reps, for time", "Deadlifts (102/70 kg)", "Handstand push-ups"],
+  },
+  Murph: {
+    wodType: "For Time",
+    scoreType: "time",
+    movements: ["For time", "1 mile run", "100 pull-ups", "200 push-ups", "300 air squats", "1 mile run"],
+  },
+};
 
 // --------------------------------------------------------------------------
 // ÉLÉMENTS DU FORMULAIRE
@@ -18,10 +61,11 @@ const DEFAULT_WODS = ["Fran", "Grace", "Helen", "Cindy", "Annie", "Diane", "Murp
 const cfForm = document.getElementById("cf-form");
 const cfDateInput = document.getElementById("cf-date");
 const cfWodSelect = document.getElementById("cf-wod-select");
-const cfWodCustom = document.getElementById("cf-wod-custom");
 const cfTypeSelect = document.getElementById("cf-type");
 const cfRxSelect = document.getElementById("cf-rx");
+const cfTimeRow = document.getElementById("cf-time-row");
 const cfTimeInput = document.getElementById("cf-time");
+const cfRoundsRow = document.getElementById("cf-rounds-row");
 const cfRoundsInput = document.getElementById("cf-rounds");
 const cfExtraRepsInput = document.getElementById("cf-extra-reps");
 const cfExercisesList = document.getElementById("cf-exercises-list");
@@ -32,6 +76,8 @@ const cfFilterSelect = document.getElementById("cf-filter-wod");
 const cfHistoryList = document.getElementById("cf-history-list");
 const cfSubmitBtn = document.getElementById("cf-submit-btn");
 const cfCancelEditBtn = document.getElementById("cf-cancel-edit");
+const cfTimerDisplay = document.getElementById("cf-timer-display");
+const cfTimerToggleBtn = document.getElementById("cf-timer-toggle");
 
 // Quand cette variable contient un id, le formulaire est en mode "édition".
 let cfEditingId = null;
@@ -39,30 +85,33 @@ let cfEditingId = null;
 /**
  * Renvoie la liste des noms de WOD déjà utilisés dans l'historique,
  * fusionnée avec la liste des benchmarks par défaut (sans doublons).
+ * "WOD du jour" est volontairement exclu d'ici : il est géré à part,
+ * toujours affiché en premier dans les listes déroulantes.
  */
 function getAllKnownWods() {
   const used = getAllSessions()
     .filter((s) => s.type === "crossfit")
     .map((s) => s.wodName)
-    .filter(Boolean);
+    .filter((name) => Boolean(name) && name !== DAILY_WOD_LABEL);
   return Array.from(new Set([...DEFAULT_WODS, ...used])).sort();
 }
 
 function populateWodSelects() {
   const wods = getAllKnownWods();
 
-  // ----- Select du formulaire -----
+  // ----- Select du formulaire : "WOD du jour" toujours en premier,
+  // c'est le cas le plus courant (un WOD sans nom particulier) -----
   cfWodSelect.innerHTML = "";
+  const dailyOpt = document.createElement("option");
+  dailyOpt.value = DAILY_WOD_LABEL;
+  dailyOpt.textContent = DAILY_WOD_LABEL;
+  cfWodSelect.appendChild(dailyOpt);
   wods.forEach((name) => {
     const opt = document.createElement("option");
     opt.value = name;
     opt.textContent = name;
     cfWodSelect.appendChild(opt);
   });
-  const customOpt = document.createElement("option");
-  customOpt.value = "__custom__";
-  customOpt.textContent = "+ Autre WOD…";
-  cfWodSelect.appendChild(customOpt);
 
   // ----- Select du filtre d'historique -----
   cfFilterSelect.innerHTML = "";
@@ -70,6 +119,10 @@ function populateWodSelects() {
   allOpt.value = "all";
   allOpt.textContent = "Tous les WOD";
   cfFilterSelect.appendChild(allOpt);
+  const dailyFilterOpt = document.createElement("option");
+  dailyFilterOpt.value = DAILY_WOD_LABEL;
+  dailyFilterOpt.textContent = DAILY_WOD_LABEL;
+  cfFilterSelect.appendChild(dailyFilterOpt);
   wods.forEach((name) => {
     const opt = document.createElement("option");
     opt.value = name;
@@ -78,11 +131,54 @@ function populateWodSelects() {
   });
 }
 
-cfWodSelect.addEventListener("change", () => {
-  const isCustom = cfWodSelect.value === "__custom__";
-  cfWodCustom.style.display = isCustom ? "block" : "none";
-  if (isCustom) cfWodCustom.focus();
-});
+/** Affiche uniquement les champs de score pertinents pour un WOD donné (temps OU rounds). */
+function setScoreFieldsVisibility(name) {
+  const preset = BENCHMARK_WODS[name];
+  if (preset && preset.scoreType === "time") {
+    cfTimeRow.style.display = "";
+    cfRoundsRow.style.display = "none";
+  } else if (preset && preset.scoreType === "rounds") {
+    cfTimeRow.style.display = "none";
+    cfRoundsRow.style.display = "";
+  } else {
+    cfTimeRow.style.display = "";
+    cfRoundsRow.style.display = "";
+  }
+}
+
+/**
+ * Applique automatiquement le préréglage d'un benchmark quand on le
+ * sélectionne dans le formulaire : type de WOD, mouvements préremplis, et
+ * affichage des seuls champs de score pertinents. Pour "WOD du jour" ou un
+ * nom sans préréglage connu, on repart sur des mouvements vides.
+ */
+function applyWodSelection(name) {
+  const preset = BENCHMARK_WODS[name];
+  setScoreFieldsVisibility(name);
+
+  if (!preset) {
+    resetExerciseRows();
+    return;
+  }
+
+  cfTypeSelect.value = preset.wodType;
+
+  cfExercisesList.innerHTML = "";
+  preset.movements.forEach((movement) => {
+    const row = createExerciseRow();
+    row.querySelector(".cf-exercise-input").value = movement;
+    cfExercisesList.appendChild(row);
+  });
+
+  if (preset.scoreType === "time") {
+    cfRoundsInput.value = "";
+    cfExtraRepsInput.value = "";
+  } else {
+    cfTimeInput.value = "";
+  }
+}
+
+cfWodSelect.addEventListener("change", () => applyWodSelection(cfWodSelect.value));
 
 // --------------------------------------------------------------------------
 // MOUVEMENTS DYNAMIQUES (une simple liste de textes, ex: "Thrusters 42,5 kg")
@@ -131,14 +227,58 @@ function formatSecondsToTime(totalSeconds) {
 }
 
 // --------------------------------------------------------------------------
+// CHRONOMÈTRE INTÉGRÉ
+// Permet de chronométrer directement le WOD dans l'appli, plutôt que de
+// chronométrer à côté (sur le téléphone par exemple) puis retaper le
+// résultat de mémoire. "Arrêter" remplit automatiquement le champ Temps.
+// --------------------------------------------------------------------------
+
+let cfTimerRunning = false;
+let cfTimerStartedAt = null; // instant de départ (Date.now()), en millisecondes
+let cfTimerIntervalId = null;
+
+function updateCfTimerDisplay() {
+  const elapsedSeconds = Math.floor((Date.now() - cfTimerStartedAt) / 1000);
+  cfTimerDisplay.textContent = formatSecondsToTime(elapsedSeconds);
+}
+
+cfTimerToggleBtn.addEventListener("click", () => {
+  if (!cfTimerRunning) {
+    // On démarre toujours un nouveau décompte à zéro
+    cfTimerRunning = true;
+    cfTimerStartedAt = Date.now();
+    cfTimerDisplay.textContent = "00:00";
+    cfTimerDisplay.classList.add("cf-timer-display-active");
+    cfTimerToggleBtn.textContent = "Arrêter";
+    cfTimerIntervalId = setInterval(updateCfTimerDisplay, 500);
+  } else {
+    // On arrête, et on remplit automatiquement le champ Temps du formulaire
+    cfTimerRunning = false;
+    clearInterval(cfTimerIntervalId);
+    const elapsedSeconds = Math.floor((Date.now() - cfTimerStartedAt) / 1000);
+    cfTimeInput.value = formatSecondsToTime(elapsedSeconds);
+    cfTimerDisplay.classList.remove("cf-timer-display-active");
+    cfTimerToggleBtn.textContent = "Démarrer";
+  }
+});
+
+/** Remet le chronomètre visuellement à zéro (formulaire réinitialisé, séance dupliquée...). */
+function resetCfTimer() {
+  cfTimerRunning = false;
+  clearInterval(cfTimerIntervalId);
+  cfTimerDisplay.textContent = "00:00";
+  cfTimerDisplay.classList.remove("cf-timer-display-active");
+  cfTimerToggleBtn.textContent = "Démarrer";
+}
+
+// --------------------------------------------------------------------------
 // SOUMISSION DU FORMULAIRE
 // --------------------------------------------------------------------------
 
 cfForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
-  const isCustom = cfWodSelect.value === "__custom__";
-  const wodName = isCustom ? cfWodCustom.value.trim() : cfWodSelect.value;
+  const wodName = cfWodSelect.value;
 
   if (!wodName) {
     showCfFeedback("Merci d'indiquer un nom de WOD.", true);
@@ -207,21 +347,15 @@ function duplicateCfSession(session) {
   cfDateInput.value = new Date().toISOString().split("T")[0];
 
   populateWodSelects();
-  const exists = [...cfWodSelect.options].some((o) => o.value === session.wodName);
-  if (exists) {
-    cfWodSelect.value = session.wodName;
-    cfWodCustom.style.display = "none";
-  } else {
-    cfWodSelect.value = "__custom__";
-    cfWodCustom.style.display = "block";
-    cfWodCustom.value = session.wodName;
-  }
+  cfWodSelect.value = session.wodName;
+  setScoreFieldsVisibility(session.wodName);
 
   cfTypeSelect.value = session.wodType || "For Time";
   cfRxSelect.value = session.rxOrScaled || "RX";
   cfTimeInput.value = "";
   cfRoundsInput.value = "";
   cfExtraRepsInput.value = "";
+  resetCfTimer();
 
   cfExercisesList.innerHTML = "";
   (session.exercises && session.exercises.length ? session.exercises : ["", ""]).forEach((ex) => {
@@ -242,19 +376,13 @@ function duplicateCfSession(session) {
  */
 function startEditCfSession(session) {
   cfEditingId = session.id;
+  resetCfTimer();
 
   cfDateInput.value = session.date;
 
   populateWodSelects();
-  const exists = [...cfWodSelect.options].some((o) => o.value === session.wodName);
-  if (exists) {
-    cfWodSelect.value = session.wodName;
-    cfWodCustom.style.display = "none";
-  } else {
-    cfWodSelect.value = "__custom__";
-    cfWodCustom.style.display = "block";
-    cfWodCustom.value = session.wodName;
-  }
+  cfWodSelect.value = session.wodName;
+  setScoreFieldsVisibility(session.wodName);
 
   cfTypeSelect.value = session.wodType || "For Time";
   cfRxSelect.value = session.rxOrScaled || "RX";
@@ -281,10 +409,12 @@ function cancelCfEdit() {
   cfEditingId = null;
   cfForm.reset();
   resetExerciseRows();
-  cfWodCustom.style.display = "none";
+  cfTimeRow.style.display = "";
+  cfRoundsRow.style.display = "";
   cfDateInput.value = new Date().toISOString().split("T")[0];
   cfSubmitBtn.textContent = "Enregistrer le WOD";
   cfCancelEditBtn.style.display = "none";
+  resetCfTimer();
 }
 
 cfCancelEditBtn.addEventListener("click", cancelCfEdit);
