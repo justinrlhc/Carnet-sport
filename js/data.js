@@ -281,12 +281,22 @@ function deleteManualCfBest(wodName) {
 
 // --------------------------------------------------------------------------
 // DONNÉES DE DÉMONSTRATION
-// Ne s'exécute QUE si aucune séance n'existe encore, pour ne jamais
-// écraser tes vraies données. Utile pour ne pas ouvrir une app vide.
+// Ne s'exécute QUE lors de la toute première ouverture de l'app sur cet
+// appareil — jamais après, même si les données sont vides suite à une
+// réinitialisation volontaire (Réglages > Réinitialiser toutes les
+// données). C'est le rôle de STORAGE_KEY_INITIALIZED : une fois posé, il
+// n'est plus jamais retiré (même par un reset), pour que "vide" signifie
+// vraiment "vide" et non "à remplir de nouveau avec la démo".
 // --------------------------------------------------------------------------
 
+const STORAGE_KEY_INITIALIZED = "carnet_initialized";
+
 function ensureDemoData() {
-  if (getAllSessions().length > 0) return; // on ne touche à rien si des données existent déjà
+  const alreadyInitialized = localStorage.getItem(STORAGE_KEY_INITIALIZED);
+  if (alreadyInitialized) return; // déjà initialisé une fois : on ne remet plus jamais la démo automatiquement
+  localStorage.setItem(STORAGE_KEY_INITIALIZED, "1");
+
+  if (getAllSessions().length > 0) return; // sécurité : ne touche à rien si des données existent déjà
 
   const today = new Date();
 
