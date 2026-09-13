@@ -76,8 +76,6 @@ const cfFilterSelect = document.getElementById("cf-filter-wod");
 const cfHistoryList = document.getElementById("cf-history-list");
 const cfSubmitBtn = document.getElementById("cf-submit-btn");
 const cfCancelEditBtn = document.getElementById("cf-cancel-edit");
-const cfTimerDisplay = document.getElementById("cf-timer-display");
-const cfTimerToggleBtn = document.getElementById("cf-timer-toggle");
 
 // Quand cette variable contient un id, le formulaire est en mode "édition".
 let cfEditingId = null;
@@ -227,51 +225,6 @@ function formatSecondsToTime(totalSeconds) {
 }
 
 // --------------------------------------------------------------------------
-// CHRONOMÈTRE INTÉGRÉ
-// Permet de chronométrer directement le WOD dans l'appli, plutôt que de
-// chronométrer à côté (sur le téléphone par exemple) puis retaper le
-// résultat de mémoire. "Arrêter" remplit automatiquement le champ Temps.
-// --------------------------------------------------------------------------
-
-let cfTimerRunning = false;
-let cfTimerStartedAt = null; // instant de départ (Date.now()), en millisecondes
-let cfTimerIntervalId = null;
-
-function updateCfTimerDisplay() {
-  const elapsedSeconds = Math.floor((Date.now() - cfTimerStartedAt) / 1000);
-  cfTimerDisplay.textContent = formatSecondsToTime(elapsedSeconds);
-}
-
-cfTimerToggleBtn.addEventListener("click", () => {
-  if (!cfTimerRunning) {
-    // On démarre toujours un nouveau décompte à zéro
-    cfTimerRunning = true;
-    cfTimerStartedAt = Date.now();
-    cfTimerDisplay.textContent = "00:00";
-    cfTimerDisplay.classList.add("cf-timer-display-active");
-    cfTimerToggleBtn.textContent = "Arrêter";
-    cfTimerIntervalId = setInterval(updateCfTimerDisplay, 500);
-  } else {
-    // On arrête, et on remplit automatiquement le champ Temps du formulaire
-    cfTimerRunning = false;
-    clearInterval(cfTimerIntervalId);
-    const elapsedSeconds = Math.floor((Date.now() - cfTimerStartedAt) / 1000);
-    cfTimeInput.value = formatSecondsToTime(elapsedSeconds);
-    cfTimerDisplay.classList.remove("cf-timer-display-active");
-    cfTimerToggleBtn.textContent = "Démarrer";
-  }
-});
-
-/** Remet le chronomètre visuellement à zéro (formulaire réinitialisé, séance dupliquée...). */
-function resetCfTimer() {
-  cfTimerRunning = false;
-  clearInterval(cfTimerIntervalId);
-  cfTimerDisplay.textContent = "00:00";
-  cfTimerDisplay.classList.remove("cf-timer-display-active");
-  cfTimerToggleBtn.textContent = "Démarrer";
-}
-
-// --------------------------------------------------------------------------
 // SOUMISSION DU FORMULAIRE
 // --------------------------------------------------------------------------
 
@@ -355,7 +308,6 @@ function duplicateCfSession(session) {
   cfTimeInput.value = "";
   cfRoundsInput.value = "";
   cfExtraRepsInput.value = "";
-  resetCfTimer();
 
   cfExercisesList.innerHTML = "";
   (session.exercises && session.exercises.length ? session.exercises : ["", ""]).forEach((ex) => {
@@ -376,7 +328,6 @@ function duplicateCfSession(session) {
  */
 function startEditCfSession(session) {
   cfEditingId = session.id;
-  resetCfTimer();
 
   cfDateInput.value = session.date;
 
@@ -414,7 +365,6 @@ function cancelCfEdit() {
   cfDateInput.value = new Date().toISOString().split("T")[0];
   cfSubmitBtn.textContent = "Enregistrer le WOD";
   cfCancelEditBtn.style.display = "none";
-  resetCfTimer();
 }
 
 cfCancelEditBtn.addEventListener("click", cancelCfEdit);

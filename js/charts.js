@@ -311,15 +311,12 @@ document.addEventListener("change", (event) => {
 // CALENDRIER D'ASSIDUITÉ (façon "heatmap" GitHub)
 // Une grille d'un petit carré par jour, plus foncé si une séance a eu lieu
 // ce jour-là (musculation ET CrossFit comptent). Les colonnes sont des
-// semaines (lundi en haut), pour bien voir les habitudes de la semaine.
+// semaines (lundi en haut), avec le nom du mois affiché au-dessus dès
+// qu'on change de mois. Réutilisée en version compacte sur le Dashboard
+// et en version complète sur la page Statistiques.
 // --------------------------------------------------------------------------
 
-function renderAttendanceHeatmap() {
-  const container = document.getElementById("attendance-heatmap");
-  if (!container) return;
-
-  const NB_WEEKS = 24; // environ 5-6 mois d'historique
-
+function buildAttendanceHeatmapHtml(nbWeeks) {
   // On compte le nombre de séances par jour (tous types confondus)
   const countByDate = {};
   getAllSessions().forEach((s) => {
@@ -330,15 +327,36 @@ function renderAttendanceHeatmap() {
   today.setHours(0, 0, 0, 0);
   const currentWeekStart = getWeekStartDate(today);
   const firstWeekStart = new Date(currentWeekStart);
-  firstWeekStart.setDate(firstWeekStart.getDate() - (NB_WEEKS - 1) * 7);
+  firstWeekStart.setDate(firstWeekStart.getDate() - (nbWeeks - 1) * 7);
 
-  // On construit la grille semaine par semaine, jour par jour (lundi à dimanche)
+  let monthsHtml = "";
   let columnsHtml = "";
-  for (let w = 0; w < NB_WEEKS; w++) {
+  let lastMonthLabel = null;
+  let lastPrintedColumnIndex = -Infinity;
+  const MIN_GAP_BETWEEN_LABELS = 3; // en nombre de colonnes, pour éviter que deux mois se chevauchent visuellement
+
+  for (let w = 0; w < nbWeeks; w++) {
+    const weekStart = new Date(firstWeekStart);
+    weekStart.setDate(weekStart.getDate() + w * 7);
+
+    // On repère un changement de mois, mais on ne l'affiche que s'il y a
+    // assez de place depuis la dernière étiquette affichée, sinon le texte
+    // du mois précédent et celui du suivant se chevauchent.
+    const monthLabel = weekStart.toLocaleDateString("fr-FR", { month: "short" });
+    const isNewMonth = monthLabel !== lastMonthLabel;
+    if (isNewMonth) lastMonthLabel = monthLabel;
+
+    if (isNewMonth && (w - lastPrintedColumnIndex) >= MIN_GAP_BETWEEN_LABELS) {
+      monthsHtml += `<span class="hm-month-label">${monthLabel}</span>`;
+      lastPrintedColumnIndex = w;
+    } else {
+      monthsHtml += `<span class="hm-month-label"></span>`;
+    }
+
     let cellsHtml = "";
     for (let d = 0; d < 7; d++) {
-      const date = new Date(firstWeekStart);
-      date.setDate(date.getDate() + w * 7 + d);
+      const date = new Date(weekStart);
+      date.setDate(date.getDate() + d);
 
       if (date > today) {
         cellsHtml += `<div class="hm-cell hm-future"></div>`;
@@ -355,8 +373,9 @@ function renderAttendanceHeatmap() {
     columnsHtml += `<div class="hm-column">${cellsHtml}</div>`;
   }
 
-  container.innerHTML = `
+  return `
     <div class="hm-wrapper">
+      <div class="hm-months">${monthsHtml}</div>
       <div class="hm-grid">${columnsHtml}</div>
       <div class="hm-legend">
         <span>Moins</span>
@@ -367,6 +386,13 @@ function renderAttendanceHeatmap() {
       </div>
     </div>
   `;
+}
+
+/** Version complète (≈5-6 mois), affichée sur la page Statistiques. */
+function renderAttendanceHeatmap() {
+  const container = document.getElementById("attendance-heatmap");
+  if (!container) return;
+  container.innerHTML = buildAttendanceHeatmapHtml(24);
 }
 
 // --------------------------------------------------------------------------

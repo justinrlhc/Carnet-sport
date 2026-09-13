@@ -441,27 +441,6 @@ button { font-family: inherit; }
 .form-row-inline > div { display: flex; flex-direction: column; gap: 6px; }
 .form-row-inline label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
 
-/* ----- Chronomètre CrossFit ----- */
-.cf-timer {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
-  margin-bottom: 16px;
-}
-.cf-timer-display {
-  font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  min-width: 78px;
-}
-.cf-timer-display-active { color: var(--accent-strong); }
-
 /* ----- Blocs exercice (une séance peut contenir plusieurs exercices) ----- */
 .exercise-block {
   border: 1px solid var(--border);
@@ -778,6 +757,18 @@ button { font-family: inherit; }
   display: flex;
   gap: 3px;
   width: fit-content;
+}
+.hm-months {
+  display: flex;
+  gap: 3px;
+  width: fit-content;
+}
+.hm-month-label {
+  width: 13px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+  white-space: nowrap;
 }
 .hm-column {
   display: flex;
