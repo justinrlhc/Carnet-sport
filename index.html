@@ -224,7 +224,11 @@
               <div class="form-row">
                 <label>Mouvements</label>
                 <div id="cf-exercises-list" class="sets-list"></div>
-                <button type="button" id="cf-add-exercise" class="btn btn-secondary btn-small">+ Ajouter un mouvement</button>
+                <div class="cf-add-buttons">
+                  <button type="button" id="cf-add-exercise" class="btn btn-secondary btn-small">+ Mouvement libre</button>
+                  <button type="button" id="cf-add-structured-exercise" class="btn btn-secondary btn-small">+ Exercice structuré</button>
+                </div>
+                <p class="form-hint">Un mouvement libre reste enregistré dans l'historique, mais un exercice structuré alimente en plus tes statistiques (volume, records, 1RM) comme dans l'onglet Musculation.</p>
               </div>
 
               <div class="form-row">
@@ -243,7 +247,15 @@
           <div class="panel history-panel">
             <div class="history-header">
               <h2 class="panel-title">Historique</h2>
-              <select id="cf-filter-wod"></select>
+              <div class="history-header-filters">
+                <select id="cf-filter-wod"></select>
+                <select id="cf-filter-level">
+                  <option value="all">Tous les niveaux</option>
+                  <option value="RX">RX</option>
+                  <option value="Inter">Inter</option>
+                  <option value="Scaled">Scaled</option>
+                </select>
+              </div>
             </div>
             <div id="cf-history-list" class="history-list"></div>
           </div>
@@ -253,6 +265,7 @@
 
       <!-- ---------- SECTION : MENSURATIONS ---------- -->
       <section class="section" id="section-mensurations">
+
         <div class="muscu-layout">
 
           <div class="panel form-panel">
@@ -283,6 +296,21 @@
           </div>
 
         </div>
+
+        <div class="panel" style="margin-top: 16px;">
+          <h2 class="panel-title">Ta taille</h2>
+          <div class="height-row">
+            <input type="number" id="height-input" min="0" step="0.5" placeholder="Taille (cm)">
+            <button type="button" id="height-save-btn" class="btn btn-secondary btn-small">Enregistrer</button>
+          </div>
+          <p class="form-hint">Utilisée uniquement pour calculer ton IMC ci-dessous — la taille change rarement, pas besoin de la ressaisir à chaque fois.</p>
+        </div>
+
+        <div class="panel" style="margin-top: 16px;">
+          <h2 class="panel-title">IMC (indice de masse corporelle)</h2>
+          <div id="bmi-gauge-container"></div>
+        </div>
+
       </section>
 
       <!-- ---------- SECTION : RECORDS ---------- -->
@@ -377,7 +405,10 @@
       <section class="section" id="section-statistiques">
 
         <div class="panel">
-          <h2 class="panel-title">Régularité</h2>
+          <div class="regularity-header">
+            <h2 class="panel-title">Régularité</h2>
+            <span class="streak-badge" id="streak-badge" style="display:none;"></span>
+          </div>
           <div id="attendance-heatmap"></div>
         </div>
 

@@ -48,7 +48,10 @@ function goToSection(targetId) {
   if (targetId === "dashboard") renderDashboard();
   if (targetId === "musculation" && typeof renderMuscuHistory === "function") renderMuscuHistory();
   if (targetId === "crossfit" && typeof renderCfHistory === "function") renderCfHistory();
-  if (targetId === "mensurations" && typeof renderWeightHistory === "function") renderWeightHistory();
+  if (targetId === "mensurations" && typeof renderWeightHistory === "function") {
+    renderWeightHistory();
+    if (typeof renderBmiGauge === "function") renderBmiGauge();
+  }
   if (targetId === "records" && typeof renderRecords === "function") renderRecords();
   if (targetId === "statistiques" && typeof renderAllStatsCharts === "function") renderAllStatsCharts();
 }
@@ -121,7 +124,7 @@ function renderDashboard() {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
   const sessionsThisWeek = sessions.filter((s) => {
-    const d = new Date(s.date);
+    const d = parseLocalDate(s.date);
     return d >= weekStart && d <= weekEnd;
   });
   document.getElementById("stat-sessions").textContent = sessionsThisWeek.length;

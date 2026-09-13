@@ -11,12 +11,68 @@
  * donc elle renvoie 0 ici.
  * Utilisée par le dashboard ET par les graphiques de statistiques.
  */
+/**
+ * Calcule le volume d'un exercice donné, dans une séance de musculation :
+ *  - pour un exercice classique (barre/haltères) : reps × poids soulevé
+ *  - pour un exercice au poids du corps (pull-up, dips, burpee...) :
+ *    reps × (poids de corps actuel + éventuel lest ajouté)
+ * Si l'exercice est au poids du corps mais qu'aucun poids de corps n'est
+ * encore connu (onglet Mensurations vide), ses séries sont simplement
+ * ignorées dans le calcul — sans jamais empêcher d'enregistrer la séance.
+ */
+function computeExerciseVolume(exerciseEntry) {
+  const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exerciseEntry.exercise);
+
+  if (!isBW) {
+    return exerciseEntry.sets.reduce((total, set) => total + set.reps * set.weight, 0);
+  }
+
+  const bodyweight = typeof getCurrentBodyweight === "function" ? getCurrentBodyweight() : null;
+  if (bodyweight === null) return 0; // poids de corps inconnu : pas de calcul possible pour l'instant
+
+  return exerciseEntry.sets.reduce((total, set) => total + set.reps * (bodyweight + (set.weight || 0)), 0);
+}
+
 function computeSessionVolume(session) {
-  if (session.type !== "musculation" || !session.exercises) return 0;
-  return session.exercises.reduce(
-    (total, ex) => total + ex.sets.reduce((t, set) => t + set.reps * set.weight, 0),
-    0
-  );
+  if (session.type === "musculation" && session.exercises) {
+    return session.exercises.reduce((total, ex) => total + computeExerciseVolume(ex), 0);
+  }
+  if (session.type === "crossfit" && session.exercises) {
+    return session.exercises.reduce((total, entry) => {
+      if (typeof entry !== "object" || entry === null) return total; // mouvement en texte libre : pas de volume calculable
+      return total + computeCrossfitStructuredVolume(session, entry);
+    }, 0);
+  }
+  return 0;
+}
+
+/**
+ * Calcule le volume d'un exercice structuré au sein d'un WOD CrossFit.
+ * Pour un AMRAP, les répétitions sont multipliées par le nombre de tours
+ * complets réalisés, plus d'éventuelles répétitions supplémentaires du
+ * tour partiel. Pour les autres formats (For Time, EMOM, Chipper...), les
+ * répétitions saisies sont déjà le total réalisé sur tout le WOD.
+ * Un exercice au poids du corps applique la même logique que dans
+ * l'onglet Musculation (poids de corps actuel + éventuel lest).
+ */
+function computeCrossfitStructuredVolume(session, entry) {
+  const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(entry.exercise);
+  let perRepWeight;
+
+  if (isBW) {
+    const bodyweight = typeof getCurrentBodyweight === "function" ? getCurrentBodyweight() : null;
+    if (bodyweight === null) return 0; // poids de corps inconnu : pas de calcul possible pour l'instant
+    perRepWeight = bodyweight + (entry.weight || 0);
+  } else {
+    perRepWeight = entry.weight || 0;
+  }
+
+  const isAmrap = session.wodType === "AMRAP" && typeof session.rounds === "number";
+  const totalReps = isAmrap
+    ? (entry.reps || 0) * session.rounds + (entry.extraReps || 0)
+    : (entry.reps || 0);
+
+  return totalReps * perRepWeight;
 }
 
 /** Renvoie true si une date (format "AAAA-MM-JJ") tombe dans les X derniers jours. */
@@ -43,40 +99,89 @@ function estimateOneRepMax(weight, reps) {
 }
 
 /**
- * Parcourt toutes les séances de musculation et calcule, pour chaque
- * exercice pratiqué :
+ * Parcourt toutes les séances (musculation ET exercices structurés des
+ * WOD CrossFit) et calcule, pour chaque exercice pratiqué :
  *  - le 1RM estimé le plus élevé jamais atteint (record de force estimé)
  *  - la charge la plus lourde jamais soulevée, quel que soit le nombre de reps
  *  - le plus grand nombre de répétitions jamais réalisé sur une série
+ *
+ * Important sur les données venant d'un WOD CrossFit : on ne sait jamais
+ * si les répétitions saisies ont été faites d'un seul tenant ou réparties
+ * en plusieurs petites séries pendant le WOD (que ce soit un total AMRAP
+ * cumulé sur plusieurs tours, ou même un total "For Time" comme 50 reps
+ * fractionnées). Un 1RM estimé ou un "reps max" calculés là-dessus
+ * seraient donc trompeurs. Le CrossFit alimente donc uniquement la
+ * charge maximale utilisée (un fait solide, peu importe le découpage des
+ * séries) — jamais le 1RM estimé ni les reps max, qui restent réservés
+ * aux vraies séries enregistrées dans l'onglet Musculation.
  */
 function computeMuscuRecords() {
-  const sessions = getAllSessions().filter((s) => s.type === "musculation");
   const records = {}; // { "Back Squat": { oneRM: {...}, maxWeight: {...}, maxReps: {...} } }
 
-  sessions.forEach((session) => {
-    (session.exercises || []).forEach((entry) => {
-      if (!records[entry.exercise]) {
-        records[entry.exercise] = { oneRM: null, maxWeight: null, maxReps: null };
-      }
-      const rec = records[entry.exercise];
+  function ensureRecord(exercise) {
+    if (!records[exercise]) {
+      records[exercise] = { oneRM: null, maxWeight: null, maxReps: null };
+    }
+    return records[exercise];
+  }
 
-      entry.sets.forEach((set) => {
-        const estimated1RM = estimateOneRepMax(set.weight, set.reps);
+  /** Une vraie série (musculation) : alimente le 1RM, la charge max et les reps max. */
+  function registerSet(exercise, set, date) {
+    const rec = ensureRecord(exercise);
+    const estimated1RM = estimateOneRepMax(set.weight, set.reps);
 
-        if (!rec.oneRM || estimated1RM > rec.oneRM.value) {
-          rec.oneRM = { value: estimated1RM, weight: set.weight, reps: set.reps, date: session.date };
-        }
-        if (!rec.maxWeight || set.weight > rec.maxWeight.value) {
-          rec.maxWeight = { value: set.weight, reps: set.reps, date: session.date };
-        }
-        if (!rec.maxReps || set.reps > rec.maxReps.value) {
-          rec.maxReps = { value: set.reps, weight: set.weight, date: session.date };
+    if (!rec.oneRM || estimated1RM > rec.oneRM.value) {
+      rec.oneRM = { value: estimated1RM, weight: set.weight, reps: set.reps, date };
+    }
+    if (!rec.maxWeight || set.weight > rec.maxWeight.value) {
+      rec.maxWeight = { value: set.weight, reps: set.reps, date };
+    }
+    if (!rec.maxReps || set.reps > rec.maxReps.value) {
+      rec.maxReps = { value: set.reps, weight: set.weight, date };
+    }
+  }
+
+  /** Un exercice structuré vu dans un WOD : alimente uniquement la charge max utilisée. */
+  function registerWeightUsage(exercise, weight, date) {
+    if (!weight || weight <= 0) return; // rien de fiable à en tirer sans charge réelle
+    const rec = ensureRecord(exercise);
+    if (!rec.maxWeight || weight > rec.maxWeight.value) {
+      rec.maxWeight = { value: weight, reps: null, date, source: "crossfit" };
+    }
+  }
+
+  getAllSessions().forEach((session) => {
+    if (session.type === "musculation") {
+      (session.exercises || []).forEach((entry) => {
+        entry.sets.forEach((set) => registerSet(entry.exercise, set, session.date));
+      });
+    } else if (session.type === "crossfit") {
+      (session.exercises || []).forEach((entry) => {
+        if (typeof entry === "object" && entry !== null && entry.reps > 0) {
+          registerWeightUsage(entry.exercise, entry.weight || 0, session.date);
         }
       });
-    });
+    }
   });
 
   return records;
+}
+
+/**
+ * Compare les charges avant/après l'ajout d'un WOD pour détecter si un
+ * exercice structuré vient de battre la charge maximale connue pour cet
+ * exercice. Utilisée à la place de detectMuscuNewRecords pour le
+ * CrossFit, puisque le CrossFit n'alimente que la charge max, pas le 1RM.
+ */
+function detectStructuredWeightRecords(recordsBefore, structuredEntries) {
+  const hits = [];
+  structuredEntries.forEach((entry) => {
+    if (!entry.weight || entry.weight <= 0) return;
+    const before = recordsBefore[entry.exercise];
+    const isNewRecord = !before || !before.maxWeight || entry.weight > before.maxWeight.value;
+    if (isNewRecord) hits.push({ exercise: entry.exercise, value: entry.weight });
+  });
+  return hits;
 }
 
 /**
@@ -215,29 +320,45 @@ function renderRecords() {
   exerciseNames.forEach((exercise) => {
     const sessionRec = sessionRecords[exercise] || null;
     const manual = manualOneRMs[exercise] || null;
+    const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exercise);
 
     // On choisit la valeur la plus élevée entre l'estimation calculée et
     // la valeur saisie manuellement, en gardant toujours une trace de sa source.
     let headline;
     if (manual && (!sessionRec || !sessionRec.oneRM || manual.weight >= sessionRec.oneRM.value)) {
       headline = { value: manual.weight, source: "manual", date: manual.date };
-    } else {
+    } else if (sessionRec && sessionRec.oneRM) {
       headline = { value: sessionRec.oneRM.value, source: "estimated", date: sessionRec.oneRM.date };
+    } else {
+      headline = null;
     }
+
+    // Pour un exercice au poids du corps jamais réalisé avec un lest, un
+    // "1RM à 0 kg" n'a pas de sens : on met plutôt en avant les reps max.
+    const showRepsHeadline = !headline && isBW && sessionRec && sessionRec.maxReps;
+    // Exercice jamais vu en musculation, seulement dans un WOD : on n'a
+    // qu'une charge max utilisée, jamais de 1RM (voir note plus haut).
+    const showWeightOnlyHeadline = !headline && !showRepsHeadline && sessionRec && sessionRec.maxWeight;
 
     const otherValueNote =
       manual && sessionRec && sessionRec.oneRM && Math.round(sessionRec.oneRM.value) !== Math.round(manual.weight)
         ? `<span>Estimé à partir des séances : ${Math.round(sessionRec.oneRM.value)} kg</span>`
         : "";
 
-    const subLines = sessionRec
-      ? `
-        <div class="record-sub">
-          <span>Charge max levée : ${sessionRec.maxWeight.value} kg × ${sessionRec.maxWeight.reps}</span>
-          <span>Reps max : ${sessionRec.maxReps.value} (à ${sessionRec.maxReps.weight} kg)</span>
-          ${otherValueNote}
-        </div>`
-      : `<p class="empty-text" style="margin-top:8px;">Aucune séance enregistrée pour cet exercice.</p>`;
+    const subLineParts = [];
+    if (sessionRec && sessionRec.maxWeight && sessionRec.maxWeight.value > 0) {
+      const repsText = sessionRec.maxWeight.reps ? ` × ${sessionRec.maxWeight.reps}` : "";
+      const fromWod = sessionRec.maxWeight.source === "crossfit" ? " (vu en WOD)" : "";
+      subLineParts.push(`<span>${isBW ? "Lest max" : "Charge max"} : ${sessionRec.maxWeight.value} kg${repsText}${fromWod}</span>`);
+    }
+    if (sessionRec && sessionRec.maxReps) {
+      subLineParts.push(`<span>Reps max : ${sessionRec.maxReps.value}${sessionRec.maxReps.weight > 0 ? ` (à ${sessionRec.maxReps.weight} kg)` : ""}</span>`);
+    }
+    if (otherValueNote) subLineParts.push(otherValueNote);
+
+    const subLines = subLineParts.length > 0
+      ? `<div class="record-sub">${subLineParts.join("")}</div>`
+      : `<p class="empty-text" style="margin-top:8px;">Aucune séance de musculation enregistrée pour cet exercice.</p>`;
 
     const manageLinks = manual
       ? `
@@ -247,14 +368,34 @@ function renderRecords() {
         </div>`
       : `<div class="record-manage"><button type="button" class="record-link add-1rm-link">+ Noter mon 1RM connu</button></div>`;
 
+    let mainBlock;
+    if (headline) {
+      mainBlock = `
+        <div class="record-main">
+          <span class="record-value">${Math.round(headline.value)} <small>kg</small></span>
+          <span class="record-label">${headline.source === "manual" ? "1RM connu (saisi)" : "1RM estimé*"}</span>
+        </div>`;
+    } else if (showRepsHeadline) {
+      mainBlock = `
+        <div class="record-main">
+          <span class="record-value">${sessionRec.maxReps.value}</span>
+          <span class="record-label">Reps max (poids de corps)</span>
+        </div>`;
+    } else if (showWeightOnlyHeadline) {
+      mainBlock = `
+        <div class="record-main">
+          <span class="record-value">${sessionRec.maxWeight.value} <small>kg</small></span>
+          <span class="record-label">Charge max utilisée (WOD)</span>
+        </div>`;
+    } else {
+      mainBlock = `<div class="record-main"><span class="record-value">—</span></div>`;
+    }
+
     const card = document.createElement("div");
     card.className = "record-card";
     card.innerHTML = `
       <span class="record-card-title">${exercise}</span>
-      <div class="record-main">
-        <span class="record-value">${Math.round(headline.value)} <small>kg</small></span>
-        <span class="record-label">${headline.source === "manual" ? "1RM connu (saisi)" : "1RM estimé*"}</span>
-      </div>
+      ${mainBlock}
       ${subLines}
       ${manageLinks}
     `;

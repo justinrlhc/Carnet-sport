@@ -22,6 +22,7 @@
   /* Accents secondaires, utilisés avec parcimonie */
   --success: #4CAF7D;
   --danger: #E1584F;
+  --info: #5B9BD9;
 
   /* Typographie */
   --font-display: 'Space Grotesk', sans-serif;
@@ -342,6 +343,32 @@ button { font-family: inherit; }
   /* Boutons plus faciles à toucher du pouce sur mobile */
   .btn { padding: 12px 18px; min-height: 44px; }
   .btn-small { padding: 10px 14px; min-height: 40px; }
+
+  /* En-têtes "titre + sélecteur(s)" : on les laisse passer à la ligne
+     plutôt que de se tasser ou déborder sur un écran étroit */
+  .history-header,
+  .stats-chart-header,
+  .regularity-header {
+    flex-wrap: wrap;
+  }
+  .history-header-filters {
+    width: 100%;
+  }
+  .history-header select,
+  .history-header-filters select,
+  .stats-chart-header select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Jauge d'IMC et champ taille : on garde une largeur fluide, sans
+     dépasser l'écran sur les petits téléphones */
+  .height-row { max-width: 100%; }
+  .bmi-gauge-svg { max-width: 260px; }
+
+  /* Cartes de records : la grille passe naturellement à une colonne
+     sur un écran étroit (déjà le cas via auto-fill, vérifié ici) */
+  .records-grid { grid-template-columns: 1fr; }
 }
 
 /* ==========================================================================
@@ -498,6 +525,70 @@ button { font-family: inherit; }
 }
 .exercise-block-header .exercise-block-remove:hover { color: var(--danger); }
 
+.exercise-block-hint {
+  font-size: 12px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin: 0 0 12px 0;
+}
+
+/* ----- CrossFit : deux types de mouvements (libre / structuré) ----- */
+.cf-add-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.form-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 8px 0 0 0;
+  line-height: 1.5;
+}
+.cf-structured-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-bottom: 8px;
+  background: var(--surface-raised);
+}
+.cf-structured-row-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.cf-structured-row-header select.cf-structured-select {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 9px 10px;
+  font-size: 14px;
+  font-family: var(--font-body);
+}
+.cf-structured-custom { flex: 1; }
+.cf-structured-row-header .set-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+.cf-structured-row-header .set-remove:hover { color: var(--danger); }
+.cf-structured-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+@media (max-width: 500px) {
+  .cf-structured-fields { grid-template-columns: 1fr 1fr; }
+}
+
 /* ----- Historique : plusieurs exercices affichés dans une même carte de séance ----- */
 .history-card-exercise {
   padding: 8px 0;
@@ -517,6 +608,83 @@ button { font-family: inherit; }
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+}
+.history-header-filters {
+  display: flex;
+  gap: 8px;
+}
+.regularity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.regularity-header .panel-title { margin: 0; }
+.streak-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  padding: 5px 12px;
+  border-radius: 100px;
+}
+
+/* ----- Taille / IMC (Mensurations) ----- */
+.height-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  max-width: 340px;
+}
+.height-row input { flex: 1; }
+
+/* ----- Jauge d'IMC ----- */
+.bmi-gauge-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.bmi-gauge-svg {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+}
+.bmi-gauge-value {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  margin-top: -12px;
+}
+.bmi-gauge-category {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.bmi-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+.bmi-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.bmi-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 .history-header select {
   background: var(--surface-raised);
@@ -569,6 +737,16 @@ button { font-family: inherit; }
   padding: 2px 8px;
   border-radius: 100px;
 }
+
+/* ----- Niveau RX / Inter / Scaled : un code couleur par intensité ----- */
+.badge-level-rx { background: rgba(225, 88, 79, 0.16); color: var(--danger); }
+.badge-level-inter { background: var(--accent-soft); color: var(--accent-strong); }
+.badge-level-scaled { background: rgba(91, 155, 217, 0.16); color: var(--info); }
+
+/* ----- RPE : plus foncé/rouge à mesure que l'effort perçu augmente ----- */
+.badge-rpe-low { background: rgba(76, 175, 125, 0.16); color: var(--success); }
+.badge-rpe-mid { background: var(--accent-soft); color: var(--accent-strong); }
+.badge-rpe-high { background: rgba(225, 88, 79, 0.16); color: var(--danger); }
 .history-card-notes {
   font-size: 13px;
   color: var(--text-muted);

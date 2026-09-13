@@ -28,6 +28,9 @@ function refreshEntireApp() {
   if (typeof renderCfHistory === "function") renderCfHistory();
 
   if (typeof renderWeightHistory === "function") renderWeightHistory();
+  const heightInputEl = document.getElementById("height-input");
+  if (heightInputEl && typeof getHeight === "function") heightInputEl.value = getHeight() || "";
+  if (typeof renderBmiGauge === "function") renderBmiGauge();
   if (typeof renderRecords === "function") renderRecords();
   if (typeof renderAllStatsCharts === "function") renderAllStatsCharts();
   if (typeof renderDashboard === "function") renderDashboard();

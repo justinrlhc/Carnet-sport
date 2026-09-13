@@ -15,20 +15,42 @@ const DEFAULT_EXERCISES = [
   "Deadlift", "Sumo Deadlift", "Romanian Deadlift",
   "Bench Press", "Incline Bench Press",
   "Strict Press", "Push Press", "Push Jerk", "Split Jerk",
-  "Bent-Over Row",
+  "Bent-Over Row", "Rowing barre", "Rowing haltères",
   "Barbell Lunge", "Barbell Reverse Lunge", "Walking Lunge",
   "Snatch", "Power Snatch", "Snatch Pull", "Snatch Balance",
   "Clean", "Power Clean", "Clean & Jerk", "Squat Clean", "Hang Power Clean", "Clean Pull",
-  "Barbell Thruster",
+  "Barbell Thruster", "Curl barre", "Curl haltères",
   "Dumbbell Bench Press", "Dumbbell Incline Bench Press", "Dumbbell Floor Press",
   "Dumbbell Shoulder Press", "Dumbbell Clean & Jerk", "Dumbbell Snatch",
   "Dumbbell Thruster", "Dumbbell Walking Lunge",
   "Pull-up", "Bar Muscle-Up", "Ring Muscle-Up", "Chest-to-Bar Pull-Up",
-  "Toes-to-Bar", "Push-Up", "Handstand Push-Up",
-  "Burpee", "Burpee Box Jump-Over", "Box Jump", "Box Step-Up",
+  "Toes-to-Bar", "Push-Up", "Handstand Push-Up", "Dips",
+  "Burpee", "Burpee over the bar", "Burpee Box Jump-Over", "Box Jump", "Box Step-Up",
   "V-Up", "Sit-Up",
   "Farmer Carry", "Hip Thrust",
 ];
+
+// Exercices "au poids du corps" : la charge y est facultative (on peut juste
+// noter des répétitions), mais on peut quand même ajouter un lest si la
+// série est réalisée avec une charge supplémentaire (ex : dips lestés).
+const BODYWEIGHT_EXERCISES = [
+  "Dips", "Burpee over the bar", "Pull-up", "V-Up", "Toes-to-Bar",
+  "Box Jump", "Box Step-Up", "Burpee Box Jump-Over", "Sit-Up", "Air Squat",
+  "Burpee", "Push-Up", "Handstand Push-Up", "Ring Muscle-Up", "Bar Muscle-Up",
+  "Chest-to-Bar Pull-Up",
+];
+
+/** Un exercice au poids du corps n'exige pas de charge pour valider une série. */
+function isBodyweightExercise(exerciseName) {
+  return BODYWEIGHT_EXERCISES.includes(exerciseName);
+}
+
+/** Renvoie la classe de couleur du badge RPE : vert (facile) → doré → rouge (quasi max). */
+function getRpeBadgeClass(rpe) {
+  if (rpe >= 9) return "badge-rpe-high";
+  if (rpe >= 7) return "badge-rpe-mid";
+  return "badge-rpe-low";
+}
 
 // --------------------------------------------------------------------------
 // ÉLÉMENTS GÉNÉRAUX DU FORMULAIRE
@@ -124,6 +146,7 @@ function createExerciseBlock(prefill) {
       <input type="text" class="exercise-block-custom form-input-spaced" placeholder="Nom de l'exercice" style="display:none;">
       <button type="button" class="exercise-block-remove" title="Supprimer cet exercice">✕</button>
     </div>
+    <p class="exercise-block-hint" style="display:none;">Poids de corps : la charge est facultative — ajoute un lest si tu es lesté.</p>
     <div class="exercise-block-sets sets-list"></div>
     <button type="button" class="exercise-block-add-set btn btn-secondary btn-small">+ Ajouter une série</button>
     <div class="form-row" style="margin-top: 10px;">
@@ -134,6 +157,7 @@ function createExerciseBlock(prefill) {
 
   const select = block.querySelector(".exercise-block-select");
   const customInput = block.querySelector(".exercise-block-custom");
+  const hint = block.querySelector(".exercise-block-hint");
   const setsList = block.querySelector(".exercise-block-sets");
   const addSetBtn = block.querySelector(".exercise-block-add-set");
   const removeBtn = block.querySelector(".exercise-block-remove");
@@ -141,13 +165,32 @@ function createExerciseBlock(prefill) {
 
   populateExerciseSelectElement(select);
 
+  /** Renvoie le nom d'exercice actuellement choisi dans ce bloc (liste ou saisie libre). */
+  function getBlockExerciseName() {
+    return select.value === "__custom__" ? customInput.value.trim() : select.value;
+  }
+
+  /** Adapte l'indice et les placeholders "Poids" selon que l'exercice est au poids du corps ou non. */
+  function updateBodyweightUI() {
+    const isBW = isBodyweightExercise(getBlockExerciseName());
+    hint.style.display = isBW ? "block" : "none";
+    setsList.querySelectorAll(".set-weight").forEach((input) => {
+      input.placeholder = isBW ? "Lest (kg, optionnel)" : "Poids (kg)";
+    });
+  }
+
   select.addEventListener("change", () => {
     const isCustom = select.value === "__custom__";
     customInput.style.display = isCustom ? "block" : "none";
     if (isCustom) customInput.focus();
+    updateBodyweightUI();
   });
+  customInput.addEventListener("input", updateBodyweightUI);
 
-  addSetBtn.addEventListener("click", () => setsList.appendChild(createSetRow()));
+  addSetBtn.addEventListener("click", () => {
+    setsList.appendChild(createSetRow());
+    updateBodyweightUI();
+  });
 
   removeBtn.addEventListener("click", () => {
     if (muscuExercisesList.children.length <= 1) {
@@ -177,6 +220,8 @@ function createExerciseBlock(prefill) {
   } else {
     for (let i = 0; i < 3; i++) setsList.appendChild(createSetRow());
   }
+
+  updateBodyweightUI();
 
   return block;
 }
@@ -212,12 +257,16 @@ muscuForm.addEventListener("submit", (event) => {
       return;
     }
 
+    const isBW = isBodyweightExercise(exerciseName);
     const sets = [...block.querySelectorAll(".set-row")]
       .map((row) => ({
         reps: Number(row.querySelector(".set-reps").value) || 0,
         weight: Number(row.querySelector(".set-weight").value) || 0,
       }))
-      .filter((set) => set.reps > 0 && set.weight > 0);
+      // Pour un exercice au poids du corps, une série est valide dès qu'il y a
+      // des répétitions — la charge (un éventuel lest) reste optionnelle.
+      // Pour un exercice avec barre/haltères, on garde l'exigence habituelle.
+      .filter((set) => (isBW ? set.reps > 0 : set.reps > 0 && set.weight > 0));
 
     if (sets.length === 0) {
       showMuscuFeedback(`Merci de renseigner au moins une série pour ${exerciseName}.`, true);
@@ -251,8 +300,18 @@ muscuForm.addEventListener("submit", (event) => {
       ? detectMuscuNewRecords(recordsBefore, exercises, sessionData.date)
       : [];
 
+    // Si la séance contient un exercice au poids du corps mais qu'aucun poids
+    // n'est encore connu (onglet Mensurations vide), le volume de ces
+    // exercices ne pourra pas être calculé — on le signale simplement,
+    // sans jamais empêcher l'enregistrement de la séance.
+    const hasBodyweightExercise = exercises.some((ex) => isBodyweightExercise(ex.exercise));
+    const bodyweightUnknown = hasBodyweightExercise &&
+      typeof getCurrentBodyweight === "function" && getCurrentBodyweight() === null;
+
     if (newRecords.length > 0) {
       showMuscuRecordBadge(newRecords);
+    } else if (bodyweightUnknown) {
+      showMuscuFeedback("Séance enregistrée ! Astuce : renseigne ton poids dans Mensurations pour calculer le volume des exercices au poids du corps.", false);
     } else {
       showMuscuFeedback("Séance enregistrée !", false);
     }
@@ -362,12 +421,14 @@ function renderMuscuHistory() {
 
     const exercisesHtml = session.exercises
       .map((entry) => {
-        const setsText = entry.sets.map((s) => `${s.weight} kg × ${s.reps}`).join(" · ");
+        const setsText = entry.sets
+          .map((s) => (s.weight > 0 ? `${s.weight} kg × ${s.reps}` : `${s.reps} reps`))
+          .join(" · ");
         return `
           <div class="history-card-exercise">
             <span class="history-card-exercise-name">${entry.exercise}</span>
             <span class="history-card-sets">${setsText}</span>
-            ${entry.rpe ? `<span class="badge-rpe">RPE ${entry.rpe}</span>` : ""}
+            ${entry.rpe ? `<span class="badge-rpe ${getRpeBadgeClass(entry.rpe)}">RPE ${entry.rpe}</span>` : ""}
           </div>`;
       })
       .join("");

@@ -8,6 +8,22 @@
 // navigateur, sur CET ordinateur (d'où l'intérêt de l'export, ajouté
 // plus tard).
 //
+// --------------------------------------------------------------------------
+// PIÈGE À CONNAÎTRE : `new Date("2026-09-13")` (une date SANS heure) est
+// interprétée par JavaScript comme minuit... en UTC, pas en heure locale.
+// En France (UTC+2 l'été), ça décale la date vers 2h du matin une fois
+// reconvertie en heure locale — invisible la plupart du temps, mais ça
+// peut faire "sortir" une séance de sa semaine si on la compare à une
+// limite calculée, elle, en heure locale (minuit pile). D'où cette
+// fonction : à utiliser PARTOUT où on compare une date stockée à une
+// limite de plage (début/fin de semaine par exemple), plutôt que
+// `new Date(dateString)` directement.
+// --------------------------------------------------------------------------
+function parseLocalDate(dateStr) {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day); // minuit en heure LOCALE
+}
+//
 // Les autres fichiers (app.js, plus tard musculation.js, crossfit.js...)
 // ne doivent JAMAIS écrire directement dans localStorage : ils passent
 // toujours par les fonctions ci-dessous. Ça évite les erreurs et ça
@@ -169,6 +185,53 @@ function ensureBodyweightIds() {
   if (changed) saveAllBodyweightEntries(entries);
 }
 
+/**
+ * Renvoie le poids de corps actuel de l'athlète (la mesure la plus récente
+ * enregistrée dans l'onglet Mensurations), ou null si aucune mesure n'a
+ * encore été prise. Utilisée pour calculer le volume des exercices au
+ * poids du corps (pull-ups, dips, burpees...).
+ */
+function getCurrentBodyweight() {
+  const entries = getAllBodyweightEntries();
+  if (entries.length === 0) return null;
+  const sorted = [...entries].sort((a, b) => new Date(a.date) - new Date(b.date));
+  return sorted[sorted.length - 1].weight;
+}
+
+// --------------------------------------------------------------------------
+// TAILLE ET IMC
+// La taille change rarement une fois adulte : on la garde comme une seule
+// valeur (pas un historique daté comme le poids), simple à modifier si besoin.
+// --------------------------------------------------------------------------
+
+const STORAGE_KEY_HEIGHT = "carnet_height_cm";
+
+/** Renvoie la taille enregistrée (en cm), ou null si elle n'a jamais été saisie. */
+function getHeight() {
+  const raw = localStorage.getItem(STORAGE_KEY_HEIGHT);
+  if (!raw) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function setHeight(heightCm) {
+  localStorage.setItem(STORAGE_KEY_HEIGHT, String(heightCm));
+}
+
+/**
+ * Calcule l'IMC (indice de masse corporelle) à partir du poids actuel et
+ * de la taille enregistrée. Renvoie null si l'une des deux valeurs manque
+ * — sans jamais bloquer le reste de l'application.
+ * Formule : poids (kg) / taille (m)².
+ */
+function computeBmi() {
+  const weight = getCurrentBodyweight();
+  const heightCm = getHeight();
+  if (weight === null || heightCm === null) return null;
+  const heightM = heightCm / 100;
+  return weight / (heightM * heightM);
+}
+
 // --------------------------------------------------------------------------
 // RECORDS SAISIS MANUELLEMENT
 // Certains records (1RM connu en conditions optimales, meilleur temps
@@ -309,6 +372,7 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_KEY_BODYWEIGHT);
   localStorage.removeItem(STORAGE_KEY_MANUAL_1RM);
   localStorage.removeItem(STORAGE_KEY_MANUAL_CF_BEST);
+  localStorage.removeItem(STORAGE_KEY_HEIGHT);
 }
 
 // --------------------------------------------------------------------------
@@ -328,6 +392,7 @@ function exportAllData() {
     bodyweight: getAllBodyweightEntries(),
     manualOneRMs: getManualOneRMs(),
     manualCfBests: getManualCfBests(),
+    heightCm: getHeight(),
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -352,6 +417,7 @@ function importAllData(jsonString) {
   saveAllBodyweightEntries(payload.bodyweight || []);
   localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(payload.manualOneRMs || {}));
   localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(payload.manualCfBests || {}));
+  if (payload.heightCm) setHeight(payload.heightCm);
 
   return { success: true };
 }

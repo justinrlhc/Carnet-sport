@@ -74,10 +74,10 @@ function buildWeeklyBuckets(nbWeeks) {
 }
 
 function computeWeeklyVolumeSeries(nbWeeks) {
-  const sessions = getAllSessions().filter((s) => s.type === "musculation");
+  const sessions = getAllSessions(); // musculation ET crossfit : computeSessionVolume gère les deux
   return buildWeeklyBuckets(nbWeeks).map(({ start, end }) =>
     sessions
-      .filter((s) => { const d = new Date(s.date); return d >= start && d <= end; })
+      .filter((s) => { const d = parseLocalDate(s.date); return d >= start && d <= end; })
       .reduce((total, s) => total + computeSessionVolume(s), 0)
   );
 }
@@ -85,7 +85,7 @@ function computeWeeklyVolumeSeries(nbWeeks) {
 function computeWeeklySessionsSeries(nbWeeks) {
   const sessions = getAllSessions();
   return buildWeeklyBuckets(nbWeeks).map(({ start, end }) =>
-    sessions.filter((s) => { const d = new Date(s.date); return d >= start && d <= end; }).length
+    sessions.filter((s) => { const d = parseLocalDate(s.date); return d >= start && d <= end; }).length
   );
 }
 
@@ -170,15 +170,25 @@ function renderExerciseChart() {
   const select = document.getElementById("stats-exercise-select");
   if (!canvas || !select || !select.value) return;
 
-  const sessions = getAllSessions()
-    .filter((s) => s.type === "musculation" && (s.exercises || []).some((ex) => ex.exercise === select.value))
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Ce graphique est un 1RM ESTIMÉ, qui suppose une vraie série faite d'un
+  // seul tenant. On ne l'alimente donc qu'avec les séances de musculation —
+  // pas avec les exercices structurés d'un WOD, dont on ne peut jamais être
+  // sûr qu'ils ont été faits sans les fractionner (voir stats.js).
+  const points = [];
 
-  const labels = sessions.map((s) => new Date(s.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }));
-  const data = sessions.map((s) => {
-    const entry = s.exercises.find((ex) => ex.exercise === select.value);
-    return Math.round(Math.max(...entry.sets.map((set) => estimateOneRepMax(set.weight, set.reps))));
+  getAllSessions().forEach((session) => {
+    if (session.type !== "musculation") return;
+    const entry = (session.exercises || []).find((ex) => ex.exercise === select.value);
+    if (entry) {
+      const best = Math.max(...entry.sets.map((set) => estimateOneRepMax(set.weight, set.reps)));
+      points.push({ date: session.date, value: best });
+    }
   });
+
+  points.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const labels = points.map((p) => new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }));
+  const data = points.map((p) => Math.round(p.value));
 
   if (exerciseChartInstance) exerciseChartInstance.destroy();
   exerciseChartInstance = new Chart(canvas, {
@@ -396,6 +406,57 @@ function renderAttendanceHeatmap() {
 }
 
 // --------------------------------------------------------------------------
+// COMPTEUR DE SÉRIE (STREAK) HEBDOMADAIRE
+// Nombre de semaines consécutives (lundi-dimanche) avec au moins
+// MIN_SESSIONS_PER_WEEK séances. La semaine en cours n'est comptée que si
+// elle a déjà atteint ce seuil ; sinon, comme elle n'est pas terminée, elle
+// n'est ni comptée ni considérée comme une rupture de série.
+// --------------------------------------------------------------------------
+
+const STREAK_MIN_SESSIONS_PER_WEEK = 2;
+
+function countSessionsInWeek(weekStart) {
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  return getAllSessions().filter((s) => {
+    const d = parseLocalDate(s.date);
+    return d >= weekStart && d <= weekEnd;
+  }).length;
+}
+
+function computeWeeklyStreak() {
+  const currentWeekStart = getWeekStartDate(new Date());
+  let cursor = new Date(currentWeekStart);
+
+  // La semaine en cours n'est pas terminée : si elle n'a pas encore
+  // atteint le seuil, on ne la compte pas, mais elle ne casse rien non
+  // plus — on démarre alors le décompte à la semaine précédente.
+  if (countSessionsInWeek(cursor) < STREAK_MIN_SESSIONS_PER_WEEK) {
+    cursor.setDate(cursor.getDate() - 7);
+  }
+
+  let streak = 0;
+  while (countSessionsInWeek(cursor) >= STREAK_MIN_SESSIONS_PER_WEEK) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 7);
+  }
+  return streak;
+}
+
+function renderStreakBadge() {
+  const badge = document.getElementById("streak-badge");
+  if (!badge) return;
+
+  const streak = computeWeeklyStreak();
+  if (streak === 0) {
+    badge.style.display = "none";
+    return;
+  }
+  badge.textContent = `${streak} semaine${streak > 1 ? "s" : ""} d'affilée`;
+  badge.style.display = "inline-block";
+}
+
+// --------------------------------------------------------------------------
 // FONCTION GLOBALE : tout redessiner d'un coup (appelée en arrivant sur la page)
 // --------------------------------------------------------------------------
 
@@ -403,6 +464,7 @@ function renderAllStatsCharts() {
   populateStatsExerciseSelect();
   populateStatsWodSelect();
   renderAttendanceHeatmap();
+  renderStreakBadge();
   renderBodyweightChart();
   renderExerciseChart();
   renderVolumeChart();
