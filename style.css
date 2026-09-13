@@ -303,24 +303,45 @@ button { font-family: inherit; }
     width: 100%;
     flex-direction: row;
     align-items: center;
-    padding: 12px 16px;
+    /* padding-top tient compte de l'encoche/Dynamic Island sur iPhone */
+    padding: max(12px, env(safe-area-inset-top)) 16px 12px 16px;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
-  .brand { padding: 0 12px 0 0; }
+  .brand-name { display: none; } /* trop peu de place à côté des onglets sur mobile */
+  .brand { padding: 0 10px 0 0; }
   .nav {
+    flex: 1;
     flex-direction: row;
     overflow-x: auto;
-    gap: 4px;
+    gap: 6px;
+    /* Défilement fluide au doigt, sans barre de scroll visible */
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
-  .nav-item { white-space: nowrap; }
-  .nav-item span { display: none; } /* on garde juste les icônes sur mobile */
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-item {
+    white-space: nowrap;
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px 12px;
+    min-width: 56px;
+    /* Zone tactile confortable (recommandation Apple : 44pt minimum) */
+    min-height: 44px;
+    justify-content: center;
+  }
+  .nav-label { display: none; } /* on garde juste les icônes sur mobile */
+  .nav-icon { width: 20px; height: 20px; }
   .sidebar-footer { display: none; }
 
   .main { padding: 20px 16px; }
   .topbar { flex-direction: column; align-items: flex-start; gap: 12px; }
   .btn-primary { width: 100%; }
   .stat-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Boutons plus faciles à toucher du pouce sur mobile */
+  .btn { padding: 12px 18px; min-height: 44px; }
+  .btn-small { padding: 10px 14px; min-height: 40px; }
 }
 
 /* ==========================================================================
