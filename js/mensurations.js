@@ -59,7 +59,7 @@ function startEditWeightEntry(entry) {
 function cancelWeightEdit() {
   weightEditingId = null;
   weightForm.reset();
-  weightDateInput.value = new Date().toISOString().split("T")[0];
+  weightDateInput.value = todayLocalDateString();
   weightSubmitBtn.textContent = "Enregistrer";
   weightCancelEditBtn.style.display = "none";
 }
@@ -113,7 +113,7 @@ function renderWeightHistory() {
 // INITIALISATION
 // --------------------------------------------------------------------------
 
-weightDateInput.value = new Date().toISOString().split("T")[0];
+weightDateInput.value = todayLocalDateString();
 renderWeightHistory();
 
 // --------------------------------------------------------------------------

@@ -45,7 +45,7 @@ btnExportData.addEventListener("click", () => {
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocalDateString();
   const link = document.createElement("a");
   link.href = url;
   link.download = `carnet-sauvegarde-${today}.json`;

@@ -23,6 +23,24 @@ function parseLocalDate(dateStr) {
   const [year, month, day] = dateStr.split("-").map(Number);
   return new Date(year, month - 1, day); // minuit en heure LOCALE
 }
+
+/**
+ * Convertit un objet Date en chaîne "AAAA-MM-JJ" en heure LOCALE.
+ * Même piège que ci-dessus, dans l'autre sens : `toISOString()` bascule en
+ * UTC et peut renvoyer la veille (ou le lendemain) selon l'heure qu'il est.
+ * À utiliser partout où on veut "la date du jour" ou la clé d'un jour donné.
+ */
+function toLocalDateString(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Raccourci : la date d'aujourd'hui au format "AAAA-MM-JJ", en heure locale. */
+function todayLocalDateString() {
+  return toLocalDateString(new Date());
+}
 //
 // Les autres fichiers (app.js, plus tard musculation.js, crossfit.js...)
 // ne doivent JAMAIS écrire directement dans localStorage : ils passent
@@ -304,7 +322,7 @@ function ensureDemoData() {
   function daysAgo(n) {
     const d = new Date(today);
     d.setDate(d.getDate() - n);
-    return d.toISOString().split("T")[0];
+    return toLocalDateString(d);
   }
 
   const demoSessions = [

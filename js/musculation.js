@@ -19,14 +19,14 @@ const DEFAULT_EXERCISES = [
   "Barbell Lunge", "Barbell Reverse Lunge", "Walking Lunge",
   "Snatch", "Power Snatch", "Snatch Pull", "Snatch Balance",
   "Clean", "Power Clean", "Clean & Jerk", "Squat Clean", "Hang Power Clean", "Clean Pull",
-  "Barbell Thruster", "Curl barre", "Curl haltères",
+  "Barbell Thruster", "Curl barre", "Curl haltères", "Barre au front", "Élévations latérales",
   "Dumbbell Bench Press", "Dumbbell Incline Bench Press", "Dumbbell Floor Press",
   "Dumbbell Shoulder Press", "Dumbbell Clean & Jerk", "Dumbbell Snatch",
-  "Dumbbell Thruster", "Dumbbell Walking Lunge",
+  "Dumbbell Thruster", "Dumbbell Walking Lunge", "Wall Ball",
   "Pull-up", "Bar Muscle-Up", "Ring Muscle-Up", "Chest-to-Bar Pull-Up",
   "Toes-to-Bar", "Push-Up", "Handstand Push-Up", "Dips",
   "Burpee", "Burpee over the bar", "Burpee Box Jump-Over", "Box Jump", "Box Step-Up",
-  "V-Up", "Sit-Up",
+  "V-Up", "Sit-Up", "Single Under", "Double Under",
   "Farmer Carry", "Hip Thrust",
 ];
 
@@ -37,7 +37,7 @@ const BODYWEIGHT_EXERCISES = [
   "Dips", "Burpee over the bar", "Pull-up", "V-Up", "Toes-to-Bar",
   "Box Jump", "Box Step-Up", "Burpee Box Jump-Over", "Sit-Up", "Air Squat",
   "Burpee", "Push-Up", "Handstand Push-Up", "Ring Muscle-Up", "Bar Muscle-Up",
-  "Chest-to-Bar Pull-Up",
+  "Chest-to-Bar Pull-Up", "Single Under", "Double Under",
 ];
 
 /** Un exercice au poids du corps n'exige pas de charge pour valider une série. */
@@ -284,7 +284,7 @@ muscuForm.addEventListener("submit", (event) => {
 
   const sessionData = {
     type: "musculation",
-    date: muscuDateInput.value || new Date().toISOString().split("T")[0],
+    date: muscuDateInput.value || todayLocalDateString(),
     exercises,
     notes: muscuNotesInput.value.trim(),
   };
@@ -351,7 +351,7 @@ function showMuscuRecordBadge(newRecords) {
 function duplicateMuscuSession(session) {
   muscuEditingId = null; // on s'assure de bien être en mode "ajout", pas "édition"
 
-  muscuDateInput.value = new Date().toISOString().split("T")[0];
+  muscuDateInput.value = todayLocalDateString();
   muscuNotesInput.value = "";
 
   muscuExercisesList.innerHTML = "";
@@ -385,7 +385,7 @@ function startEditMuscuSession(session) {
 /** Sort du mode édition et remet le formulaire à son état "ajout". */
 function cancelMuscuEdit() {
   muscuEditingId = null;
-  muscuDateInput.value = new Date().toISOString().split("T")[0];
+  muscuDateInput.value = todayLocalDateString();
   muscuNotesInput.value = "";
   resetExerciseBlocks();
   muscuSubmitBtn.textContent = "Enregistrer la séance";
@@ -405,7 +405,7 @@ function renderMuscuHistory() {
 
   const sessions = getAllSessions()
     .filter((s) => s.type === "musculation")
-    .filter((s) => filter === "all" || s.exercises.some((ex) => ex.exercise === filter))
+    .filter((s) => filter === "all" || (s.exercises || []).some((ex) => ex.exercise === filter))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   muscuHistoryList.innerHTML = "";
@@ -419,9 +419,9 @@ function renderMuscuHistory() {
     const card = document.createElement("div");
     card.className = "history-card";
 
-    const exercisesHtml = session.exercises
+    const exercisesHtml = (session.exercises || [])
       .map((entry) => {
-        const setsText = entry.sets
+        const setsText = (entry.sets || [])
           .map((s) => (s.weight > 0 ? `${s.weight} kg × ${s.reps}` : `${s.reps} reps`))
           .join(" · ");
         return `
@@ -470,7 +470,7 @@ function renderMuscuHistory() {
 // INITIALISATION DE LA PAGE
 // --------------------------------------------------------------------------
 
-muscuDateInput.value = new Date().toISOString().split("T")[0]; // aujourd'hui par défaut
+muscuDateInput.value = todayLocalDateString(); // aujourd'hui par défaut
 populateExerciseFilterSelect();
 resetExerciseBlocks();
 renderMuscuHistory();

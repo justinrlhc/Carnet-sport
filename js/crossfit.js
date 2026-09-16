@@ -379,7 +379,7 @@ cfForm.addEventListener("submit", (event) => {
 
   const sessionData = {
     type: "crossfit",
-    date: cfDateInput.value || new Date().toISOString().split("T")[0],
+    date: cfDateInput.value || todayLocalDateString(),
     wodName: wodName,
     wodType: cfTypeSelect.value,
     rxOrScaled: cfRxSelect.value,
@@ -423,7 +423,6 @@ cfForm.addEventListener("submit", (event) => {
   renderCfHistory();
   if (typeof renderDashboard === "function") renderDashboard();
   if (typeof renderRecords === "function") renderRecords();
-  if (typeof renderHistorique === "function") renderHistorique();
 });
 
 /**
@@ -434,7 +433,7 @@ cfForm.addEventListener("submit", (event) => {
 function duplicateCfSession(session) {
   cfEditingId = null;
 
-  cfDateInput.value = new Date().toISOString().split("T")[0];
+  cfDateInput.value = todayLocalDateString();
 
   populateWodSelects();
   cfWodSelect.value = session.wodName;
@@ -515,7 +514,7 @@ function cancelCfEdit() {
   resetExerciseRows();
   cfTimeRow.style.display = "";
   cfRoundsRow.style.display = "";
-  cfDateInput.value = new Date().toISOString().split("T")[0];
+  cfDateInput.value = todayLocalDateString();
   cfSubmitBtn.textContent = "Enregistrer le WOD";
   cfCancelEditBtn.style.display = "none";
 }
@@ -651,7 +650,7 @@ function renderCfHistory() {
 // INITIALISATION DE LA PAGE
 // --------------------------------------------------------------------------
 
-cfDateInput.value = new Date().toISOString().split("T")[0];
+cfDateInput.value = todayLocalDateString();
 populateWodSelects();
 resetExerciseRows();
 renderCfHistory();

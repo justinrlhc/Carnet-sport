@@ -179,7 +179,7 @@ function renderExerciseChart() {
   getAllSessions().forEach((session) => {
     if (session.type !== "musculation") return;
     const entry = (session.exercises || []).find((ex) => ex.exercise === select.value);
-    if (entry) {
+    if (entry && entry.sets && entry.sets.length > 0) {
       const best = Math.max(...entry.sets.map((set) => estimateOneRepMax(set.weight, set.reps)));
       points.push({ date: session.date, value: best });
     }
@@ -373,7 +373,10 @@ function buildAttendanceHeatmapHtml(nbWeeks) {
         continue;
       }
 
-      const dateStr = date.toISOString().split("T")[0];
+      // ATTENTION : surtout pas toISOString() ici — il convertit en UTC, ce
+      // qui décale la date d'un jour en France (minuit le 13 en local = 22h
+      // le 12 en UTC) et chaque case afficherait les séances de la veille.
+      const dateStr = toLocalDateString(date);
       const count = countByDate[dateStr] || 0;
       const level = count === 0 ? 0 : count === 1 ? 1 : 2;
       const label = `${date.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} — ${count} séance${count > 1 ? "s" : ""}`;

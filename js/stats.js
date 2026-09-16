@@ -21,6 +21,8 @@
  * ignorées dans le calcul — sans jamais empêcher d'enregistrer la séance.
  */
 function computeExerciseVolume(exerciseEntry) {
+  if (!exerciseEntry || !Array.isArray(exerciseEntry.sets)) return 0; // donnée malformée : on l'ignore sans planter
+
   const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exerciseEntry.exercise);
 
   if (!isBW) {
@@ -153,6 +155,7 @@ function computeMuscuRecords() {
   getAllSessions().forEach((session) => {
     if (session.type === "musculation") {
       (session.exercises || []).forEach((entry) => {
+        if (!entry || !Array.isArray(entry.sets)) return; // donnée malformée : on l'ignore sans planter
         entry.sets.forEach((set) => registerSet(entry.exercise, set, session.date));
       });
     } else if (session.type === "crossfit") {
@@ -532,7 +535,7 @@ function open1rmForm(exerciseToPrefill, existingManualEntry) {
   }
 
   manual1rmWeightInput.value = existingManualEntry ? existingManualEntry.weight : "";
-  manual1rmDateInput.value = existingManualEntry ? existingManualEntry.date : new Date().toISOString().split("T")[0];
+  manual1rmDateInput.value = existingManualEntry ? existingManualEntry.date : todayLocalDateString();
   manual1rmNotesInput.value = existingManualEntry ? existingManualEntry.notes || "" : "";
 
   manual1rmForm.style.display = "block";
@@ -565,7 +568,7 @@ if (manual1rmForm) {
 
     setManualOneRM(exercise, {
       weight,
-      date: manual1rmDateInput.value || new Date().toISOString().split("T")[0],
+      date: manual1rmDateInput.value || todayLocalDateString(),
       notes: manual1rmNotesInput.value.trim(),
     });
 
@@ -614,7 +617,7 @@ function openCfRecordForm(wodToPrefill, existingManualEntry) {
     ? formatSecondsToTime(existingManualEntry.timeSeconds) : "";
   manualCfRoundsInput.value = existingManualEntry && existingManualEntry.rounds != null ? existingManualEntry.rounds : "";
   manualCfExtraRepsInput.value = existingManualEntry && existingManualEntry.extraReps != null ? existingManualEntry.extraReps : "";
-  manualCfDateInput.value = existingManualEntry ? existingManualEntry.date : new Date().toISOString().split("T")[0];
+  manualCfDateInput.value = existingManualEntry ? existingManualEntry.date : todayLocalDateString();
   manualCfNotesInput.value = existingManualEntry ? existingManualEntry.notes || "" : "";
 
   manualCfForm.style.display = "block";
@@ -653,7 +656,7 @@ if (manualCfForm) {
       timeSeconds,
       rounds,
       extraReps,
-      date: manualCfDateInput.value || new Date().toISOString().split("T")[0],
+      date: manualCfDateInput.value || todayLocalDateString(),
       notes: manualCfNotesInput.value.trim(),
     });
 
