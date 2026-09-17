@@ -45,6 +45,17 @@ function isBodyweightExercise(exerciseName) {
   return BODYWEIGHT_EXERCISES.includes(exerciseName);
 }
 
+// Exercices dont les répétitions sont bien enregistrées, mais qui ne
+// contribuent PAS au volume d'entraînement : compter chaque saut à la corde
+// comme "un poids de corps soulevé" ferait exploser le volume hebdomadaire
+// de façon trompeuse par rapport à la musculation.
+const NO_VOLUME_EXERCISES = ["Single Under", "Double Under"];
+
+/** Renvoie true si cet exercice ne doit pas être comptabilisé dans le volume. */
+function isNoVolumeExercise(exerciseName) {
+  return NO_VOLUME_EXERCISES.includes(exerciseName);
+}
+
 /** Renvoie la classe de couleur du badge RPE : vert (facile) → doré → rouge (quasi max). */
 function getRpeBadgeClass(rpe) {
   if (rpe >= 9) return "badge-rpe-high";

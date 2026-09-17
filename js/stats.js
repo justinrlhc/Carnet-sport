@@ -22,6 +22,7 @@
  */
 function computeExerciseVolume(exerciseEntry) {
   if (!exerciseEntry || !Array.isArray(exerciseEntry.sets)) return 0; // donnée malformée : on l'ignore sans planter
+  if (typeof isNoVolumeExercise === "function" && isNoVolumeExercise(exerciseEntry.exercise)) return 0;
 
   const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exerciseEntry.exercise);
 
@@ -58,6 +59,8 @@ function computeSessionVolume(session) {
  * l'onglet Musculation (poids de corps actuel + éventuel lest).
  */
 function computeCrossfitStructuredVolume(session, entry) {
+  if (typeof isNoVolumeExercise === "function" && isNoVolumeExercise(entry.exercise)) return 0;
+
   const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(entry.exercise);
   let perRepWeight;
 

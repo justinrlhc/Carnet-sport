@@ -598,7 +598,7 @@ function renderCfHistory() {
             ? computeCrossfitStructuredVolume(session, entry)
             : 0;
           const volumeText = volume > 0 ? ` · Volume : ${Math.round(volume).toLocaleString("fr-FR")} kg` : "";
-          return `<p class="history-card-notes"><span class="badge-rpe">Structuré</span> <strong>${entry.exercise}</strong> — ${repsDetail}${weightText}${volumeText}</p>`;
+          return `<p class="history-card-notes"><strong>${entry.exercise}</strong> — ${repsDetail}${weightText}${volumeText}</p>`;
         }
         return null;
       })
@@ -606,9 +606,9 @@ function renderCfHistory() {
       .join("");
 
     const freeTextMovements = (session.exercises || []).filter((entry) => typeof entry === "string");
-    const freeTextHtml = freeTextMovements.length > 0
-      ? `<p class="history-card-notes">${freeTextMovements.join(" · ")}</p>`
-      : "";
+    const freeTextHtml = freeTextMovements
+      .map((movement) => `<p class="history-card-notes">${movement}</p>`)
+      .join("");
 
     card.innerHTML = `
       <div class="history-card-header">
