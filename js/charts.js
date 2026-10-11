@@ -19,17 +19,34 @@ const CHART_COLORS = {
   success: "#4CAF7D",
 };
 
+/** Vrai sur un écran de téléphone (même seuil que le CSS mobile). */
+function isNarrowScreen() {
+  return Boolean(window.matchMedia) && window.matchMedia("(max-width: 720px)").matches;
+}
+
 /** Options communes à tous les graphiques (couleurs des axes, légende...). */
 function getBaseChartOptions() {
+  const narrow = isNarrowScreen();
   return {
     responsive: true,
     maintainAspectRatio: false,
+    locale: "fr-FR", // nombres à la française : 5 000 et non 5,000
     plugins: {
       legend: { labels: { color: CHART_COLORS.text } },
     },
     scales: {
       x: {
-        ticks: { color: CHART_COLORS.text },
+        ticks: {
+          color: CHART_COLORS.text,
+          // Sur téléphone : étiquettes droites et courtes ("03/08" au lieu de
+          // "03/08 → 09/08" penché) ; l'info complète reste dans l'infobulle
+          maxRotation: narrow ? 0 : 50,
+          autoSkipPadding: 8,
+          callback(value) {
+            const label = this.getLabelForValue(value);
+            return narrow && typeof label === "string" ? label.split(" → ")[0] : label;
+          },
+        },
         grid: { color: CHART_COLORS.grid },
       },
       y: {
@@ -177,11 +194,20 @@ function renderExerciseChart() {
   const points = [];
 
   getAllSessions().forEach((session) => {
-    if (session.type !== "musculation") return;
-    const entry = (session.exercises || []).find((ex) => ex.exercise === select.value);
-    if (entry && entry.sets && entry.sets.length > 0) {
-      const best = Math.max(...entry.sets.map((set) => estimateOneRepMax(set.weight, set.reps)));
-      points.push({ date: session.date, value: best });
+    if (session.type === "musculation") {
+      const entry = (session.exercises || []).find((ex) => ex.exercise === select.value);
+      if (entry && entry.sets && entry.sets.length > 0) {
+        const best = Math.max(...entry.sets.map((set) => estimateOneRepMax(set.weight, set.reps)));
+        points.push({ date: session.date, value: best });
+      }
+    } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
+      // Les cours de spé comptent comme de la musculation (vraies séries)
+      const entries = (session.exercises || []).filter(
+        (ex) => typeof ex === "object" && ex !== null && ex.exercise === select.value && ex.reps > 0 && ex.weight > 0
+      );
+      if (entries.length > 0) {
+        points.push({ date: session.date, value: Math.max(...entries.map((ex) => estimateOneRepMax(ex.weight, ex.reps))) });
+      }
     }
   });
 
@@ -356,7 +382,8 @@ function buildAttendanceHeatmapHtml(nbWeeks) {
     const isNewMonth = monthLabel !== lastMonthLabel;
     if (isNewMonth) lastMonthLabel = monthLabel;
 
-    if (isNewMonth && (w - lastPrintedColumnIndex) >= MIN_GAP_BETWEEN_LABELS) {
+    // Pas d'étiquette dans les 2 dernières colonnes : elle serait coupée au bord droit
+    if (isNewMonth && (w - lastPrintedColumnIndex) >= MIN_GAP_BETWEEN_LABELS && w <= nbWeeks - 3) {
       monthsHtml += `<span class="hm-month-label">${monthLabel}</span>`;
       lastPrintedColumnIndex = w;
     } else {

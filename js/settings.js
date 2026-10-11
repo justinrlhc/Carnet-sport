@@ -33,6 +33,10 @@ function refreshEntireApp() {
   if (typeof renderBmiGauge === "function") renderBmiGauge();
   if (typeof renderRecords === "function") renderRecords();
   if (typeof renderAllStatsCharts === "function") renderAllStatsCharts();
+  // Rangs : nouvelle "photo" calculée sans annonce (pas de fenêtre "Rang
+  // supérieur" juste parce qu'on vient d'importer une sauvegarde)
+  if (typeof syncRanksAndAchievements === "function") syncRanksAndAchievements({ silent: true });
+  if (typeof renderProfile === "function") renderProfile();
   if (typeof renderDashboard === "function") renderDashboard();
 }
 
@@ -100,7 +104,7 @@ importFileInput.addEventListener("change", () => {
 
 btnResetData.addEventListener("click", () => {
   const confirmed = confirm(
-    "Supprimer DÉFINITIVEMENT toutes tes séances, mesures de poids et records ? " +
+    "Supprimer DÉFINITIVEMENT toutes tes séances, mesures de poids, records, rangs et succès ? " +
     "Cette action est irréversible. Pense à exporter une sauvegarde avant si tu n'es pas sûr."
   );
   if (!confirmed) return;

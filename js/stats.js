@@ -162,9 +162,17 @@ function computeMuscuRecords() {
         entry.sets.forEach((set) => registerSet(entry.exercise, set, session.date));
       });
     } else if (session.type === "crossfit") {
+      // Un cours de spé (gym, haltéro) se fait en séries techniques, pas en
+      // WOD chronométré : ses exercices structurés comptent comme de vraies
+      // séries de musculation. Dans un WOD classique, seule la charge utilisée compte.
+      const isSpe = typeof isSpeSession === "function" && isSpeSession(session.wodName);
       (session.exercises || []).forEach((entry) => {
         if (typeof entry === "object" && entry !== null && entry.reps > 0) {
-          registerWeightUsage(entry.exercise, entry.weight || 0, session.date);
+          if (isSpe) {
+            registerSet(entry.exercise, { reps: entry.reps, weight: entry.weight || 0 }, session.date);
+          } else {
+            registerWeightUsage(entry.exercise, entry.weight || 0, session.date);
+          }
         }
       });
     }
@@ -196,7 +204,11 @@ function detectStructuredWeightRecords(recordsBefore, structuredEntries) {
  *  - la meilleure performance en rounds/reps (la plus grande, pour les AMRAP)
  */
 function computeCfRecords() {
-  const sessions = getAllSessions().filter((s) => s.type === "crossfit");
+  // Les séances de spé (gym, haltéro) n'ont pas de score : elles n'ont pas
+  // leur place dans les records ni dans les graphiques de progression de WOD.
+  const sessions = getAllSessions().filter(
+    (s) => s.type === "crossfit" && !(typeof isSpeSession === "function" && isSpeSession(s.wodName))
+  );
   const records = {}; // { "Fran": { bestTime: {...}, bestPerformance: {...} } }
 
   sessions.forEach((session) => {
@@ -419,6 +431,8 @@ function renderRecords() {
         if (!confirmed) return;
         deleteManualOneRM(exercise);
         renderRecords();
+        if (typeof notifyRankProgress === "function") notifyRankProgress();
+        if (typeof renderDashboard === "function") renderDashboard();
       });
     }
 
@@ -578,6 +592,9 @@ if (manual1rmForm) {
     manual1rmForm.style.display = "none";
     manual1rmForm.reset();
     renderRecords();
+    // Un 1RM noté compte pour les rangs (force et haltéro)
+    if (typeof notifyRankProgress === "function") notifyRankProgress();
+    if (typeof renderDashboard === "function") renderDashboard();
   });
 }
 

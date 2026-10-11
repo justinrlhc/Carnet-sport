@@ -20,6 +20,16 @@ function getLevelBadgeClass(level) {
 // évite d'avoir à taper un nom pour les entraînements du quotidien.
 const DAILY_WOD_LABEL = "WOD du jour";
 
+// Cours "spécifiques" (gymnastique, haltérophilie) : ce ne sont pas des WOD
+// avec un score, juste des séances qu'on veut retrouver dans l'historique.
+// Pas de temps, de rounds ni de niveau à saisir ; on peut quand même y noter
+// des mouvements libres ou des exercices structurés (volume, charge max).
+const SPE_SESSIONS = ["Spé gym", "Spé haltéro"];
+
+function isSpeSession(name) {
+  return SPE_SESSIONS.includes(name);
+}
+
 // Détail de chaque benchmark : son format, son type de score (temps ou
 // rounds), et ses mouvements avec le schéma de répétitions/charges. Sert à
 // préremplir automatiquement le formulaire dès qu'on sélectionne son nom.
@@ -69,6 +79,8 @@ const cfForm = document.getElementById("cf-form");
 const cfDateInput = document.getElementById("cf-date");
 const cfWodSelect = document.getElementById("cf-wod-select");
 const cfTypeSelect = document.getElementById("cf-type");
+const cfTypeRow = document.getElementById("cf-type-row");
+const cfLevelRow = document.getElementById("cf-level-row");
 const cfRxSelect = document.getElementById("cf-rx");
 const cfTimeRow = document.getElementById("cf-time-row");
 const cfTimeInput = document.getElementById("cf-time");
@@ -99,7 +111,7 @@ function getAllKnownWods() {
   const used = getAllSessions()
     .filter((s) => s.type === "crossfit")
     .map((s) => s.wodName)
-    .filter((name) => Boolean(name) && name !== DAILY_WOD_LABEL);
+    .filter((name) => Boolean(name) && name !== DAILY_WOD_LABEL && !isSpeSession(name));
   return Array.from(new Set([...DEFAULT_WODS, ...used])).sort();
 }
 
@@ -113,6 +125,12 @@ function populateWodSelects() {
   dailyOpt.value = DAILY_WOD_LABEL;
   dailyOpt.textContent = DAILY_WOD_LABEL;
   cfWodSelect.appendChild(dailyOpt);
+  SPE_SESSIONS.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    cfWodSelect.appendChild(opt);
+  });
   wods.forEach((name) => {
     const opt = document.createElement("option");
     opt.value = name;
@@ -130,6 +148,12 @@ function populateWodSelects() {
   dailyFilterOpt.value = DAILY_WOD_LABEL;
   dailyFilterOpt.textContent = DAILY_WOD_LABEL;
   cfFilterSelect.appendChild(dailyFilterOpt);
+  SPE_SESSIONS.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    cfFilterSelect.appendChild(opt);
+  });
   wods.forEach((name) => {
     const opt = document.createElement("option");
     opt.value = name;
@@ -141,7 +165,14 @@ function populateWodSelects() {
 /** Affiche uniquement les champs de score pertinents pour un WOD donné (temps OU rounds). */
 function setScoreFieldsVisibility(name) {
   const preset = BENCHMARK_WODS[name];
-  if (preset && preset.scoreType === "time") {
+  const isSpe = isSpeSession(name);
+  cfTypeRow.style.display = isSpe ? "none" : "";
+  cfLevelRow.style.display = isSpe ? "none" : "";
+
+  if (isSpe) {
+    cfTimeRow.style.display = "none";
+    cfRoundsRow.style.display = "none";
+  } else if (preset && preset.scoreType === "time") {
     cfTimeRow.style.display = "";
     cfRoundsRow.style.display = "none";
   } else if (preset && preset.scoreType === "rounds") {
@@ -348,7 +379,9 @@ cfForm.addEventListener("submit", (event) => {
   const rounds = cfRoundsInput.value ? Number(cfRoundsInput.value) : null;
   const extraReps = cfExtraRepsInput.value ? Number(cfExtraRepsInput.value) : null;
 
-  if (timeSeconds === null && rounds === null) {
+  const isSpe = isSpeSession(wodName);
+
+  if (!isSpe && timeSeconds === null && rounds === null) {
     showCfFeedback("Indique au moins un temps (mm:ss) ou un nombre de rounds.", true);
     return;
   }
@@ -381,11 +414,11 @@ cfForm.addEventListener("submit", (event) => {
     type: "crossfit",
     date: cfDateInput.value || todayLocalDateString(),
     wodName: wodName,
-    wodType: cfTypeSelect.value,
-    rxOrScaled: cfRxSelect.value,
-    timeSeconds: timeSeconds,
-    rounds: rounds,
-    extraReps: extraReps,
+    wodType: isSpe ? null : cfTypeSelect.value,
+    rxOrScaled: isSpe ? null : cfRxSelect.value,
+    timeSeconds: isSpe ? null : timeSeconds,
+    rounds: isSpe ? null : rounds,
+    extraReps: isSpe ? null : extraReps,
     exercises: exercises,
     notes: cfNotesInput.value.trim(),
   };
@@ -421,6 +454,7 @@ cfForm.addEventListener("submit", (event) => {
   cancelCfEdit();
   populateWodSelects();
   renderCfHistory();
+  if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
   if (typeof renderDashboard === "function") renderDashboard();
   if (typeof renderRecords === "function") renderRecords();
 });
@@ -514,6 +548,8 @@ function cancelCfEdit() {
   resetExerciseRows();
   cfTimeRow.style.display = "";
   cfRoundsRow.style.display = "";
+  cfTypeRow.style.display = "";
+  cfLevelRow.style.display = "";
   cfDateInput.value = todayLocalDateString();
   cfSubmitBtn.textContent = "Enregistrer le WOD";
   cfCancelEditBtn.style.display = "none";
@@ -552,6 +588,45 @@ function showCfRecordBadge(wodName, wodRecord, liftRecords) {
 cfFilterSelect.addEventListener("change", () => renderCfHistory());
 cfFilterLevelSelect.addEventListener("change", () => renderCfHistory());
 
+const cfHistorySearch = document.getElementById("cf-history-search");
+const cfLastSeen = document.getElementById("cf-last-seen");
+cfHistorySearch.addEventListener("input", () => renderCfHistory());
+
+/** Nom affichable d'un mouvement, qu'il soit structuré ou en texte libre. */
+function getMovementLabel(entry) {
+  return typeof entry === "object" && entry !== null ? entry.exercise : String(entry);
+}
+
+/** Une séance correspond à la recherche si son nom de WOD ou l'un de ses mouvements contient le texte cherché. */
+function cfSessionMatchesSearch(session, query) {
+  if (!query) return true;
+  if (normalizeSearchText(session.wodName).includes(query)) return true;
+  return (session.exercises || []).some((entry) => normalizeSearchText(getMovementLabel(entry)).includes(query));
+}
+
+/** Encart "Dernière fois" pendant une recherche : le WOD le plus récent qui correspond, avec charges. */
+function renderCfLastSeen(sessions, query) {
+  const latest = sessions[0];
+  if (!query || !latest) {
+    cfLastSeen.style.display = "none";
+    return;
+  }
+  const matching = (latest.exercises || []).filter((entry) => normalizeSearchText(getMovementLabel(entry)).includes(query));
+  const lines = matching
+    .map((entry) => {
+      if (typeof entry === "object" && entry !== null) {
+        const weightText = entry.weight > 0 ? ` à ${entry.weight} kg` : "";
+        return `<span><strong>${entry.exercise}</strong> — ${entry.reps} reps${weightText}</span>`;
+      }
+      return `<span>${entry}</span>`;
+    })
+    .join("");
+  cfLastSeen.innerHTML = `
+    <span class="history-last-seen-title">Dernière fois : ${latest.wodName} — ${parseLocalDate(latest.date).toLocaleDateString("fr-FR")}</span>
+    ${lines}`;
+  cfLastSeen.style.display = "flex";
+}
+
 /** Construit le texte de résultat à afficher : "6:42" ou "18 rounds + 5 reps" */
 function formatWodResult(session) {
   if (session.timeSeconds !== null && session.timeSeconds !== undefined) {
@@ -567,13 +642,16 @@ function formatWodResult(session) {
 function renderCfHistory() {
   const filter = cfFilterSelect.value || "all";
   const levelFilter = cfFilterLevelSelect.value || "all";
+  const query = normalizeSearchText(cfHistorySearch.value);
 
   const sessions = getAllSessions()
     .filter((s) => s.type === "crossfit")
     .filter((s) => filter === "all" || s.wodName === filter)
     .filter((s) => levelFilter === "all" || s.rxOrScaled === levelFilter)
+    .filter((s) => cfSessionMatchesSearch(s, query))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
+  renderCfLastSeen(sessions, query);
   cfHistoryList.innerHTML = "";
 
   if (sessions.length === 0) {
@@ -615,10 +693,12 @@ function renderCfHistory() {
         <span class="history-card-title">${session.wodName}</span>
         <span class="history-card-date">${new Date(session.date).toLocaleDateString("fr-FR")}</span>
       </div>
-      <p class="history-card-sets">${session.wodType || ""} — <strong>${formatWodResult(session)}</strong></p>
+      ${isSpeSession(session.wodName)
+        ? `<p class="history-card-sets">Séance spécifique</p>`
+        : `<p class="history-card-sets">${session.wodType || ""} — <strong>${formatWodResult(session)}</strong></p>`}
       ${exercisesHtml}
       ${freeTextHtml}
-      <span class="badge-rpe ${getLevelBadgeClass(session.rxOrScaled)}">${session.rxOrScaled}</span>
+      ${session.rxOrScaled ? `<span class="badge-rpe ${getLevelBadgeClass(session.rxOrScaled)}">${session.rxOrScaled}</span>` : ""}
       ${session.notes ? `<p class="history-card-notes">${session.notes}</p>` : ""}
       <div class="history-card-actions">
         <button type="button" class="btn btn-secondary btn-small hist-repeat-btn">Refaire ce WOD</button>
@@ -639,6 +719,7 @@ function renderCfHistory() {
       if (!confirmed) return;
       deleteSession(session.id);
       renderCfHistory();
+      if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
       if (typeof renderDashboard === "function") renderDashboard();
       if (typeof renderRecords === "function") renderRecords();
     });

@@ -38,6 +38,9 @@ weightForm.addEventListener("submit", (event) => {
 
   cancelWeightEdit();
   renderWeightHistory();
+  // Le poids de corps change les seuils de rang : on recalcule (avant le
+  // tableau de bord, pour que la carte "Prochain palier" soit à jour)
+  if (typeof notifyRankProgress === "function") notifyRankProgress();
   if (typeof renderDashboard === "function") renderDashboard();
   if (typeof renderBmiGauge === "function") renderBmiGauge();
 });
@@ -102,6 +105,7 @@ function renderWeightHistory() {
       if (!confirmed) return;
       deleteBodyweightEntry(entry.id);
       renderWeightHistory();
+      if (typeof notifyRankProgress === "function") notifyRankProgress();
       if (typeof renderDashboard === "function") renderDashboard();
       if (typeof renderBmiGauge === "function") renderBmiGauge();
     });

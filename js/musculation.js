@@ -11,18 +11,18 @@
 // Liste des exercices proposés par défaut. Le joueur peut aussi taper
 // le nom d'un exercice personnalisé grâce à l'option "Autre".
 const DEFAULT_EXERCISES = [
-  "Back Squat", "Front Squat", "Overhead Squat", "Air Squat",
-  "Deadlift", "Sumo Deadlift", "Romanian Deadlift",
+  "Back Squat", "Front Squat", "Overhead Squat", "Air Squat", "Goblet Squat", "Fente bulgare",
+  "Deadlift", "Sumo Deadlift", "Romanian Deadlift", "Good Morning",
   "Bench Press", "Incline Bench Press",
   "Strict Press", "Push Press", "Push Jerk", "Split Jerk",
-  "Bent-Over Row", "Rowing barre", "Rowing haltères",
+  "Rowing barre", "Rowing haltères", "Shrugs", "Oiseau deltoïdes",
   "Barbell Lunge", "Barbell Reverse Lunge", "Walking Lunge",
-  "Snatch", "Power Snatch", "Snatch Pull", "Snatch Balance",
+  "Snatch", "Power Snatch", "Squat Snatch", "Snatch Pull", "Snatch Balance",
   "Clean", "Power Clean", "Clean & Jerk", "Squat Clean", "Hang Power Clean", "Clean Pull",
   "Barbell Thruster", "Curl barre", "Curl haltères", "Barre au front", "Élévations latérales",
   "Dumbbell Bench Press", "Dumbbell Incline Bench Press", "Dumbbell Floor Press",
   "Dumbbell Shoulder Press", "Dumbbell Clean & Jerk", "Dumbbell Snatch",
-  "Dumbbell Thruster", "Dumbbell Walking Lunge", "Wall Ball",
+  "Dumbbell Thruster", "Dumbbell Walking Lunge", "Devil Press", "Wall Ball", "Kettlebell Swing",
   "Pull-up", "Bar Muscle-Up", "Ring Muscle-Up", "Chest-to-Bar Pull-Up",
   "Toes-to-Bar", "Push-Up", "Handstand Push-Up", "Dips",
   "Burpee", "Burpee over the bar", "Burpee Box Jump-Over", "Box Jump", "Box Step-Up",
@@ -56,6 +56,42 @@ function isNoVolumeExercise(exerciseName) {
   return NO_VOLUME_EXERCISES.includes(exerciseName);
 }
 
+// --------------------------------------------------------------------------
+// TESTS CARDIO
+// Un test cardio n'a pas de séries : son résultat est un temps. Il alimente
+// l'axe Endurance de la page Profil, et jamais le volume d'entraînement.
+// Stockage : { exercise: "Rameur 500 m", kind: "cardio", timeSeconds: 103 }
+// --------------------------------------------------------------------------
+const CARDIO_TESTS = ["Rameur 500 m", "Course 400 m"];
+
+function isCardioEntry(entry) {
+  return Boolean(entry) && entry.kind === "cardio";
+}
+
+/**
+ * Lit les champs minutes + secondes d'un bloc cardio. Renvoie des secondes,
+ * ou null si c'est vide ou illisible. Les dixièmes sont acceptés ("43,5").
+ */
+function readCardioTime(block) {
+  const minText = block.querySelector(".cardio-block-min").value.trim();
+  const secText = block.querySelector(".cardio-block-sec").value.trim().replace(",", ".");
+  if (!minText && !secText) return null;
+  if ((minText && !/^\d+$/.test(minText)) || (secText && !/^\d+(\.\d)?$/.test(secText))) return null;
+  const total = (Number(minText) || 0) * 60 + (Number(secText) || 0);
+  return total > 0 ? Math.round(total * 10) / 10 : null;
+}
+
+/** 103 → "1:43" ; 103,5 → "1:43,5" */
+function formatDuration(totalSeconds) {
+  const total = Math.round(totalSeconds * 10) / 10;
+  const minutes = Math.floor(total / 60);
+  const seconds = Math.round((total - minutes * 60) * 10) / 10;
+  const secondsText = Number.isInteger(seconds)
+    ? String(seconds).padStart(2, "0")
+    : seconds.toFixed(1).padStart(4, "0").replace(".", ",");
+  return `${minutes}:${secondsText}`;
+}
+
 /** Renvoie la classe de couleur du badge RPE : vert (facile) → doré → rouge (quasi max). */
 function getRpeBadgeClass(rpe) {
   if (rpe >= 9) return "badge-rpe-high";
@@ -75,6 +111,16 @@ const muscuNotesInput = document.getElementById("muscu-notes");
 const muscuFeedback = document.getElementById("muscu-feedback");
 const muscuFilterSelect = document.getElementById("muscu-filter-exercise");
 const muscuHistoryList = document.getElementById("muscu-history-list");
+const muscuHistorySearch = document.getElementById("muscu-history-search");
+const muscuLastSeen = document.getElementById("muscu-last-seen");
+
+/**
+ * Prépare un texte pour une recherche souple : minuscules et accents retirés,
+ * pour que "elevations" trouve "Élévations latérales". Partagée avec crossfit.js.
+ */
+function normalizeSearchText(text) {
+  return String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
 const muscuSubmitBtn = document.getElementById("muscu-submit-btn");
 const muscuCancelEditBtn = document.getElementById("muscu-cancel-edit");
 
@@ -89,7 +135,7 @@ let muscuEditingId = null;
 function getAllKnownExercises() {
   const used = getAllSessions()
     .filter((s) => s.type === "musculation")
-    .flatMap((s) => (s.exercises || []).map((ex) => ex.exercise));
+    .flatMap((s) => (s.exercises || []).filter((ex) => ex && !isCardioEntry(ex)).map((ex) => ex.exercise));
   return Array.from(new Set([...DEFAULT_EXERCISES, ...used])).sort();
 }
 
@@ -134,12 +180,27 @@ function createSetRow() {
   const row = document.createElement("div");
   row.className = "set-row";
   row.innerHTML = `
-    <input type="number" class="set-reps" placeholder="Répétitions" min="0">
+    <input type="number" class="set-reps" placeholder="Reps" min="0" inputmode="numeric">
     <span class="set-x">×</span>
-    <input type="number" class="set-weight" placeholder="Poids (kg)" min="0" step="0.5">
+    <input type="number" class="set-weight" placeholder="kg" min="0" step="0.5">
+    <button type="button" class="set-duplicate" title="Refaire cette série" aria-label="Refaire cette série">
+      <svg viewBox="0 0 24 24"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm-3 4h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Zm0 2v10h10V9H5Z"/></svg>
+    </button>
     <button type="button" class="set-remove" title="Supprimer cette série">✕</button>
   `;
   row.querySelector(".set-remove").addEventListener("click", () => row.remove());
+
+  // "Refaire cette série" : insère juste en dessous une copie exacte de la
+  // série (mêmes reps, même charge), pour ne pas tout retaper quand on
+  // enchaîne plusieurs séries identiques (ex : 5 × 10 reps à 40 kg).
+  row.querySelector(".set-duplicate").addEventListener("click", () => {
+    const copy = createSetRow();
+    const sourceWeight = row.querySelector(".set-weight");
+    copy.querySelector(".set-reps").value = row.querySelector(".set-reps").value;
+    copy.querySelector(".set-weight").value = sourceWeight.value;
+    copy.querySelector(".set-weight").placeholder = sourceWeight.placeholder;
+    row.after(copy);
+  });
   return row;
 }
 
@@ -186,7 +247,7 @@ function createExerciseBlock(prefill) {
     const isBW = isBodyweightExercise(getBlockExerciseName());
     hint.style.display = isBW ? "block" : "none";
     setsList.querySelectorAll(".set-weight").forEach((input) => {
-      input.placeholder = isBW ? "Lest (kg, optionnel)" : "Poids (kg)";
+      input.placeholder = isBW ? "Lest (kg)" : "kg";
     });
   }
 
@@ -241,6 +302,61 @@ muscuAddExerciseBlockBtn.addEventListener("click", () => {
   muscuExercisesList.appendChild(createExerciseBlock(null));
 });
 
+/** Crée un bloc "test cardio" : le test choisi et le temps réalisé. */
+function createCardioBlock(prefill) {
+  const block = document.createElement("div");
+  block.className = "exercise-block cardio-block";
+  block.innerHTML = `
+    <div class="exercise-block-header">
+      <select class="exercise-block-select cardio-block-select" aria-label="Test cardio"></select>
+      <button type="button" class="exercise-block-remove" title="Supprimer ce test">✕</button>
+    </div>
+    <div class="form-row" style="margin-bottom: 0;">
+      <label>Temps réalisé</label>
+      <!-- Deux champs séparés : le pavé numérique de l'iPhone n'a pas de touche ":" -->
+      <div class="cardio-time-row">
+        <input type="text" class="cardio-block-min" inputmode="numeric" pattern="[0-9]*" placeholder="1" aria-label="Minutes">
+        <span class="cardio-time-unit">min</span>
+        <input type="text" class="cardio-block-sec" inputmode="decimal" placeholder="43" aria-label="Secondes">
+        <span class="cardio-time-unit">s</span>
+      </div>
+    </div>
+  `;
+  const select = block.querySelector(".cardio-block-select");
+  CARDIO_TESTS.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  });
+  block.querySelector(".exercise-block-remove").addEventListener("click", () => {
+    if (muscuExercisesList.children.length <= 1) {
+      showMuscuFeedback("Une séance doit contenir au moins un exercice.", true);
+      return;
+    }
+    block.remove();
+  });
+  if (prefill) {
+    if (CARDIO_TESTS.includes(prefill.exercise)) select.value = prefill.exercise;
+    if (prefill.timeSeconds > 0) {
+      const minutes = Math.floor(prefill.timeSeconds / 60);
+      const seconds = Math.round((prefill.timeSeconds - minutes * 60) * 10) / 10;
+      block.querySelector(".cardio-block-min").value = String(minutes);
+      block.querySelector(".cardio-block-sec").value = String(seconds).replace(".", ",");
+    }
+  }
+  return block;
+}
+
+/** Crée le bon type de bloc pour une entrée enregistrée (exercice ou test cardio). */
+function createBlockForEntry(entry) {
+  return isCardioEntry(entry) ? createCardioBlock(entry) : createExerciseBlock(entry);
+}
+
+document.getElementById("muscu-add-cardio-block").addEventListener("click", () => {
+  muscuExercisesList.appendChild(createCardioBlock(null));
+});
+
 /** Vide la liste des blocs et en remet un seul, vide. */
 function resetExerciseBlocks() {
   muscuExercisesList.innerHTML = "";
@@ -254,10 +370,21 @@ function resetExerciseBlocks() {
 muscuForm.addEventListener("submit", (event) => {
   event.preventDefault(); // empêche la page de se recharger, comportement par défaut d'un formulaire
 
-  const blocks = [...muscuExercisesList.querySelectorAll(".exercise-block")];
+  const blocks = [...muscuExercisesList.children];
   const exercises = [];
 
   for (const block of blocks) {
+    if (block.classList.contains("cardio-block")) {
+      const testName = block.querySelector(".cardio-block-select").value;
+      const timeSeconds = readCardioTime(block);
+      if (timeSeconds === null) {
+        showMuscuFeedback(`Merci d'indiquer ton temps pour le test ${testName} (minutes et secondes, ex : 1 min 43 s).`, true);
+        return;
+      }
+      exercises.push({ exercise: testName, kind: "cardio", timeSeconds });
+      continue;
+    }
+
     const select = block.querySelector(".exercise-block-select");
     const customInput = block.querySelector(".exercise-block-custom");
     const isCustom = select.value === "__custom__";
@@ -331,6 +458,7 @@ muscuForm.addEventListener("submit", (event) => {
   cancelMuscuEdit(); // remet le formulaire à zéro et sort du mode édition
   populateExerciseFilterSelect();
   renderMuscuHistory();
+  if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
   if (typeof renderDashboard === "function") renderDashboard();
   if (typeof renderRecords === "function") renderRecords();
 });
@@ -366,8 +494,8 @@ function duplicateMuscuSession(session) {
   muscuNotesInput.value = "";
 
   muscuExercisesList.innerHTML = "";
-  session.exercises.forEach((entry) => {
-    muscuExercisesList.appendChild(createExerciseBlock(entry));
+  (session.exercises || []).forEach((entry) => {
+    muscuExercisesList.appendChild(createBlockForEntry(entry));
   });
 
   muscuSubmitBtn.textContent = "Enregistrer la séance";
@@ -385,8 +513,8 @@ function startEditMuscuSession(session) {
   muscuNotesInput.value = session.notes || "";
 
   muscuExercisesList.innerHTML = "";
-  session.exercises.forEach((entry) => {
-    muscuExercisesList.appendChild(createExerciseBlock(entry));
+  (session.exercises || []).forEach((entry) => {
+    muscuExercisesList.appendChild(createBlockForEntry(entry));
   });
 
   muscuSubmitBtn.textContent = "Mettre à jour la séance";
@@ -410,15 +538,47 @@ muscuCancelEditBtn.addEventListener("click", cancelMuscuEdit);
 // --------------------------------------------------------------------------
 
 muscuFilterSelect.addEventListener("change", () => renderMuscuHistory());
+muscuHistorySearch.addEventListener("input", () => renderMuscuHistory());
+
+/**
+ * Encart "Dernière fois" affiché pendant une recherche : la séance la plus
+ * récente contenant l'exercice cherché, avec ses séries et ses charges.
+ */
+function renderMuscuLastSeen(sessions, query) {
+  const latest = sessions[0];
+  if (!query || !latest) {
+    muscuLastSeen.style.display = "none";
+    return;
+  }
+  const matching = (latest.exercises || []).filter((ex) => normalizeSearchText(ex.exercise).includes(query));
+  const lines = matching
+    .map((entry) => {
+      if (isCardioEntry(entry)) {
+        return `<span><strong>${entry.exercise}</strong> — ${formatDuration(entry.timeSeconds)}</span>`;
+      }
+      const setsText = (entry.sets || [])
+        .map((s) => (s.weight > 0 ? `${s.weight} kg × ${s.reps}` : `${s.reps} reps`))
+        .join(" · ");
+      return `<span><strong>${entry.exercise}</strong> — ${setsText}</span>`;
+    })
+    .join("");
+  muscuLastSeen.innerHTML = `
+    <span class="history-last-seen-title">Dernière fois : ${new Date(latest.date).toLocaleDateString("fr-FR")}</span>
+    ${lines}`;
+  muscuLastSeen.style.display = "flex";
+}
 
 function renderMuscuHistory() {
   const filter = muscuFilterSelect.value || "all";
+  const query = normalizeSearchText(muscuHistorySearch.value);
 
   const sessions = getAllSessions()
     .filter((s) => s.type === "musculation")
     .filter((s) => filter === "all" || (s.exercises || []).some((ex) => ex.exercise === filter))
+    .filter((s) => !query || (s.exercises || []).some((ex) => normalizeSearchText(ex.exercise).includes(query)))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
+  renderMuscuLastSeen(sessions, query);
   muscuHistoryList.innerHTML = "";
 
   if (sessions.length === 0) {
@@ -432,6 +592,13 @@ function renderMuscuHistory() {
 
     const exercisesHtml = (session.exercises || [])
       .map((entry) => {
+        if (isCardioEntry(entry)) {
+          return `
+          <div class="history-card-exercise">
+            <span class="history-card-exercise-name">${entry.exercise}</span>
+            <span class="history-card-sets">Test chrono : ${formatDuration(entry.timeSeconds)}</span>
+          </div>`;
+        }
         const setsText = (entry.sets || [])
           .map((s) => (s.weight > 0 ? `${s.weight} kg × ${s.reps}` : `${s.reps} reps`))
           .join(" · ");
@@ -470,6 +637,7 @@ function renderMuscuHistory() {
       if (!confirmed) return;
       deleteSession(session.id);
       renderMuscuHistory();
+      if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
       if (typeof renderDashboard === "function") renderDashboard();
       if (typeof renderRecords === "function") renderRecords();
     });

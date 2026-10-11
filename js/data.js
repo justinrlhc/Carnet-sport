@@ -401,6 +401,9 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_KEY_MANUAL_1RM);
   localStorage.removeItem(STORAGE_KEY_MANUAL_CF_BEST);
   localStorage.removeItem(STORAGE_KEY_HEIGHT);
+  // Rangs et succès : on repart de zéro aussi
+  localStorage.removeItem("carnet_achievements");
+  localStorage.removeItem("carnet_rank_snapshot");
 }
 
 // --------------------------------------------------------------------------
@@ -421,6 +424,8 @@ function exportAllData() {
     manualOneRMs: getManualOneRMs(),
     manualCfBests: getManualCfBests(),
     heightCm: getHeight(),
+    // Succès débloqués (avec leur date) : ils restent acquis même après un import
+    achievements: JSON.parse(localStorage.getItem("carnet_achievements") || "{}"),
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -447,6 +452,12 @@ function importAllData(jsonString) {
   localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(payload.manualCfBests || {}));
   if (payload.heightCm) setHeight(payload.heightCm);
 
+  // Succès : on restaure ceux de la sauvegarde (une ancienne sauvegarde n'en a pas)
+  const achievements = payload.achievements && typeof payload.achievements === "object" ? payload.achievements : {};
+  localStorage.setItem("carnet_achievements", JSON.stringify(achievements));
+  // La "photo" des rangs est recalculée sans annonce au prochain calcul
+  localStorage.removeItem("carnet_rank_snapshot");
+
   return { success: true };
 }
 
@@ -454,6 +465,50 @@ function importAllData(jsonString) {
 // fichier, AVANT que musculation.js ou app.js ne tentent d'afficher quoi
 // que ce soit. C'est pour ça que data.js doit toujours être chargé en
 // premier dans index.html.
+// --------------------------------------------------------------------------
+// RENOMMAGE D'EXERCICES
+// Quand un exercice est retiré de la liste parce qu'il faisait doublon avec
+// un autre, on convertit les anciennes données vers le nom conservé, pour
+// que l'historique et les records restent regroupés sous un seul nom.
+// --------------------------------------------------------------------------
+const EXERCISE_RENAMES = {
+  "Bent-Over Row": "Rowing barre",
+};
+
+function ensureExerciseRenames() {
+  const rename = (name) => EXERCISE_RENAMES[name] || name;
+
+  // Séances : exercices de musculation et exercices structurés des WOD
+  let sessionsChanged = false;
+  const sessions = getAllSessions().map((session) => {
+    if (!Array.isArray(session.exercises)) return session;
+    const exercises = session.exercises.map((entry) => {
+      if (typeof entry === "object" && entry !== null && EXERCISE_RENAMES[entry.exercise]) {
+        sessionsChanged = true;
+        return { ...entry, exercise: rename(entry.exercise) };
+      }
+      return entry;
+    });
+    return { ...session, exercises };
+  });
+  if (sessionsChanged) saveAllSessions(sessions);
+
+  // 1RM saisis à la main : en cas de doublon, on garde la valeur la plus haute
+  const manual = getManualOneRMs();
+  let manualChanged = false;
+  Object.keys(EXERCISE_RENAMES).forEach((oldName) => {
+    if (!manual[oldName]) return;
+    const newName = EXERCISE_RENAMES[oldName];
+    if (!manual[newName] || manual[oldName].weight > manual[newName].weight) {
+      manual[newName] = manual[oldName];
+    }
+    delete manual[oldName];
+    manualChanged = true;
+  });
+  if (manualChanged) localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(manual));
+}
+
 ensureDemoData();
 ensureBodyweightIds();
 ensureMuscuSessionsMigrated();
+ensureExerciseRenames();

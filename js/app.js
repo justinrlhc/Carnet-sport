@@ -14,6 +14,7 @@ const pageTitle = document.getElementById("page-title");
 
 const titles = {
   dashboard: "Tableau de bord",
+  profil: "Profil",
   musculation: "Musculation",
   crossfit: "CrossFit",
   mensurations: "Mensurations",
@@ -43,9 +44,11 @@ function goToSection(targetId) {
   document.getElementById(`section-${targetId}`).classList.add("is-active");
 
   pageTitle.textContent = titles[targetId];
+  revealActiveNavItem();
 
   // On rafraîchit la page avec les données les plus récentes à chaque visite
   if (targetId === "dashboard") renderDashboard();
+  if (targetId === "profil" && typeof renderProfile === "function") renderProfile();
   if (targetId === "musculation" && typeof renderMuscuHistory === "function") renderMuscuHistory();
   if (targetId === "crossfit" && typeof renderCfHistory === "function") renderCfHistory();
   if (targetId === "mensurations" && typeof renderWeightHistory === "function") {
@@ -54,6 +57,19 @@ function goToSection(targetId) {
   }
   if (targetId === "records" && typeof renderRecords === "function") renderRecords();
   if (targetId === "statistiques" && typeof renderAllStatsCharts === "function") renderAllStatsCharts();
+}
+
+/**
+ * Sur mobile, le menu est une rangée d'icônes qui défile de côté : on fait
+ * glisser l'onglet actif au centre pour qu'il soit toujours visible.
+ */
+function revealActiveNavItem() {
+  const nav = document.querySelector(".nav");
+  const active = document.querySelector(".nav-item.is-active");
+  if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return;
+  // .nav est en position: relative (style.css), donc offsetLeft se mesure depuis le début du menu
+  const target = active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2;
+  try { nav.scrollTo({ left: Math.max(0, target), behavior: "smooth" }); } catch { nav.scrollLeft = Math.max(0, target); }
 }
 
 // --------------------------------------------------------------------------
@@ -144,6 +160,9 @@ function renderDashboard() {
   document.getElementById("stat-pr").textContent = exerciseCount;
 
   // ----- Dernières séances -----
+  // ----- Prochain palier (rangs, voir ranks.js) -----
+  if (typeof renderNextMilestoneCard === "function") renderNextMilestoneCard();
+
   const recentList = document.getElementById("recent-sessions-list");
   recentList.innerHTML = "";
 
@@ -163,7 +182,7 @@ function renderDashboard() {
     const isMuscu = session.type === "musculation";
     const tagClass = isMuscu ? "session-tag-muscu" : "session-tag-cf";
     const tagLabel = isMuscu ? "Muscu" : "CrossFit";
-    const name = isMuscu ? session.exercises.map((ex) => ex.exercise).join(", ") : session.wodName;
+    const name = isMuscu ? (session.exercises || []).map((ex) => ex.exercise).join(", ") : session.wodName;
 
     li.innerHTML = `
       <span class="session-tag ${tagClass}">${tagLabel}</span>
