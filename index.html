@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 
@@ -26,6 +26,10 @@
         <button class="nav-item is-active" data-section="dashboard">
           <svg viewBox="0 0 24 24" class="nav-icon"><path d="M3 13h4v8H3v-8Zm7-9h4v17h-4V4Zm7 5h4v12h-4V9Z"/></svg>
           <span class="nav-label">Tableau de bord</span>
+        </button>
+        <button class="nav-item" data-section="profil">
+          <svg viewBox="0 0 24 24" class="nav-icon"><path fill-rule="evenodd" d="M12 2 4 5v6c0 5.1 3.4 9.5 8 11 4.6-1.5 8-5.9 8-11V5l-8-3Zm0 5 1.55 3.15 3.45.5-2.5 2.45.6 3.45L12 14.9l-3.1 1.65.6-3.45L7 10.65l3.45-.5L12 7Z"/></svg>
+          <span class="nav-label">Profil</span>
         </button>
         <button class="nav-item" data-section="musculation">
           <svg viewBox="0 0 24 24" class="nav-icon">
@@ -109,6 +113,9 @@
           </div>
         </div>
 
+        <!-- Carte "Prochain palier" : le rang le plus proche à gagner (rempli par js/ranks.js) -->
+        <section class="panel next-milestone" id="next-milestone" aria-label="Prochain palier"></section>
+
         <div class="panel-grid">
           <div class="panel">
             <h2 class="panel-title">Progression récente</h2>
@@ -122,6 +129,13 @@
           </div>
         </div>
 
+      </section>
+
+      <!-- ---------- SECTION : PROFIL (rangs et succès) ---------- -->
+      <section class="section" id="section-profil">
+        <div id="profile-content">
+          <!-- Rempli automatiquement par js/ranks.js -->
+        </div>
       </section>
 
       <!-- ---------- SECTION : MUSCULATION ---------- -->
@@ -138,7 +152,10 @@
               </div>
 
               <div id="muscu-exercises-list"></div>
-              <button type="button" id="muscu-add-exercise-block" class="btn btn-secondary btn-small" style="margin-bottom: 16px;">+ Ajouter un exercice</button>
+              <div class="muscu-add-buttons">
+                <button type="button" id="muscu-add-exercise-block" class="btn btn-secondary btn-small">+ Exercice</button>
+                <button type="button" id="muscu-add-cardio-block" class="btn btn-secondary btn-small">+ Test cardio</button>
+              </div>
 
               <div class="form-row">
                 <label for="muscu-notes">Notes de la séance <span class="label-optional">(optionnel)</span></label>
@@ -158,6 +175,8 @@
               <h2 class="panel-title">Historique</h2>
               <select id="muscu-filter-exercise"></select>
             </div>
+            <input type="search" id="muscu-history-search" class="history-search" placeholder="Rechercher un exercice (ex : squat)">
+            <div id="muscu-last-seen" class="history-last-seen" style="display:none;"></div>
             <div id="muscu-history-list" class="history-list"></div>
           </div>
 
@@ -182,7 +201,7 @@
                 <select id="cf-wod-select"></select>
               </div>
 
-              <div class="form-row">
+              <div class="form-row" id="cf-type-row">
                 <label for="cf-type">Type de WOD</label>
                 <select id="cf-type">
                   <option value="For Time">For Time</option>
@@ -194,7 +213,7 @@
                 </select>
               </div>
 
-              <div class="form-row">
+              <div class="form-row" id="cf-level-row">
                 <label for="cf-rx">Niveau</label>
                 <select id="cf-rx">
                   <option value="RX">RX</option>
@@ -228,7 +247,7 @@
                   <button type="button" id="cf-add-exercise" class="btn btn-secondary btn-small">+ Mouvement libre</button>
                   <button type="button" id="cf-add-structured-exercise" class="btn btn-secondary btn-small">+ Exercice structuré</button>
                 </div>
-                <p class="form-hint">Un mouvement libre reste enregistré dans l'historique, mais un exercice structuré alimente en plus tes statistiques (volume, records, 1RM) comme dans l'onglet Musculation.</p>
+                <p class="form-hint">Un mouvement libre reste enregistré dans l'historique, mais un exercice structuré alimente en plus tes statistiques (volume et charge max utilisée).</p>
               </div>
 
               <div class="form-row">
@@ -257,6 +276,8 @@
                 </select>
               </div>
             </div>
+            <input type="search" id="cf-history-search" class="history-search" placeholder="Rechercher un exercice ou un WOD">
+            <div id="cf-last-seen" class="history-last-seen" style="display:none;"></div>
             <div id="cf-history-list" class="history-list"></div>
           </div>
 
@@ -468,7 +489,7 @@
         <div class="panel panel-danger" style="margin-top: 16px;">
           <h2 class="panel-title">Zone de danger</h2>
           <p class="settings-text">
-            Supprime définitivement toutes tes séances, mesures de poids et records de cet appareil. Cette action est
+            Supprime définitivement toutes tes séances, mesures de poids, records, rangs et succès de cet appareil. Cette action est
             irréversible — pense à faire un export juste avant si tu n'es pas sûr.
           </p>
           <button type="button" class="btn btn-danger" id="btn-reset-data">Réinitialiser toutes les données</button>
@@ -492,16 +513,25 @@
     </div>
   </div>
 
+  <!-- ===== FENÊTRE "RANG SUPÉRIEUR" (s'ouvre quand un exercice monte de rang) ===== -->
+  <div class="modal-overlay" id="rank-up-modal">
+    <div class="modal rank-up-modal" role="dialog" aria-modal="true" aria-label="Rang supérieur">
+      <div class="rank-up-content"></div>
+      <button type="button" class="btn btn-primary rank-up-close">Continuer</button>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=6"></script>
-  <script src="js/musculation.js?v=6"></script>
-  <script src="js/crossfit.js?v=6"></script>
-  <script src="js/mensurations.js?v=6"></script>
-  <script src="js/stats.js?v=6"></script>
-  <script src="js/charts.js?v=6"></script>
-  <script src="js/settings.js?v=6"></script>
-  <script src="js/app.js?v=6"></script>
+  <script src="js/data.js?v=9"></script>
+  <script src="js/musculation.js?v=9"></script>
+  <script src="js/crossfit.js?v=9"></script>
+  <script src="js/mensurations.js?v=9"></script>
+  <script src="js/stats.js?v=9"></script>
+  <script src="js/charts.js?v=9"></script>
+  <script src="js/ranks.js?v=9"></script>
+  <script src="js/settings.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
 </body>
 </html>
 

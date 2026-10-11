@@ -87,6 +87,7 @@ button { font-family: inherit; }
   display: flex;
   flex-direction: column;
   gap: 4px;
+  position: relative; /* repère pour centrer l'onglet actif sur mobile (app.js) */
 }
 
 .nav-item {
@@ -397,6 +398,7 @@ button { font-family: inherit; }
 .label-optional { color: var(--text-muted); font-weight: 400; }
 
 .app input[type="text"],
+.app input[type="search"],
 .app input[type="number"],
 .app input[type="date"],
 .app select,
@@ -462,10 +464,12 @@ button { font-family: inherit; }
 }
 .set-row {
   display: grid;
-  grid-template-columns: 1fr auto 1fr auto;
+  /* reps × poids, puis les boutons "refaire la série" et "supprimer" */
+  grid-template-columns: 1fr auto 1fr auto auto;
   align-items: center;
   gap: 8px;
 }
+.set-row input { min-width: 0; } /* évite tout débordement sur petit écran */
 .set-x { color: var(--text-muted); font-size: 13px; }
 .set-remove {
   background: transparent;
@@ -476,6 +480,19 @@ button { font-family: inherit; }
   padding: 4px 8px;
 }
 .set-remove:hover { color: var(--danger); }
+
+/* Bouton "Refaire cette série" */
+.set-duplicate {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+}
+.set-duplicate svg { width: 16px; height: 16px; fill: currentColor; }
+.set-duplicate:hover { color: var(--accent-strong); }
 
 /* Ligne de mouvement CrossFit : un seul champ texte + bouton supprimer */
 .set-row-single { grid-template-columns: 1fr auto; }
@@ -1060,3 +1077,630 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 .modal-cancel:hover { color: var(--text-secondary); }
+
+/* ==========================================================================
+   RECHERCHE DANS LES HISTORIQUES (Musculation et CrossFit)
+   ========================================================================== */
+.app input.history-search {
+  margin-bottom: 12px;
+}
+.history-last-seen {
+  flex-direction: column;
+  gap: 4px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(211, 162, 78, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.history-last-seen-title {
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+.history-last-seen strong { color: var(--text-primary); }
+
+/* ----- Musculation : boutons "Ajouter un exercice" / "Ajouter un test cardio" ----- */
+.muscu-add-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.cardio-block { border-color: rgba(91, 155, 217, 0.35); }
+
+/* ==========================================================================
+   RANGS — éléments communs (badges, barres de progression)
+   ========================================================================== */
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1;
+}
+.rank-badge-sm { width: 28px; height: 28px; border-radius: 8px; font-size: 14px; }
+.rank-badge-md { width: 40px; height: 40px; border-radius: 11px; font-size: 21px; }
+.rank-badge-lg { width: 64px; height: 64px; border-radius: 16px; font-size: 34px; }
+.rank-badge-xl { width: 104px; height: 104px; border-radius: 26px; font-size: 60px; border-width: 2px; }
+.rank-badge-unknown {
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px dashed var(--text-muted);
+}
+
+.rank-progress {
+  height: 6px;
+  border-radius: 100px;
+  background: var(--surface-raised);
+  overflow: hidden;
+  width: 100%;
+}
+.rank-progress > div {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 0.4s ease;
+}
+.rank-progress-lg { height: 8px; }
+
+.profile-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.profile-accent-text { color: var(--accent-strong); }
+
+/* ==========================================================================
+   TABLEAU DE BORD — carte "Prochain palier"
+   ========================================================================== */
+.next-milestone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 24px;
+  border-color: rgba(211, 162, 78, 0.4);
+}
+.milestone-main {
+  flex: 3 1 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.milestone-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.milestone-headline > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.milestone-ranks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+.milestone-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+}
+.milestone-others {
+  flex: 2 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 1px solid var(--border);
+  padding-left: 24px;
+  min-width: 0;
+}
+.milestone-others-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.milestone-next-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.milestone-next-item > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.milestone-next-item strong { font-size: 14px; }
+.milestone-next-item span:not(.rank-badge) { font-size: 12px; color: var(--text-secondary); }
+.milestone-link {
+  margin-top: auto;
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  padding: 8px 0;
+  min-height: 40px;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.milestone-link:hover { color: var(--accent); }
+
+/* ==========================================================================
+   PAGE PROFIL
+   ========================================================================== */
+#profile-content {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 1120px;
+}
+.profile-bodyweight {
+  margin: -12px 0 -8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ----- En-tête : rang global + radar ----- */
+.profile-hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 28px;
+}
+.profile-hero-main {
+  flex: 1 1 380px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 28px;
+  min-width: 0;
+}
+.rank-emblem {
+  width: 132px;
+  height: 132px;
+  flex-shrink: 0;
+  border-radius: 30px;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rank-emblem span {
+  font-family: var(--font-display);
+  font-size: 72px;
+  font-weight: 700;
+  line-height: 1;
+}
+.profile-hero-text {
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.profile-hero-title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+}
+.profile-hero-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.profile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.profile-chip {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  padding: 5px 12px;
+  border-radius: 100px;
+}
+.profile-chip-accent { color: var(--accent-strong); background: var(--accent-soft); }
+.profile-hero-radar {
+  flex: 1 1 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.profile-radar {
+  width: 100%;
+  max-width: 380px;
+  height: auto;
+  font-family: var(--font-body);
+}
+
+/* ----- Barème ----- */
+.rank-scale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.rank-scale-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-right: 4px;
+}
+.rank-scale-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: 3px 12px 3px 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.rank-scale-chip .rank-badge-sm { width: 24px; height: 24px; border-radius: 7px; font-size: 13px; }
+
+/* ----- Catégories et cartes d'exercice ----- */
+.profile-category {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.profile-category-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.profile-category-header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+.profile-category-basis {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.profile-category-basis.profile-accent-text { color: var(--accent-strong); font-weight: 600; }
+
+.rank-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+.rank-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.rank-card-locked {
+  background: transparent;
+  border-style: dashed;
+}
+.rank-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.rank-card-header h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+.rank-card-locked .rank-card-header h4 { color: var(--text-secondary); }
+.rank-card-value-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rank-card-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+}
+.rank-card-value-muted {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.rank-card-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ----- Succès ----- */
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 14px;
+}
+.achievement-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.achievement-unlocked {
+  background: var(--surface);
+  border-color: rgba(211, 162, 78, 0.35);
+}
+.achievement-icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.achievement-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.achievement-unlocked .achievement-icon,
+.achievement-toast .achievement-icon {
+  background: rgba(211, 162, 78, 0.16);
+  color: var(--accent-strong);
+}
+.achievement-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.achievement-text h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.achievement-card:not(.achievement-unlocked) .achievement-text h4 { color: var(--text-secondary); }
+.achievement-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+/* ==========================================================================
+   FENÊTRE "RANG SUPÉRIEUR"
+   ========================================================================== */
+.modal.rank-up-modal {
+  max-width: 400px;
+  margin: 0 16px;
+  padding: 32px 28px;
+  border-radius: 16px;
+  border-color: rgba(211, 162, 78, 0.45);
+  box-shadow: 0 0 60px rgba(211, 162, 78, 0.15);
+  animation: rank-up-pop 0.35s ease-out;
+}
+.rank-up-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.rank-up-content .profile-eyebrow { letter-spacing: 2px; }
+.rank-up-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+}
+.rank-up-ranks {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 8px 0;
+}
+.rank-up-from { opacity: 0.6; }
+.rank-up-arrow { font-size: 24px; color: var(--text-secondary); }
+.rank-up-rank-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+}
+.rank-up-content .rank-progress { margin-top: 6px; }
+.rank-up-close { width: 100%; min-height: 46px; font-size: 15px; }
+
+@keyframes rank-up-pop {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ==========================================================================
+   NOTIFICATION "SUCCÈS DÉBLOQUÉ"
+   ========================================================================== */
+.toast-stack {
+  position: fixed;
+  right: 24px;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+}
+.achievement-toast {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid rgba(211, 162, 78, 0.45);
+  border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 40px rgba(211, 162, 78, 0.12);
+  padding: 14px 16px;
+  cursor: pointer;
+  animation: toast-in 0.3s ease-out;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.achievement-toast.is-leaving { opacity: 0; transform: translateY(12px); }
+.achievement-toast .achievement-text h4 { font-family: var(--font-display); font-size: 16px; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal.rank-up-modal, .achievement-toast { animation: none; }
+  .rank-progress > div { transition: none; }
+}
+
+/* ----- Profil et prochain palier sur mobile ----- */
+@media (max-width: 720px) {
+  .next-milestone { padding: 18px; gap: 18px; }
+  .milestone-others { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 16px; }
+  .milestone-title { font-size: 18px; }
+
+  #profile-content { gap: 26px; }
+  .profile-bodyweight { margin: -4px 0 -10px 0; }
+  .profile-hero { padding: 20px; }
+  .profile-hero-main { gap: 18px; }
+  .rank-emblem { width: 96px; height: 96px; border-radius: 24px; }
+  .rank-emblem span { font-size: 54px; }
+  .profile-hero-title { font-size: 24px; }
+  .rank-grid, .achievement-grid { grid-template-columns: 1fr; }
+
+  .toast-stack { right: 16px; left: 16px; width: auto; max-width: none; bottom: max(16px, env(safe-area-inset-bottom)); }
+}
+
+/* ----- Test cardio : minutes + secondes ----- */
+.cardio-time-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  max-width: 320px;
+}
+.cardio-time-row input { min-width: 0; }
+.cardio-time-unit { font-size: 13px; color: var(--text-secondary); }
+
+/* ==========================================================================
+   AJUSTEMENTS MOBILE (iPhone) — passe de vérification complète
+   ========================================================================== */
+@media (max-width: 720px) {
+  /* --- Musculation : les deux boutons d'ajout côte à côte, même largeur --- */
+  .muscu-add-buttons { display: grid; grid-template-columns: 1fr 1fr; }
+
+  /* --- En-têtes "titre + menu déroulant" : le menu passe sous le titre, en pleine largeur --- */
+  .history-header,
+  .stats-chart-header { gap: 10px; }
+  .history-header .panel-title,
+  .stats-chart-header .panel-title { margin: 0; }
+  .history-header > select,
+  .stats-chart-header > select { flex: 1 1 100%; }
+
+  /* --- Cartes d'historique : "Refaire" sur toute la largeur, puis Modifier / Supprimer --- */
+  .history-card-actions { flex-wrap: wrap; }
+  .history-card-actions > .btn { flex: 1 1 0; }
+  .history-card-actions > .btn:first-child:not(:last-child):nth-last-child(3) { flex-basis: 100%; }
+
+  /* --- Réglages : boutons pleine largeur --- */
+  .settings-actions .btn,
+  #btn-reset-data { width: 100%; }
+
+  /* --- Calendrier d'assiduité : les cases s'adaptent à la largeur, les
+         semaines les plus récentes restent visibles sans faire défiler --- */
+  .hm-grid,
+  .hm-months {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    width: 100%;
+    gap: 2px;
+  }
+  .hm-column { gap: 2px; }
+  .hm-column .hm-cell { width: auto; height: auto; aspect-ratio: 1; border-radius: 2px; }
+  .hm-month-label { width: auto; overflow: visible; }
+
+  /* --- Profil : en-tête compact (emblème à côté du titre) --- */
+  .profile-hero-main {
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    column-gap: 16px;
+    row-gap: 10px;
+    align-items: center;
+  }
+  .profile-hero-text { display: contents; }
+  .rank-emblem { grid-row: 1 / span 2; width: 76px; height: 76px; border-radius: 20px; }
+  .rank-emblem span { font-size: 44px; }
+  .profile-hero-text > .profile-eyebrow { align-self: end; }
+  .profile-hero-text > .profile-hero-title { align-self: start; font-size: 24px; line-height: 1.15; }
+  .profile-hero-text > :nth-child(n+3) { grid-column: 1 / -1; }
+  .profile-hero-radar { flex-basis: 100%; }
+  .profile-radar { max-width: 340px; }
+
+  /* --- Barème : grille de 3 colonnes au lieu de 3 lignes irrégulières --- */
+  .rank-scale { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .rank-scale-label { grid-column: 1 / -1; }
+  .rank-scale-chip { gap: 6px; padding: 3px 6px 3px 3px; font-size: 11.5px; min-width: 0; }
+  .rank-scale-chip .rank-badge-sm { width: 22px; height: 22px; font-size: 12px; }
+
+  /* --- Cartes d'exercice plus compactes --- */
+  .rank-grid { gap: 10px; }
+  .rank-card { padding: 14px 16px; gap: 8px; }
+  .rank-card .rank-badge-md { width: 34px; height: 34px; border-radius: 9px; font-size: 18px; }
+  .rank-card-value-block { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
+  .rank-card-value { font-size: 21px; }
+  .rank-card-locked { padding: 12px 16px; gap: 4px; }
+  .rank-card-locked .rank-card-value-muted { display: none; } /* l'indication suffit */
+  .profile-category { gap: 12px; }
+  .profile-category-basis { flex-basis: 100%; margin-top: -6px; }
+
+  /* --- Succès plus compacts --- */
+  .achievement-grid { gap: 10px; }
+  .achievement-card { padding: 12px 14px; gap: 12px; }
+  .achievement-icon { width: 40px; height: 40px; }
+  .achievement-icon svg { width: 20px; height: 20px; }
+
+  /* --- Fenêtre "Rang supérieur" --- */
+  .modal.rank-up-modal { padding: 28px 20px; }
+  .rank-badge-xl { width: 92px; height: 92px; font-size: 52px; border-radius: 22px; }
+}
+
+/* --- iPhone / iPad : Safari zoome sur un champ dont le texte fait moins de
+       16 px dès qu'on le touche. On passe tous les champs à 16 px sur les
+       écrans tactiles pour que la page ne bouge plus. (!important car
+       certains menus ont une taille plus précise ailleurs dans ce fichier) --- */
+@media (max-width: 720px), (pointer: coarse) {
+  .app input,
+  .app select,
+  .app textarea { font-size: 16px !important; }
+}
