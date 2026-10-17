@@ -119,6 +119,22 @@ function renderInstallPanel() {
 renderInstallPanel();
 
 // --------------------------------------------------------------------------
+// VERSION DE L'APPLI
+// --------------------------------------------------------------------------
+
+function renderVersionPanel() {
+  const label = document.getElementById("app-version-label");
+  if (label) label.textContent = typeof APP_VERSION !== "undefined" && APP_VERSION ? `Version ${APP_VERSION}` : "Version locale";
+}
+
+const btnCheckUpdate = document.getElementById("btn-check-update");
+if (btnCheckUpdate) {
+  btnCheckUpdate.addEventListener("click", () => {
+    if (typeof checkForUpdate === "function") checkForUpdate(true);
+  });
+}
+
+// --------------------------------------------------------------------------
 // IMPORT
 // --------------------------------------------------------------------------
 

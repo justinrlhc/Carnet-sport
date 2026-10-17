@@ -224,9 +224,82 @@ renderDashboard();
 // (https), pas en ouvrant le fichier index.html directement.
 // --------------------------------------------------------------------------
 
-if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+const IS_ONLINE_SITE = location.protocol === "https:" || location.hostname === "localhost";
+
+if ("serviceWorker" in navigator && IS_ONLINE_SITE) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js").catch((error) => console.warn("Mode hors ligne indisponible :", error));
+  });
+}
+
+// --------------------------------------------------------------------------
+// 5. MISES À JOUR
+// Le numéro de version est celui des liens "?v=13" de index.html (une seule
+// source, rien d'autre à modifier à chaque version). L'appli compare sa
+// version à celle en ligne au démarrage et chaque fois qu'on y revient
+// (l'iPhone garde souvent l'appli en mémoire sans la recharger), puis
+// propose de se mettre à jour d'un toucher.
+// --------------------------------------------------------------------------
+
+const APP_VERSION = (() => {
+  const script = document.querySelector('script[src*="js/app.js"]');
+  if (!script) return null;
+  return new URL(script.getAttribute("src"), location.href).searchParams.get("v");
+})();
+
+let lastUpdateCheck = 0;
+
+/** Va lire la version en ligne. Renvoie le numéro, ou null (hors ligne, fichier ouvert en local...). */
+async function fetchOnlineVersion() {
+  if (!APP_VERSION || !IS_ONLINE_SITE || navigator.onLine === false) return null;
+  try {
+    const response = await fetch(`./index.html?check=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) return null;
+    const match = (await response.text()).match(/js\/app\.js\?v=(\d+)/);
+    return match ? match[1] : null;
+  } catch (error) {
+    return null; // pas de réseau : on réessaiera plus tard
+  }
+}
+
+async function checkForUpdate(fromButton) {
+  const now = Date.now();
+  if (!fromButton && now - lastUpdateCheck < 60 * 1000) return; // au plus une fois par minute
+  lastUpdateCheck = now;
+  const online = await fetchOnlineVersion();
+  if (online && online !== APP_VERSION) {
+    showUpdateBanner(online);
+  } else if (fromButton && typeof showSettingsFeedback === "function") {
+    showSettingsFeedback(online ? `Tu as déjà la dernière version (version ${APP_VERSION}).` : "Impossible de vérifier : pas de connexion.", !online);
+  }
+}
+
+/** Recharge l'appli sur la nouvelle version (le service worker récupère d'abord les nouveaux fichiers). */
+async function applyUpdate() {
+  try {
+    const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    if (registration) await registration.update();
+  } catch (error) { /* on recharge quand même */ }
+  location.reload();
+}
+
+function showUpdateBanner(onlineVersion) {
+  if (document.getElementById("update-banner")) return;
+  const banner = document.createElement("div");
+  banner.id = "update-banner";
+  banner.className = "update-banner";
+  banner.setAttribute("role", "status");
+  banner.innerHTML = `
+    <span>Nouvelle version disponible <small>(version ${escapeHtml(onlineVersion)})</small></span>
+    <button type="button" class="btn btn-primary btn-small">Mettre à jour</button>`;
+  banner.querySelector("button").addEventListener("click", applyUpdate);
+  document.body.appendChild(banner);
+}
+
+if (APP_VERSION && IS_ONLINE_SITE) {
+  window.addEventListener("load", () => setTimeout(() => checkForUpdate(false), 1500));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForUpdate(false);
   });
 }
 
@@ -235,3 +308,6 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
 if (navigator.storage && typeof navigator.storage.persist === "function") {
   navigator.storage.persist().catch(() => {});
 }
+
+// Affiche le numéro de version dans Réglages (settings.js est chargé avant ce fichier)
+if (typeof renderVersionPanel === "function") renderVersionPanel();
