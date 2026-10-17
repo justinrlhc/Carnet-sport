@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=19">
+  <link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 
@@ -102,6 +102,9 @@
       <!-- ---------- SECTION : DASHBOARD ---------- -->
       <section class="section is-active" id="section-dashboard">
 
+        <!-- Rappel de sauvegarde (settings.js) : n'apparaît qu'au-delà de 30 jours sans export -->
+        <div class="backup-reminder" id="backup-reminder" role="status" style="display:none;"></div>
+
         <div class="stat-grid">
           <div class="stat-card">
             <span class="stat-label">Poids actuel</span>
@@ -130,7 +133,7 @@
 
         <div class="panel-grid">
           <div class="panel">
-            <h2 class="panel-title">Progression récente</h2>
+            <h2 class="panel-title">Volume par semaine (kg)</h2>
             <div class="chart-container"><canvas id="chart-dashboard-recent" height="90"></canvas></div>
           </div>
           <div class="panel">
@@ -237,14 +240,14 @@
 
               <div class="form-row form-row-inline" id="cf-time-row">
                 <div>
-                  <label for="cf-time">Temps <span class="label-optional">(si "For Time")</span></label>
+                  <label for="cf-time">Temps <span class="label-optional" id="cf-time-optional"></span></label>
                   <input type="text" id="cf-time" inputmode="decimal" placeholder="ex : 6:42 ou 6,42">
                 </div>
               </div>
 
               <div class="form-row form-row-inline" id="cf-rounds-row">
                 <div>
-                  <label for="cf-rounds">Rounds complets <span class="label-optional">(si AMRAP)</span></label>
+                  <label for="cf-rounds">Rounds complets <span class="label-optional" id="cf-rounds-optional"></span></label>
                   <input type="number" id="cf-rounds" min="0">
                 </div>
                 <div>
@@ -555,6 +558,7 @@
             Exporte régulièrement une sauvegarde pour ne jamais les perdre — par exemple avant de changer de
             téléphone. Sur iPhone, choisis « Enregistrer dans Fichiers » après avoir touché Exporter.
           </p>
+          <p class="backup-status" id="backup-status"></p>
           <div class="settings-actions">
             <button type="button" class="btn btn-primary" id="btn-export-data">Exporter mes données (.json)</button>
             <button type="button" class="btn btn-secondary" id="btn-import-data">Importer une sauvegarde</button>
@@ -665,15 +669,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=19"></script>
-  <script src="js/musculation.js?v=19"></script>
-  <script src="js/crossfit.js?v=19"></script>
-  <script src="js/mensurations.js?v=19"></script>
-  <script src="js/stats.js?v=19"></script>
-  <script src="js/charts.js?v=19"></script>
-  <script src="js/ranks.js?v=19"></script>
-  <script src="js/settings.js?v=19"></script>
-  <script src="js/app.js?v=19"></script>
+  <script src="js/data.js?v=20"></script>
+  <script src="js/musculation.js?v=20"></script>
+  <script src="js/crossfit.js?v=20"></script>
+  <script src="js/mensurations.js?v=20"></script>
+  <script src="js/stats.js?v=20"></script>
+  <script src="js/charts.js?v=20"></script>
+  <script src="js/ranks.js?v=20"></script>
+  <script src="js/settings.js?v=20"></script>
+  <script src="js/app.js?v=20"></script>
 </body>
 </html>
 

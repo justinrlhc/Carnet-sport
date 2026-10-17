@@ -1990,3 +1990,41 @@ body.ob-open { overflow: hidden; }
 }
 .rank-card-update:hover { color: var(--accent-strong); }
 .rank-card.is-highlighted { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); transition: box-shadow 0.3s, border-color 0.3s; }
+
+/* Calendrier : étiquette du mois en cours calée à droite (elle déborde vers la gauche) */
+.hm-month-label-end { display: flex; justify-content: flex-end; overflow: visible; }
+
+/* ----- Formulaire de séance : "Dernière fois" et record sous l'exercice ----- */
+.exercise-last-seen {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  margin: 0 0 12px; padding: 8px 10px;
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; line-height: 1.4; color: var(--text-secondary);
+}
+.exercise-last-seen strong { color: var(--text-primary); font-weight: 600; }
+.exercise-last-seen-text { flex: 1 1 100%; min-width: 0; }
+.exercise-last-seen-record { color: var(--accent-strong); font-weight: 600; }
+.exercise-last-seen-reuse {
+  margin-left: auto; background: none; border: none; padding: 4px 0;
+  color: var(--accent-strong); font-weight: 700; font-size: 13px; font-family: var(--font-body);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.exercise-last-seen-reuse:hover { text-decoration: underline; }
+.set-row input::placeholder { color: var(--text-muted); }
+
+/* ----- Sauvegarde : date de la dernière et rappel du tableau de bord ----- */
+.backup-status { font-size: 13px; color: var(--text-secondary); margin: 0 0 14px; }
+.backup-status:empty { display: none; }
+.backup-status.is-overdue { color: var(--accent-strong); font-weight: 600; }
+.backup-reminder {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--accent-soft); border: 1px solid rgba(211, 162, 78, 0.45);
+  border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 16px;
+}
+.backup-reminder-text { margin: 0; flex: 1 1 260px; font-size: 14px; line-height: 1.45; color: var(--text-secondary); }
+.backup-reminder-text strong { display: block; color: var(--text-primary); margin-bottom: 2px; }
+.backup-reminder-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 720px) {
+  .backup-reminder-actions { width: 100%; }
+  .backup-reminder-actions .btn { flex: 1; }
+}
