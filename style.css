@@ -1788,3 +1788,44 @@ button { font-family: inherit; }
 }
 .record-level-badge { flex-shrink: 0; }
 .record-level .record-main { margin: 0; }
+
+/* ----- Réglages : version de l'appli ----- */
+.version-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.version-label {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* ----- Bandeau "Nouvelle version disponible" ----- */
+.update-banner {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 140;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid rgba(211, 162, 78, 0.5);
+  border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  animation: toast-in 0.3s ease-out;
+}
+.update-banner small { color: var(--text-secondary); font-weight: 500; }
+.update-banner .btn { flex-shrink: 0; width: auto; }
+@media (min-width: 721px) {
+  .update-banner { left: auto; right: 24px; bottom: 24px; max-width: 420px; }
+}
