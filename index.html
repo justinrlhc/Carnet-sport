@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 
@@ -119,9 +119,9 @@
             <span class="stat-trend" id="stat-volume-trend">Cette semaine</span>
           </div>
           <div class="stat-card stat-card-accent">
-            <span class="stat-label">Records personnels</span>
+            <span class="stat-label">Records battus</span>
             <span class="stat-value" id="stat-pr">—</span>
-            <span class="stat-trend">ce mois-ci</span>
+            <span class="stat-trend" id="stat-pr-trend">ce mois-ci</span>
           </div>
         </div>
 
@@ -409,6 +409,14 @@
               <input type="text" id="manual-cf-wod-custom" class="form-input-spaced"
                      placeholder="Nom du WOD" style="display:none;">
             </div>
+            <div class="form-row">
+              <label for="manual-cf-level">Niveau</label>
+              <select id="manual-cf-level">
+                <option value="RX">RX</option>
+                <option value="Inter">Inter</option>
+                <option value="Scaled">Scaled</option>
+              </select>
+            </div>
             <div class="form-row form-row-inline">
               <div>
                 <label for="manual-cf-time">Temps <span class="label-optional">(mm:ss)</span></label>
@@ -552,15 +560,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=11"></script>
-  <script src="js/musculation.js?v=11"></script>
-  <script src="js/crossfit.js?v=11"></script>
-  <script src="js/mensurations.js?v=11"></script>
-  <script src="js/stats.js?v=11"></script>
-  <script src="js/charts.js?v=11"></script>
-  <script src="js/ranks.js?v=11"></script>
-  <script src="js/settings.js?v=11"></script>
-  <script src="js/app.js?v=11"></script>
+  <script src="js/data.js?v=12"></script>
+  <script src="js/musculation.js?v=12"></script>
+  <script src="js/crossfit.js?v=12"></script>
+  <script src="js/mensurations.js?v=12"></script>
+  <script src="js/stats.js?v=12"></script>
+  <script src="js/charts.js?v=12"></script>
+  <script src="js/ranks.js?v=12"></script>
+  <script src="js/settings.js?v=12"></script>
+  <script src="js/app.js?v=12"></script>
 </body>
 </html>
 

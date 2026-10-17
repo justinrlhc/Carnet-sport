@@ -1773,3 +1773,18 @@ button { font-family: inherit; }
 @media (max-width: 720px) {
   .main { padding-bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px)); }
 }
+
+/* ----- Records CrossFit : un bloc par niveau (RX, Inter, Scaled) ----- */
+.record-level {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding-top: 8px;
+}
+.record-level + .record-level {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+.record-level-badge { flex-shrink: 0; }
+.record-level .record-main { margin: 0; }
