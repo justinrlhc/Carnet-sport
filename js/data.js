@@ -360,6 +360,48 @@ function deleteManualOneRM(exercise) {
   localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(all));
 }
 
+// Perfs notées à la main pour les exercices au poids du corps (reps max
+// d'affilée, sans lest) et pour les tests cardio (meilleur temps). Elles
+// comptent pour les rangs, comme le 1RM noté.
+const STORAGE_KEY_MANUAL_REPS = "carnet_manual_reps";
+const STORAGE_KEY_MANUAL_TIMES = "carnet_manual_times";
+
+function readJsonObject(key) {
+  const raw = localStorage.getItem(key);
+  if (!raw) return {};
+  try { const value = JSON.parse(raw); return value && typeof value === "object" ? value : {}; } catch { return {}; }
+}
+
+function getManualReps() { return readJsonObject(STORAGE_KEY_MANUAL_REPS); }
+
+/** data : { reps, date, notes } */
+function setManualReps(exercise, data) {
+  const all = getManualReps();
+  all[exercise] = data;
+  localStorage.setItem(STORAGE_KEY_MANUAL_REPS, JSON.stringify(all));
+}
+
+function deleteManualReps(exercise) {
+  const all = getManualReps();
+  delete all[exercise];
+  localStorage.setItem(STORAGE_KEY_MANUAL_REPS, JSON.stringify(all));
+}
+
+function getManualTimes() { return readJsonObject(STORAGE_KEY_MANUAL_TIMES); }
+
+/** data : { timeSeconds, date, notes } */
+function setManualTime(exercise, data) {
+  const all = getManualTimes();
+  all[exercise] = data;
+  localStorage.setItem(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(all));
+}
+
+function deleteManualTime(exercise) {
+  const all = getManualTimes();
+  delete all[exercise];
+  localStorage.setItem(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(all));
+}
+
 function getManualCfBests() {
   const raw = localStorage.getItem(STORAGE_KEY_MANUAL_CF_BEST);
   if (!raw) return {};
@@ -408,6 +450,8 @@ function hasAnyUserData() {
     getAllBodyweightEntries().length > 0 ||
     Object.keys(getManualOneRMs()).length > 0 ||
     Object.keys(getManualCfBests()).length > 0 ||
+    Object.keys(getManualReps()).length > 0 ||
+    Object.keys(getManualTimes()).length > 0 ||
     getBirthYear() !== null || getHeight() !== null;
 }
 
@@ -457,6 +501,8 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_KEY_BODYWEIGHT);
   localStorage.removeItem(STORAGE_KEY_MANUAL_1RM);
   localStorage.removeItem(STORAGE_KEY_MANUAL_CF_BEST);
+  localStorage.removeItem(STORAGE_KEY_MANUAL_REPS);
+  localStorage.removeItem(STORAGE_KEY_MANUAL_TIMES);
   localStorage.removeItem(STORAGE_KEY_HEIGHT);
   localStorage.removeItem(STORAGE_KEY_BIRTH_YEAR);
   localStorage.removeItem(STORAGE_KEY_SEX);
@@ -484,6 +530,8 @@ function exportAllData() {
     bodyweight: getAllBodyweightEntries(),
     manualOneRMs: getManualOneRMs(),
     manualCfBests: getManualCfBests(),
+    manualReps: getManualReps(),
+    manualTimes: getManualTimes(),
     heightCm: getHeight(),
     birthYear: getBirthYear(),
     sex: getSex(),
@@ -513,6 +561,9 @@ function importAllData(jsonString) {
   saveAllBodyweightEntries(payload.bodyweight || []);
   localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(payload.manualOneRMs || {}));
   localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(payload.manualCfBests || {}));
+  const asObject = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
+  localStorage.setItem(STORAGE_KEY_MANUAL_REPS, JSON.stringify(asObject(payload.manualReps)));
+  localStorage.setItem(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(asObject(payload.manualTimes)));
   if (payload.heightCm) setHeight(payload.heightCm);
   if (Number.isInteger(payload.birthYear) && payload.birthYear > 1900) setBirthYear(payload.birthYear);
   if (payload.sex === "female" || payload.sex === "male") setSex(payload.sex);
@@ -584,6 +635,20 @@ function ensureExerciseRenames() {
     manualChanged = true;
   });
   if (manualChanged) localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(manual));
+
+  // Reps et temps notés à la main : en cas de doublon, on garde le nouveau nom
+  [STORAGE_KEY_MANUAL_REPS, STORAGE_KEY_MANUAL_TIMES].forEach((key) => {
+    const store = readJsonObject(key);
+    let changed = false;
+    Object.keys(EXERCISE_RENAMES).forEach((oldName) => {
+      if (!store[oldName]) return;
+      const newName = EXERCISE_RENAMES[oldName];
+      if (!store[newName]) store[newName] = store[oldName];
+      delete store[oldName];
+      changed = true;
+    });
+    if (changed) localStorage.setItem(key, JSON.stringify(store));
+  });
 }
 
 ensureInitialized();

@@ -341,6 +341,20 @@ const manualCfLevelSelect = document.getElementById("manual-cf-level");
 const btnToggleCfForm = document.getElementById("btn-toggle-cf-record-form");
 const btnCancelCfForm = document.getElementById("btn-cancel-cf-record-form");
 
+/** Meilleur temps de chaque test cardio dans les séances : { "Row 2000 m": { value, date } }. */
+function computeCardioTestBests() {
+  const bests = {};
+  getAllSessions().forEach((session) => {
+    if (session.type !== "musculation") return;
+    (session.exercises || []).forEach((entry) => {
+      if (!entry || entry.kind !== "cardio" || !(entry.timeSeconds > 0)) return;
+      const current = bests[entry.exercise];
+      if (!current || entry.timeSeconds < current.value) bests[entry.exercise] = { value: entry.timeSeconds, date: session.date };
+    });
+  });
+  return bests;
+}
+
 function renderRecords() {
   const muscuGrid = document.getElementById("records-muscu-grid");
   const cfGrid = document.getElementById("records-cf-grid");
@@ -354,22 +368,89 @@ function renderRecords() {
   // ========== MUSCULATION ==========
   const sessionRecords = computeMuscuRecords();
   const manualOneRMs = getManualOneRMs();
-  const exerciseNames = Array.from(new Set([...Object.keys(sessionRecords), ...Object.keys(manualOneRMs)])).sort();
+  const manualRepsAll = getManualReps();
+  const manualTimesAll = getManualTimes();
+  const sessionCardioBests = computeCardioTestBests();
+  const exerciseNames = Array.from(new Set([
+    ...Object.keys(sessionRecords), ...Object.keys(manualOneRMs), ...Object.keys(manualRepsAll),
+    ...Object.keys(sessionCardioBests), ...Object.keys(manualTimesAll),
+  ])).sort();
+  const notedOn = (date) => (date ? ` le ${parseLocalDate(date).toLocaleDateString("fr-FR")}` : "");
 
   muscuGrid.innerHTML = "";
   if (exerciseNames.length === 0) {
-    muscuGrid.innerHTML = `<p class="empty-text">Ajoute une séance ou note un 1RM connu pour voir apparaître tes records ici.</p>`;
+    muscuGrid.innerHTML = `<p class="empty-text">Ajoute une séance ou note une perf pour voir apparaître tes records ici.</p>`;
   }
 
+  /** Branche les liens d'une carte : progression, noter / modifier / supprimer. */
+  function wireRecordCard(card, exercise, handlers) {
+    Object.entries(handlers).forEach(([selector, handler]) => {
+      const el = card.querySelector(selector);
+      if (el) el.addEventListener("click", handler);
+    });
+  }
+  const afterManualDelete = () => {
+    renderRecords();
+    if (typeof notifyRankProgress === "function") notifyRankProgress();
+    if (typeof renderDashboard === "function") renderDashboard();
+  };
+
   exerciseNames.forEach((exercise) => {
+    const progressLink = (chartable.lifts.includes(exercise) || chartable.cardio.includes(exercise))
+      ? `<button type="button" class="record-link record-progress-link">Voir la progression ›</button>`
+      : "";
+
+    // ----- Test cardio (Row 2000 m, Run 5 km…) : meilleur temps -----
+    if (sessionCardioBests[exercise] || manualTimesAll[exercise]) {
+      const sessionBest = sessionCardioBests[exercise] || null;
+      const manualTime = manualTimesAll[exercise] || null;
+      const manualIsBest = manualTime && (!sessionBest || manualTime.timeSeconds < sessionBest.value);
+      const best = manualIsBest ? { value: manualTime.timeSeconds } : sessionBest;
+      const sub = [];
+      if (manualIsBest) {
+        sub.push(`<span>Noté${notedOn(manualTime.date)}</span>`);
+        if (sessionBest) sub.push(`<span>En séance : ${formatDuration(sessionBest.value)}</span>`);
+      } else if (manualTime) {
+        sub.push(`<span>Temps noté : ${formatDuration(manualTime.timeSeconds)}</span>`);
+      }
+      const links = manualTime
+        ? `${progressLink}<button type="button" class="record-link edit-time-link">Modifier mon temps</button><button type="button" class="record-link record-link-danger delete-time-link">Supprimer</button>`
+        : `${progressLink}<button type="button" class="record-link add-time-link">+ Noter mon meilleur temps</button>`;
+      const card = document.createElement("div");
+      card.className = "record-card";
+      card.innerHTML = `
+        <span class="record-card-title">${escapeHtml(exercise)}</span>
+        <div class="record-main">
+          <span class="record-value">${formatDuration(best.value)}</span>
+          <span class="record-label">Meilleur temps${manualIsBest ? " (noté)" : ""}</span>
+        </div>
+        ${sub.length ? `<div class="record-sub">${sub.join("")}</div>` : ""}
+        <div class="record-manage">${links}</div>`;
+      wireRecordCard(card, exercise, {
+        ".record-progress-link": () => openProgressChart("exercise", exercise),
+        ".edit-time-link": () => open1rmForm(exercise, manualTime, { mode: "time" }),
+        ".add-time-link": () => open1rmForm(exercise, null, { mode: "time" }),
+        ".delete-time-link": () => {
+          if (!confirm(`Supprimer le temps que tu as noté pour ${exercise} ?`)) return;
+          deleteManualTime(exercise);
+          afterManualDelete();
+        },
+      });
+      muscuGrid.appendChild(card);
+      return;
+    }
+
     const sessionRec = sessionRecords[exercise] || null;
     const manual = manualOneRMs[exercise] || null;
     const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exercise);
 
     // Exercice au poids du corps (pull-up, dips...) : ce qui compte, ce sont
-    // les répétitions max en une série. Un "1RM" n'aurait pas de sens (il
-    // vaudrait 0 kg sans lest) : le lest max apparaît seulement en dessous.
-    const showRepsHeadline = isBW && sessionRec && sessionRec.maxReps && sessionRec.maxReps.value > 0;
+    // les répétitions max en une série (en séance ou notées à la main). Un
+    // "1RM" n'aurait pas de sens : le lest max apparaît seulement en dessous.
+    const sessionReps = sessionRec && sessionRec.maxReps && sessionRec.maxReps.value > 0 ? sessionRec.maxReps : null;
+    const manualReps = isBW ? manualRepsAll[exercise] || null : null;
+    const showRepsHeadline = isBW && Boolean(sessionReps || manualReps);
+    const manualRepsIsBest = Boolean(manualReps && (!sessionReps || manualReps.reps > sessionReps.value));
 
     // Sinon : la valeur la plus élevée entre l'estimation calculée et la
     // valeur saisie manuellement, en gardant toujours une trace de sa source.
@@ -386,14 +467,13 @@ function renderRecords() {
     // qu'une charge max utilisée, jamais de 1RM (voir note plus haut).
     const showWeightOnlyHeadline = !headline && !showRepsHeadline && sessionRec && sessionRec.maxWeight;
 
-    let otherValueNote = "";
-    if (manual && showRepsHeadline) {
-      otherValueNote = `<span>Lest max noté (1 rep) : ${formatKgValue(manual.weight)} kg</span>`;
-    } else if (manual && estimate && Math.round(estimate.value) !== Math.round(manual.weight)) {
-      otherValueNote = `<span>Estimé à partir des séances : ${Math.round(estimate.value)} kg</span>`;
-    }
-
     const subLineParts = [];
+    if (showRepsHeadline && manualRepsIsBest) {
+      subLineParts.push(`<span>Noté${notedOn(manualReps.date)}</span>`);
+      if (sessionReps) subLineParts.push(`<span>En séance : ${sessionReps.value} reps${sessionReps.weight > 0 ? ` (lesté ${formatKgValue(sessionReps.weight)} kg)` : ""}</span>`);
+    } else if (showRepsHeadline && manualReps) {
+      subLineParts.push(`<span>Reps notées : ${manualReps.reps}</span>`);
+    }
     if (sessionRec && sessionRec.maxWeight && sessionRec.maxWeight.value > 0) {
       const repsText = sessionRec.maxWeight.reps ? ` × ${sessionRec.maxWeight.reps}` : "";
       const fromWod = sessionRec.maxWeight.source === "crossfit" ? " (vu en WOD)" : "";
@@ -402,7 +482,11 @@ function renderRecords() {
     if (sessionRec && sessionRec.maxReps && !showRepsHeadline) {
       subLineParts.push(`<span>Reps max : ${sessionRec.maxReps.value}${sessionRec.maxReps.weight > 0 ? ` (à ${formatKgValue(sessionRec.maxReps.weight)} kg)` : ""}</span>`);
     }
-    if (otherValueNote) subLineParts.push(otherValueNote);
+    if (manual && isBW && showRepsHeadline) {
+      subLineParts.push(`<span>Lest max noté (1 rep) : ${formatKgValue(manual.weight)} kg</span>`);
+    } else if (manual && estimate && Math.round(estimate.value) !== Math.round(manual.weight)) {
+      subLineParts.push(`<span>Estimé à partir des séances : ${Math.round(estimate.value)} kg</span>`);
+    }
 
     let subLines = "";
     if (subLineParts.length > 0) {
@@ -411,30 +495,39 @@ function renderRecords() {
       subLines = `<p class="empty-text" style="margin-top:8px;">Aucune séance de musculation enregistrée pour cet exercice.</p>`;
     }
 
-    const progressLink = chartable.lifts.includes(exercise)
-      ? `<button type="button" class="record-link record-progress-link">Voir la progression ›</button>`
-      : "";
-    const manageLinks = manual
-      ? `
-        <div class="record-manage">
-          ${progressLink}
-          <button type="button" class="record-link edit-1rm-link">Modifier le 1RM connu</button>
-          <button type="button" class="record-link record-link-danger delete-1rm-link">Supprimer</button>
-        </div>`
-      : `<div class="record-manage">${progressLink}<button type="button" class="record-link add-1rm-link">${isBW ? "+ Noter mon lest max (1 rep)" : "+ Noter mon 1RM connu"}</button></div>`;
+    let links = progressLink;
+    if (isBW) {
+      links += manualReps
+        ? `<button type="button" class="record-link edit-reps-link">Modifier mes reps</button><button type="button" class="record-link record-link-danger delete-reps-link">Supprimer</button>`
+        : `<button type="button" class="record-link add-reps-link">+ Noter mon max de reps</button>`;
+      if (manual) {
+        links += `<button type="button" class="record-link edit-1rm-link">Modifier le lest noté</button><button type="button" class="record-link record-link-danger delete-1rm-link">Supprimer le lest</button>`;
+      }
+    } else {
+      links += manual
+        ? `<button type="button" class="record-link edit-1rm-link">Modifier le 1RM connu</button><button type="button" class="record-link record-link-danger delete-1rm-link">Supprimer</button>`
+        : `<button type="button" class="record-link add-1rm-link">+ Noter mon 1RM connu</button>`;
+    }
+    const manageLinks = `<div class="record-manage">${links}</div>`;
 
     let mainBlock;
     if (headline) {
       mainBlock = `
         <div class="record-main">
           <span class="record-value">${Math.round(headline.value)} <small>kg</small></span>
-          <span class="record-label">${headline.source === "manual" ? "1RM connu (saisi)" : "1RM estimé*"}</span>
+          <span class="record-label">${headline.source === "manual" ? (isBW ? "Lest max (saisi)" : "1RM connu (saisi)") : "1RM estimé*"}</span>
+        </div>`;
+    } else if (showRepsHeadline && manualRepsIsBest) {
+      mainBlock = `
+        <div class="record-main">
+          <span class="record-value">${manualReps.reps} <small>reps</small></span>
+          <span class="record-label">Reps max en une série (notées)</span>
         </div>`;
     } else if (showRepsHeadline) {
       mainBlock = `
         <div class="record-main">
-          <span class="record-value">${sessionRec.maxReps.value} <small>reps</small></span>
-          <span class="record-label">Reps max en une série${sessionRec.maxReps.weight > 0 ? ` (lesté ${formatKgValue(sessionRec.maxReps.weight)} kg)` : ""}</span>
+          <span class="record-value">${sessionReps.value} <small>reps</small></span>
+          <span class="record-label">Reps max en une série${sessionReps.weight > 0 ? ` (lesté ${formatKgValue(sessionReps.weight)} kg)` : ""}</span>
         </div>`;
     } else if (showWeightOnlyHeadline) {
       mainBlock = `
@@ -455,26 +548,24 @@ function renderRecords() {
       ${manageLinks}
     `;
 
-    const progress = card.querySelector(".record-progress-link");
-    if (progress) progress.addEventListener("click", () => openProgressChart("exercise", exercise));
-
-    const editLink = card.querySelector(".edit-1rm-link");
-    if (editLink) editLink.addEventListener("click", () => open1rmForm(exercise, manual));
-
-    const addLink = card.querySelector(".add-1rm-link");
-    if (addLink) addLink.addEventListener("click", () => open1rmForm(exercise, null));
-
-    const deleteLink = card.querySelector(".delete-1rm-link");
-    if (deleteLink) {
-      deleteLink.addEventListener("click", () => {
-        const confirmed = confirm(`Supprimer le 1RM connu que tu as saisi pour ${exercise} ?`);
-        if (!confirmed) return;
+    wireRecordCard(card, exercise, {
+      ".record-progress-link": () => openProgressChart("exercise", exercise),
+      ".edit-1rm-link": () => open1rmForm(exercise, manual, { mode: "load" }),
+      ".add-1rm-link": () => open1rmForm(exercise, null, { mode: "load" }),
+      ".edit-reps-link": () => open1rmForm(exercise, manualReps, { mode: "reps" }),
+      ".add-reps-link": () => open1rmForm(exercise, null, { mode: "reps" }),
+      ".delete-1rm-link": () => {
+        const what = isBW ? "le lest max" : "le 1RM connu";
+        if (!confirm(`Supprimer ${what} que tu as saisi pour ${exercise} ?`)) return;
         deleteManualOneRM(exercise);
-        renderRecords();
-        if (typeof notifyRankProgress === "function") notifyRankProgress();
-        if (typeof renderDashboard === "function") renderDashboard();
-      });
-    }
+        afterManualDelete();
+      },
+      ".delete-reps-link": () => {
+        if (!confirm(`Supprimer les reps que tu as notées pour ${exercise} ?`)) return;
+        deleteManualReps(exercise);
+        afterManualDelete();
+      },
+    });
 
     muscuGrid.appendChild(card);
   });
@@ -757,33 +848,166 @@ function formatKgValue(value) {
 }
 
 // --------------------------------------------------------------------------
-// FORMULAIRE "1RM CONNU" — ouverture, remplissage des listes, soumission
+// FORMULAIRE "NOTER UNE PERF" — 1RM / lest, reps max, meilleur temps
 // --------------------------------------------------------------------------
 
 function populateManual1rmExerciseSelect() {
   if (!manual1rmExerciseSelect) return;
   const exercises = typeof getAllKnownExercises === "function" ? getAllKnownExercises() : [];
+  const label = (ex) => (typeof exerciseOptionLabel === "function" ? exerciseOptionLabel(ex) : ex);
   manual1rmExerciseSelect.innerHTML = "";
   exercises.forEach((ex) => {
     const opt = document.createElement("option");
     opt.value = ex;
-    opt.textContent = typeof exerciseOptionLabel === "function" ? exerciseOptionLabel(ex) : ex;
+    opt.textContent = label(ex);
     manual1rmExerciseSelect.appendChild(opt);
   });
+  // Tests cardio : on y note un meilleur temps
+  const cardioTests = typeof CARDIO_TESTS !== "undefined" ? CARDIO_TESTS : [];
+  if (cardioTests.length > 0) {
+    const group = document.createElement("optgroup");
+    group.label = "Tests cardio";
+    cardioTests.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = label(name);
+      group.appendChild(opt);
+    });
+    manual1rmExerciseSelect.appendChild(group);
+  }
   const customOpt = document.createElement("option");
   customOpt.value = "__custom__";
   customOpt.textContent = "+ Autre exercice…";
   manual1rmExerciseSelect.appendChild(customOpt);
 }
 
-function open1rmForm(exerciseToPrefill, existingManualEntry) {
+// ----- Ce que le formulaire demande selon l'exercice -----
+// "load" : charge max (ou lest max pour un exercice au poids du corps)
+// "reps" : reps max d'affilée, sans lest (exercices au poids du corps)
+// "time" : meilleur temps (tests cardio)
+const manualPerfModeRow = document.getElementById("manual-perf-mode-row");
+const manualPerfModeGroup = document.getElementById("manual-perf-mode");
+const manualValueRow = document.getElementById("manual-value-row");
+const manualValueLabel = document.getElementById("manual-value-label");
+const manualValueHint = document.getElementById("manual-value-hint");
+const manualTimeFields = document.getElementById("manual-time-fields");
+const manualTimeMinInput = document.getElementById("manual-time-min");
+const manualTimeSecInput = document.getElementById("manual-time-sec");
+const manual1rmSubmitBtn = document.getElementById("manual-1rm-submit");
+const manual1rmFeedback = document.getElementById("manual-1rm-feedback");
+
+let manualPerfMode = "load";
+// Quand le formulaire a été ouvert depuis le Profil : { itemId } pour y revenir ensuite
+let manualPerfReturn = null;
+
+function getManualFormExercise() {
+  if (!manual1rmExerciseSelect) return "";
+  return manual1rmExerciseSelect.value === "__custom__" ? manual1rmExerciseCustom.value.trim() : manual1rmExerciseSelect.value;
+}
+
+function isCardioTestName(name) {
+  return typeof CARDIO_TESTS !== "undefined" && CARDIO_TESTS.includes(name);
+}
+
+function isBodyweightName(name) {
+  return typeof isBodyweightExercise === "function" && isBodyweightExercise(name);
+}
+
+/** Le mode par défaut d'un exercice : temps pour un test cardio, reps pour le poids du corps, charge sinon. */
+function defaultPerfMode(name) {
+  if (isCardioTestName(name)) return "time";
+  if (isBodyweightName(name)) return "reps";
+  return "load";
+}
+
+function showManualFeedback(message) {
+  if (manual1rmFeedback) manual1rmFeedback.textContent = message || "";
+}
+
+/** Adapte libellés, champs et bouton au mode choisi. */
+function applyManualPerfMode(mode) {
+  const name = getManualFormExercise();
+  const isBW = isBodyweightName(name);
+  manualPerfMode = mode;
+
+  if (manualPerfModeRow) manualPerfModeRow.style.display = isBW ? "" : "none";
+  if (manualPerfModeGroup) {
+    manualPerfModeGroup.querySelectorAll("button[data-mode]").forEach((button) => {
+      const selected = button.dataset.mode === mode;
+      button.classList.toggle("on", selected);
+      button.setAttribute("aria-checked", selected ? "true" : "false");
+    });
+  }
+
+  const isTime = mode === "time";
+  manual1rmWeightInput.style.display = isTime ? "none" : "";
+  if (manualTimeFields) manualTimeFields.style.display = isTime ? "" : "none";
+  if (manualValueRow) manualValueRow.classList.toggle("is-stacked", isTime);
+
+  if (mode === "reps") {
+    manualValueLabel.textContent = "Reps d'affilée";
+    manualValueLabel.setAttribute("for", "manual-1rm-weight");
+    manual1rmWeightInput.step = "1";
+    manual1rmWeightInput.setAttribute("inputmode", "numeric");
+    manual1rmWeightInput.placeholder = "ex : 12";
+    manualValueHint.textContent = "Sans lest, en une seule série";
+    manual1rmSubmitBtn.textContent = "Enregistrer ces reps";
+  } else if (isTime) {
+    manualValueLabel.textContent = "Meilleur temps";
+    manualValueLabel.setAttribute("for", "manual-time-min");
+    manualValueHint.textContent = "";
+    manual1rmSubmitBtn.textContent = "Enregistrer ce temps";
+  } else {
+    manualValueLabel.textContent = isBW ? "Lest max (1 rep, kg)" : "Charge max (1 rep, kg)";
+    manualValueLabel.setAttribute("for", "manual-1rm-weight");
+    manual1rmWeightInput.step = "0.5";
+    manual1rmWeightInput.setAttribute("inputmode", "decimal");
+    manual1rmWeightInput.placeholder = isBW ? "ex : 10" : "ex : 100";
+    manualValueHint.textContent = isBW ? "Charge ajoutée en plus de ton poids de corps" : "";
+    manual1rmSubmitBtn.textContent = isBW ? "Enregistrer ce lest" : "Enregistrer ce 1RM";
+  }
+}
+
+/** Remplit la valeur et la date avec ce qui a déjà été noté pour cet exercice dans ce mode (ou vide). */
+function fillManualPerfValues(existing) {
+  const name = getManualFormExercise();
+  let entry = existing;
+  if (entry === undefined) {
+    if (manualPerfMode === "reps") entry = getManualReps()[name] || null;
+    else if (manualPerfMode === "time") entry = getManualTimes()[name] || null;
+    else entry = getManualOneRMs()[name] || null;
+  }
+  manual1rmWeightInput.value = "";
+  if (manualTimeMinInput) manualTimeMinInput.value = "";
+  if (manualTimeSecInput) manualTimeSecInput.value = "";
+  if (entry) {
+    if (manualPerfMode === "reps") manual1rmWeightInput.value = entry.reps;
+    else if (manualPerfMode === "time" && entry.timeSeconds > 0) {
+      const minutes = Math.floor(entry.timeSeconds / 60);
+      const seconds = Math.round((entry.timeSeconds - minutes * 60) * 10) / 10;
+      manualTimeMinInput.value = String(minutes);
+      manualTimeSecInput.value = String(seconds).replace(".", ",");
+    } else if (manualPerfMode === "load") manual1rmWeightInput.value = entry.weight;
+  }
+  manual1rmDateInput.value = entry && entry.date ? entry.date : todayLocalDateString();
+  manual1rmNotesInput.value = entry ? entry.notes || "" : "";
+}
+
+/**
+ * Ouvre le formulaire "Noter une perf".
+ * options.mode : "load", "reps" ou "time" (par défaut : selon l'exercice)
+ * options.returnTo : { itemId } pour revenir sur cette carte du Profil après
+ */
+function open1rmForm(exerciseToPrefill, existingManualEntry, options) {
+  const opts = options || {};
   populateManual1rmExerciseSelect();
+  manual1rmExerciseCustom.style.display = "none";
+  manual1rmExerciseCustom.value = "";
 
   if (exerciseToPrefill) {
     const exists = [...manual1rmExerciseSelect.options].some((o) => o.value === exerciseToPrefill);
     if (exists) {
       manual1rmExerciseSelect.value = exerciseToPrefill;
-      manual1rmExerciseCustom.style.display = "none";
     } else {
       manual1rmExerciseSelect.value = "__custom__";
       manual1rmExerciseCustom.style.display = "block";
@@ -791,18 +1015,52 @@ function open1rmForm(exerciseToPrefill, existingManualEntry) {
     }
   }
 
-  manual1rmWeightInput.value = existingManualEntry ? existingManualEntry.weight : "";
-  manual1rmDateInput.value = existingManualEntry ? existingManualEntry.date : todayLocalDateString();
-  manual1rmNotesInput.value = existingManualEntry ? existingManualEntry.notes || "" : "";
+  manualPerfReturn = opts.returnTo || null;
+  showManualFeedback("");
+  applyManualPerfMode(opts.mode || defaultPerfMode(getManualFormExercise()));
+  fillManualPerfValues(existingManualEntry || undefined);
 
   manual1rmForm.style.display = "block";
   manual1rmForm.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeManualPerfForm() {
+  manual1rmForm.style.display = "none";
+  manual1rmForm.reset();
+  showManualFeedback("");
+  const target = manualPerfReturn;
+  manualPerfReturn = null;
+  return target;
+}
+
+/** Retour sur la carte du Profil d'où l'on venait, mise en évidence un instant. */
+function returnToProfileCard(target) {
+  if (!target || typeof goToSection !== "function") return;
+  goToSection("profil");
+  const card = document.querySelector(`#profile-content [data-rank-item="${target.itemId}"]`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.add("is-highlighted");
+  setTimeout(() => card.classList.remove("is-highlighted"), 1600);
 }
 
 if (manual1rmExerciseSelect) {
   manual1rmExerciseSelect.addEventListener("change", () => {
     const isCustom = manual1rmExerciseSelect.value === "__custom__";
     manual1rmExerciseCustom.style.display = isCustom ? "block" : "none";
+    showManualFeedback("");
+    applyManualPerfMode(defaultPerfMode(getManualFormExercise()));
+    fillManualPerfValues();
+  });
+}
+
+if (manualPerfModeGroup) {
+  manualPerfModeGroup.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-mode]");
+    if (!button || button.dataset.mode === manualPerfMode) return;
+    showManualFeedback("");
+    applyManualPerfMode(button.dataset.mode);
+    fillManualPerfValues();
   });
 }
 
@@ -810,31 +1068,53 @@ if (btnToggle1rmForm) {
   btnToggle1rmForm.addEventListener("click", () => open1rmForm(null, null));
 }
 if (btnCancel1rmForm) {
-  btnCancel1rmForm.addEventListener("click", () => { manual1rmForm.style.display = "none"; manual1rmForm.reset(); });
+  btnCancel1rmForm.addEventListener("click", () => returnToProfileCard(closeManualPerfForm()));
 }
 
 if (manual1rmForm) {
   manual1rmForm.addEventListener("submit", (event) => {
     event.preventDefault();
 
-    const isCustom = manual1rmExerciseSelect.value === "__custom__";
-    const exercise = isCustom ? manual1rmExerciseCustom.value.trim() : manual1rmExerciseSelect.value;
-    const weight = Number(manual1rmWeightInput.value);
+    const exercise = getManualFormExercise();
+    if (!exercise) {
+      showManualFeedback("Choisis ou écris le nom de l'exercice.");
+      return;
+    }
+    const date = manual1rmDateInput.value || todayLocalDateString();
+    const notes = manual1rmNotesInput.value.trim();
+    const rawValue = String(manual1rmWeightInput.value).trim().replace(",", ".");
 
-    if (!exercise || !weight || weight <= 0) return;
+    if (manualPerfMode === "reps") {
+      const reps = Number(rawValue);
+      if (!Number.isInteger(reps) || reps < 1 || reps > 1000) {
+        showManualFeedback("Indique un nombre de reps entier (au moins 1).");
+        return;
+      }
+      setManualReps(exercise, { reps, date, notes });
+    } else if (manualPerfMode === "time") {
+      const timeSeconds = typeof readCardioTime === "function"
+        ? readCardioTime({ querySelector: (sel) => (sel === ".cardio-block-min" ? manualTimeMinInput : manualTimeSecInput) })
+        : null;
+      if (!timeSeconds) {
+        showManualFeedback("Indique un temps valide (minutes et secondes).");
+        return;
+      }
+      setManualTime(exercise, { timeSeconds, date, notes });
+    } else {
+      const weight = Number(rawValue);
+      if (!Number.isFinite(weight) || weight <= 0) {
+        showManualFeedback("Indique une charge en kg.");
+        return;
+      }
+      setManualOneRM(exercise, { weight, date, notes });
+    }
 
-    setManualOneRM(exercise, {
-      weight,
-      date: manual1rmDateInput.value || todayLocalDateString(),
-      notes: manual1rmNotesInput.value.trim(),
-    });
-
-    manual1rmForm.style.display = "none";
-    manual1rmForm.reset();
+    const returnTarget = closeManualPerfForm();
     renderRecords();
-    // Un 1RM noté compte pour les rangs (force et haltéro)
+    // Les perfs notées comptent pour les rangs (force, haltéro, gym, endurance)
     if (typeof notifyRankProgress === "function") notifyRankProgress();
     if (typeof renderDashboard === "function") renderDashboard();
+    returnToProfileCard(returnTarget);
   });
 }
 

@@ -221,7 +221,7 @@ function collectPerformances() {
   // Par nom d'exercice : meilleure charge en séries réelles, meilleure charge
   // en WOD (minimum prouvé), 1RM noté à la main, meilleures reps, meilleur temps.
   const perf = {};
-  const get = (name) => (perf[name] = perf[name] || { load: 0, loadSource: "estimate", wodLoad: 0, manual: 0, reps: 0, time: null });
+  const get = (name) => (perf[name] = perf[name] || { load: 0, loadSource: "estimate", wodLoad: 0, manual: 0, reps: 0, manualReps: 0, time: null, manualTime: null });
 
   const registerRealSet = (name, reps, weight) => {
     if (!name || !(reps > 0)) return;
@@ -269,6 +269,17 @@ function collectPerformances() {
   Object.keys(manual).forEach((name) => {
     if (manual[name] && manual[name].weight > 0) get(name).manual = Math.max(get(name).manual, manual[name].weight);
   });
+  // Reps max (poids du corps) et meilleurs temps (tests cardio) notés à la main
+  const manualReps = typeof getManualReps === "function" ? getManualReps() : {};
+  Object.keys(manualReps).forEach((name) => {
+    const reps = manualReps[name] && Number(manualReps[name].reps);
+    if (reps > 0) get(name).manualReps = Math.max(get(name).manualReps, reps);
+  });
+  const manualTimes = typeof getManualTimes === "function" ? getManualTimes() : {};
+  Object.keys(manualTimes).forEach((name) => {
+    const time = manualTimes[name] && Number(manualTimes[name].timeSeconds);
+    if (time > 0) { const p = get(name); p.manualTime = p.manualTime === null ? time : Math.min(p.manualTime, time); }
+  });
 
   return perf;
 }
@@ -301,8 +312,10 @@ function getItemValue(item, perf) {
       if (item.wodProof && p.wodLoad > 0) candidates.push({ value: p.wodLoad, source: "wod" });
     } else if (item.kind === "reps") {
       if (p.reps > 0) candidates.push({ value: p.reps, source: "reps" });
+      if (p.manualReps > 0) candidates.push({ value: p.manualReps, source: "manualReps" });
     } else if (item.kind === "time") {
       if (p.time !== null) candidates.push({ value: p.time, source: "time" });
+      if (p.manualTime !== null) candidates.push({ value: p.manualTime, source: "manualTime" });
     }
     candidates.forEach((c) => {
       const better = !best || (item.kind === "time" ? c.value < best.value : c.value > best.value);
@@ -371,7 +384,8 @@ function describeNextStep(item) {
   if (item.kind === "time") {
     return `${formatDuration(Math.floor(item.next.threshold))} ou moins pour le rang ${nextLetter}`;
   }
-  return `${item.next.threshold} séances par semaine pour le rang ${nextLetter}`;
+  const sessions = item.next.threshold;
+  return `${sessions.toLocaleString("fr-FR")} séance${sessions > 1 ? "s" : ""} par semaine pour le rang ${nextLetter}`;
 }
 
 /** Valeur mise en forme (charge, reps, temps ou fréquence). */
@@ -391,8 +405,8 @@ function describeItemSource(item, bodyweight) {
     const ratio = (item.value / bodyweight).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return `${label} · ${ratio} × poids de corps`;
   }
-  if (item.kind === "reps") return "Répétitions max en une série";
-  if (item.kind === "time") return "Meilleur temps";
+  if (item.kind === "reps") return item.source === "manualReps" ? "Reps max notées (une série)" : "Répétitions max en une série";
+  if (item.kind === "time") return item.source === "manualTime" ? "Meilleur temps noté" : "Meilleur temps";
   return "Moyenne sur les 4 dernières semaines";
 }
 
@@ -594,24 +608,74 @@ function rankBadgeHtml(rankIndex, size) {
   return `<span class="rank-badge rank-badge-${size || "md"}" style="color:${info.color};background:${info.tint};border-color:${info.color}">${letter}</span>`;
 }
 
+// --------------------------------------------------------------------------
+// NOTER UNE PERF DEPUIS LE PROFIL
+// Une carte vide (ou "Mettre à jour") ouvre le formulaire de la page Records,
+// déjà réglé sur le bon exercice et le bon type de perf ; après
+// l'enregistrement, on revient sur la carte.
+// --------------------------------------------------------------------------
+
+const PERF_MODE_BY_KIND = { lift: "load", reps: "reps", time: "time" };
+const PERF_CTA_LABELS = { lift: "+ Noter mon 1RM ›", reps: "+ Noter mon max de reps ›", time: "+ Noter mon meilleur temps ›" };
+
+function findRankItemDefinition(itemId) {
+  for (const category of RANK_CATEGORIES) {
+    const item = category.items.find((i) => i.id === itemId);
+    if (item) return item;
+  }
+  return null;
+}
+
+function openPerfFormForRankItem(itemId) {
+  const item = findRankItemDefinition(itemId);
+  if (!item || !PERF_MODE_BY_KIND[item.kind] || typeof open1rmForm !== "function") return;
+  if (typeof goToSection === "function") goToSection("records");
+  open1rmForm(item.sources[0], undefined, { mode: PERF_MODE_BY_KIND[item.kind], returnTo: { itemId } });
+}
+
+function goToBodyweightForm() {
+  if (typeof goToSection === "function") goToSection("mensurations");
+  const form = document.getElementById("weight-form");
+  if (form) form.scrollIntoView({ behavior: "smooth", block: "start" });
+  const input = document.getElementById("weight-value");
+  if (input) input.focus({ preventScroll: true });
+}
+
+const profileContentEl = document.getElementById("profile-content");
+if (profileContentEl) {
+  profileContentEl.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-rank-action]");
+    if (!button) return;
+    if (button.dataset.rankAction === "bodyweight") goToBodyweightForm();
+    else if (button.dataset.rankAction === "perf") openPerfFormForRankItem(button.dataset.itemId);
+  });
+}
+
 function rankItemCardHtml(item, bodyweight) {
+  const canNote = Boolean(PERF_MODE_BY_KIND[item.kind]);
   if (item.status === "untested" || item.status === "needsBodyweight") {
     const hints = {
-      lift: "Note une série ou un 1RM pour obtenir ton rang",
-      reps: item.id === "muscleUp" ? "Note ton premier muscle-up pour obtenir ton rang" : "Note une série pour obtenir ton rang",
-      time: "Note un test chrono (onglet Musculation)",
+      lift: "Une série en séance ou ton 1RM connu",
+      reps: item.id === "muscleUp" ? "Ton premier muscle-up, ou ton max d'affilée" : "Ton max de reps d'affilée",
+      time: "Ton meilleur temps sur un test",
     };
-    const hint = item.status === "needsBodyweight" ? "Renseigne ton poids dans Mensurations" : hints[item.kind];
+    const needsBw = item.status === "needsBodyweight";
+    const hint = needsBw ? "Renseigne ton poids dans Mensurations" : hints[item.kind] || "";
+    const cta = needsBw
+      ? `<button type="button" class="rank-card-cta" data-rank-action="bodyweight">Renseigner mon poids ›</button>`
+      : canNote ? `<button type="button" class="rank-card-cta" data-rank-action="perf" data-item-id="${item.id}">${PERF_CTA_LABELS[item.kind]}</button>` : "";
     return `
-      <article class="rank-card rank-card-locked">
+      <article class="rank-card rank-card-locked" data-rank-item="${item.id}">
         <div class="rank-card-header"><h4>${item.name}</h4><span class="rank-badge rank-badge-md rank-badge-unknown">?</span></div>
         <span class="rank-card-value-muted">Pas encore classé</span>
         <span class="rank-card-meta">${hint}</span>
+        ${cta}
       </article>`;
   }
   const info = RANK_INFO[RANK_LETTERS[item.rankIndex]];
+  const update = canNote ? `<button type="button" class="rank-card-update" data-rank-action="perf" data-item-id="${item.id}">Mettre à jour ›</button>` : "";
   return `
-    <article class="rank-card">
+    <article class="rank-card" data-rank-item="${item.id}">
       <div class="rank-card-header"><h4>${item.name}</h4>${rankBadgeHtml(item.rankIndex, "md")}</div>
       <div class="rank-card-value-block">
         <span class="rank-card-value">${formatItemValue(item)}</span>
@@ -619,6 +683,7 @@ function rankItemCardHtml(item, bodyweight) {
       </div>
       <div class="rank-progress"><div style="width:${Math.round(item.progress * 100)}%;background:${info.color}"></div></div>
       <span class="rank-card-meta">${describeNextStep(item)}</span>
+      ${update}
     </article>`;
 }
 
