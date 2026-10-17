@@ -1964,3 +1964,29 @@ body.ob-open { overflow: hidden; }
 .panel .ob-seg button { min-height: 46px; font-size: 15px; }
 .ob-seg button, .ob-link { -webkit-tap-highlight-color: transparent; }
 #sex-feedback:empty { display: none; }
+
+/* ----- Formulaire "Noter une perf" (Records) : charge, reps ou temps ----- */
+#manual-perf-mode-row .ob-seg { max-width: 420px; }
+#manual-perf-mode-row .ob-seg button { min-height: 46px; font-size: 14px; padding: 6px 8px; line-height: 1.2; }
+.form-row-inline.is-stacked { display: flex; flex-direction: column; gap: 14px; }
+#manual-time-fields { grid-template-columns: 76px auto 76px auto; justify-content: start; }
+.manual-value-hint { font-size: 12px; color: var(--text-muted); line-height: 1.35; }
+.manual-value-hint:empty { display: none; }
+#manual-1rm-feedback:empty { display: none; }
+
+/* ----- Profil : noter une perf depuis une carte de rang ----- */
+.rank-card-cta {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 8px 12px; border-radius: 10px;
+  border: 1px dashed var(--accent); background: var(--accent-soft);
+  color: var(--accent-strong); font-weight: 700; font-size: 14px; font-family: var(--font-body);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.rank-card-cta:active { transform: scale(0.98); }
+.rank-card-update {
+  align-self: flex-start; background: none; border: none; padding: 6px 0; margin-top: -4px;
+  color: var(--text-secondary); font-size: 13px; font-weight: 700; font-family: var(--font-body);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.rank-card-update:hover { color: var(--accent-strong); }
+.rank-card.is-highlighted { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); transition: box-shadow 0.3s, border-color 0.3s; }
