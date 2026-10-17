@@ -196,6 +196,19 @@ function renderDashboard() {
   if (typeof renderDashboardChart === "function") renderDashboardChart();
 }
 
+// Carte "Records battus" : un toucher ouvre le fil des derniers records
+const statPrCard = document.getElementById("stat-pr-card");
+if (statPrCard) {
+  const openRecordFeed = () => {
+    goToSection("records");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  statPrCard.addEventListener("click", openRecordFeed);
+  statPrCard.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRecordFeed(); }
+  });
+}
+
 // Transforme "2026-09-10" en "Aujourd'hui", "Hier", ou "Il y a X jours"
 function formatRelativeDate(dateStr) {
   const date = new Date(dateStr);

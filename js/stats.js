@@ -346,6 +346,11 @@ function renderRecords() {
   const cfGrid = document.getElementById("records-cf-grid");
   if (!muscuGrid || !cfGrid) return; // sécurité si la page n'est pas encore dans le DOM
 
+  renderRecordFeed();
+
+  // Exercices / WOD qui ont un graphique dans Statistiques
+  const chartable = typeof getChartableExercises === "function" ? getChartableExercises() : { lifts: [], cardio: [] };
+
   // ========== MUSCULATION ==========
   const sessionRecords = computeMuscuRecords();
   const manualOneRMs = getManualOneRMs();
@@ -406,13 +411,17 @@ function renderRecords() {
       subLines = `<p class="empty-text" style="margin-top:8px;">Aucune séance de musculation enregistrée pour cet exercice.</p>`;
     }
 
+    const progressLink = chartable.lifts.includes(exercise)
+      ? `<button type="button" class="record-link record-progress-link">Voir la progression ›</button>`
+      : "";
     const manageLinks = manual
       ? `
         <div class="record-manage">
+          ${progressLink}
           <button type="button" class="record-link edit-1rm-link">Modifier le 1RM connu</button>
           <button type="button" class="record-link record-link-danger delete-1rm-link">Supprimer</button>
         </div>`
-      : `<div class="record-manage"><button type="button" class="record-link add-1rm-link">${isBW ? "+ Noter mon lest max (1 rep)" : "+ Noter mon 1RM connu"}</button></div>`;
+      : `<div class="record-manage">${progressLink}<button type="button" class="record-link add-1rm-link">${isBW ? "+ Noter mon lest max (1 rep)" : "+ Noter mon 1RM connu"}</button></div>`;
 
     let mainBlock;
     if (headline) {
@@ -445,6 +454,9 @@ function renderRecords() {
       ${subLines}
       ${manageLinks}
     `;
+
+    const progress = card.querySelector(".record-progress-link");
+    if (progress) progress.addEventListener("click", () => openProgressChart("exercise", exercise));
 
     const editLink = card.querySelector(".edit-1rm-link");
     if (editLink) editLink.addEventListener("click", () => open1rmForm(exercise, manual));
@@ -525,17 +537,24 @@ function renderRecords() {
         </div>`;
     }).join("");
 
+    const wodProgressLink = sessionCfRecords[wodName]
+      ? `<button type="button" class="record-link record-progress-link">Voir la progression ›</button>`
+      : "";
     const manageLinks = manual
       ? `
         <div class="record-manage">
+          ${wodProgressLink}
           <button type="button" class="record-link edit-cf-link">Modifier le résultat connu</button>
           <button type="button" class="record-link record-link-danger delete-cf-link">Supprimer</button>
         </div>`
-      : `<div class="record-manage"><button type="button" class="record-link add-cf-link">+ Noter un résultat connu</button></div>`;
+      : `<div class="record-manage">${wodProgressLink}<button type="button" class="record-link add-cf-link">+ Noter un résultat connu</button></div>`;
 
     const card = document.createElement("div");
     card.className = "record-card";
     card.innerHTML = `<span class="record-card-title">${escapeHtml(wodName)}</span>${mainBlock}${manageLinks}`;
+
+    const wodProgress = card.querySelector(".record-progress-link");
+    if (wodProgress) wodProgress.addEventListener("click", () => openProgressChart("wod", wodName));
 
     const editLink = card.querySelector(".edit-cf-link");
     if (editLink) editLink.addEventListener("click", () => openCfRecordForm(wodName, manual));
@@ -558,43 +577,178 @@ function renderRecords() {
 }
 
 /**
- * Nombre de records BATTUS depuis une date ("AAAA-MM-JJ") : on compare les
- * records d'avant cette date à ceux d'aujourd'hui. Un exercice ou un WOD fait
- * pour la toute première fois ne compte pas (il n'y avait rien à battre).
- *  - musculation : 1RM estimé (reps max pour un exercice au poids du corps) ;
- *  - CrossFit : meilleur temps ou meilleure performance, à niveau égal.
+ * HISTORIQUE DES RECORDS BATTUS
+ * On rejoue toutes les séances dans l'ordre chronologique et on note chaque
+ * fois qu'un record est BATTU (la toute première fois ne compte pas : il n'y
+ * avait rien à battre). Mêmes règles que le reste de l'appli :
+ *  - exercice avec charge : 1RM estimé (Epley jusqu'à 10 reps) — Musculation
+ *    et cours de spé ;
+ *  - exercice au poids du corps : reps max en une série ;
+ *  - test cardio (rameur, course) : meilleur temps ;
+ *  - WOD avec un nom : meilleur temps ou meilleure performance, à niveau égal.
+ * Renvoie la liste, du plus récent au plus ancien :
+ * { date, title, value, gain, detail, target: { section, name } }
  */
-function countRecordsBeatenSince(startDate) {
-  let count = 0;
+function computeRecordHistory() {
+  const sessions = getAllSessions()
+    .map((session, index) => ({ session, index }))
+    .sort((a, b) => (a.session.date < b.session.date ? -1 : a.session.date > b.session.date ? 1 : a.index - b.index))
+    .map((item) => item.session);
 
-  const muscuBefore = computeMuscuRecords({ before: startDate });
-  const muscuNow = computeMuscuRecords();
-  Object.keys(muscuNow).forEach((exercise) => {
-    const prev = muscuBefore[exercise];
-    const now = muscuNow[exercise];
-    if (!prev) return;
-    const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exercise);
-    if (isBW) {
-      if (prev.maxReps && now.maxReps && now.maxReps.value > prev.maxReps.value) count++;
-    } else if (prev.oneRM && prev.oneRM.value > 0 && now.oneRM && now.oneRM.value > prev.oneRM.value + 1e-9) {
-      count++;
+  const best = {};
+  const events = [];
+  const kg = (v) => `${formatNumberFr(Math.round(v * 10) / 10)} kg`;
+
+  sessions.forEach((session) => {
+    // ---- Musculation, cours de spé et tests cardio ----
+    let entries = [];
+    if (session.type === "musculation") {
+      (session.exercises || []).forEach((entry) => {
+        if (!entry) return;
+        if (entry.kind === "cardio") {
+          if (entry.timeSeconds > 0) entries.push({ name: entry.exercise, time: entry.timeSeconds });
+        } else if (Array.isArray(entry.sets)) {
+          entries.push({ name: entry.exercise, sets: entry.sets });
+        }
+      });
+    } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
+      entries = (session.exercises || [])
+        .filter((e) => typeof e === "object" && e !== null && e.reps > 0 && getEntryUnit(e) === "reps")
+        .map((e) => ({ name: e.exercise, sets: [{ reps: e.reps, weight: e.weight || 0 }] }));
+    }
+
+    // Une même séance peut contenir plusieurs fois l'exercice : on garde sa meilleure série
+    const top = {};
+    entries.forEach((entry) => {
+      if (entry.time) {
+        const key = "time:" + entry.name;
+        if (!top[key] || entry.time < top[key].value) top[key] = { name: entry.name, value: entry.time, mode: "time" };
+        return;
+      }
+      const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(entry.name);
+      entry.sets.forEach((set) => {
+        const value = isBW ? set.reps || 0 : set.weight > 0 && set.reps > 0 ? estimateOneRepMax(set.weight, set.reps) : 0;
+        const key = (isBW ? "reps:" : "load:") + entry.name;
+        if (value > 0 && (!top[key] || value > top[key].value)) top[key] = { name: entry.name, value, set, mode: isBW ? "reps" : "load" };
+      });
+    });
+
+    Object.entries(top).forEach(([key, t]) => {
+      const previous = best[key];
+      const better = previous === undefined ? false : t.mode === "time" ? t.value < previous : t.value > previous + 1e-9;
+      if (better) {
+        let value, gain, detail = "";
+        if (t.mode === "time") {
+          value = formatDuration(t.value);
+          gain = `−${formatDuration(previous - t.value)}`;
+          detail = "test chrono";
+        } else if (t.mode === "reps") {
+          value = `${t.value} reps`;
+          gain = `+${t.value - previous} rep${t.value - previous > 1 ? "s" : ""}`;
+          detail = t.set.weight > 0 ? `lesté ${formatNumberFr(t.set.weight)} kg` : "";
+        } else {
+          value = kg(t.value);
+          gain = `+${kg(t.value - previous)}`;
+          detail = `${formatNumberFr(t.set.weight)} kg × ${t.set.reps}`;
+        }
+        events.push({ date: session.date, title: t.name, value, gain, detail, target: { section: "exercise", name: t.name } });
+      }
+      if (previous === undefined || better) best[key] = t.value;
+    });
+
+    // ---- WOD avec un nom, par niveau ----
+    if (session.type === "crossfit" && isRecordableWod(session.wodName)) {
+      const level = getCfLevel(session);
+      const title = `${session.wodName} ${level}`;
+      if (session.timeSeconds !== null && session.timeSeconds !== undefined) {
+        const key = `wodtime:${session.wodName}:${level}`;
+        const previous = best[key];
+        if (previous !== undefined && session.timeSeconds < previous) {
+          events.push({ date: session.date, title, value: formatSecondsToTime(session.timeSeconds), gain: `−${formatSecondsToTime(previous - session.timeSeconds)}`, detail: "", target: { section: "wod", name: session.wodName } });
+        }
+        if (previous === undefined || session.timeSeconds < previous) best[key] = session.timeSeconds;
+      }
+      if (session.rounds !== null && session.rounds !== undefined) {
+        const key = `wodperf:${session.wodName}:${level}`;
+        const perf = { rounds: session.rounds, extraReps: session.extraReps || 0 };
+        const previous = best[key];
+        if (previous !== undefined && isBetterPerformance(perf, previous)) {
+          const roundGain = perf.rounds - previous.rounds;
+          const gain = roundGain > 0 ? `+${roundGain} round${roundGain > 1 ? "s" : ""}` : `+${perf.extraReps - previous.extraReps} reps`;
+          events.push({ date: session.date, title, value: `${perf.rounds}${perf.extraReps ? ` + ${perf.extraReps}` : ""} rounds`, gain, detail: "", target: { section: "wod", name: session.wodName } });
+        }
+        if (previous === undefined || isBetterPerformance(perf, previous)) best[key] = perf;
+      }
     }
   });
 
-  const cfBefore = computeCfRecords({ before: startDate });
-  const cfNow = computeCfRecords();
-  Object.keys(cfNow).forEach((wodName) => {
-    Object.keys(cfNow[wodName]).forEach((level) => {
-      const prev = cfBefore[wodName] && cfBefore[wodName][level];
-      const now = cfNow[wodName][level];
-      if (!prev) return;
-      const fasterTime = prev.bestTime && now.bestTime && now.bestTime.value < prev.bestTime.value;
-      const betterPerf = prev.bestPerformance && now.bestPerformance && isBetterPerformance(now.bestPerformance, prev.bestPerformance);
-      if (fasterTime || betterPerf) count++;
-    });
-  });
+  return events.reverse();
+}
 
-  return count;
+/**
+ * Nombre de records battus depuis une date ("AAAA-MM-JJ") : chaque fois que
+ * tu fais mieux qu'avant compte (même règle que le fil de la page Records).
+ */
+function countRecordsBeatenSince(startDate) {
+  return computeRecordHistory().filter((event) => event.date >= startDate).length;
+}
+
+// --------------------------------------------------------------------------
+// FIL "DERNIERS RECORDS BATTUS" (en haut de la page Records)
+// --------------------------------------------------------------------------
+
+let recordFeedLimit = 6;
+
+function renderRecordFeed() {
+  const container = document.getElementById("record-feed");
+  if (!container) return;
+  const events = computeRecordHistory();
+  const now = new Date();
+  const monthStart = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+  const thisMonth = events.filter((e) => e.date >= monthStart).length;
+
+  const badge = document.getElementById("record-feed-count");
+  if (badge) badge.textContent = `${thisMonth} ce mois-ci`;
+
+  if (events.length === 0) {
+    container.innerHTML = `<p class="empty-text">Aucun record battu pour l'instant. Ils apparaîtront ici dès que tu feras mieux qu'avant sur un exercice, un test chrono ou un WOD.</p>`;
+    return;
+  }
+
+  container.innerHTML = `<ol class="pr-timeline">${events.slice(0, recordFeedLimit).map((e) => `
+    <li>
+      <span class="pr-dot" aria-hidden="true"></span>
+      <div class="pr-line">
+        <div class="pr-line-top"><strong>${escapeHtml(e.title)}</strong><span class="pr-date">${parseLocalDate(e.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span></div>
+        <div class="pr-line-bottom">
+          <span class="pr-value">${escapeHtml(e.value)}</span>
+          <span class="pr-gain">${escapeHtml(e.gain)}</span>
+          ${e.detail ? `<span class="pr-detail">${escapeHtml(e.detail)}</span>` : ""}
+        </div>
+      </div>
+    </li>`).join("")}</ol>`;
+  appendShowMoreButton(container, events.length - recordFeedLimit, () => {
+    recordFeedLimit += 6;
+    renderRecordFeed();
+  });
+}
+
+// --------------------------------------------------------------------------
+// LIENS "VOIR LA PROGRESSION" (carte de record → graphique de Statistiques)
+// --------------------------------------------------------------------------
+
+/** Ouvre Statistiques sur le graphique d'un exercice (ou d'un WOD) précis. */
+function openProgressChart(kind, name) {
+  if (typeof goToSection !== "function") return;
+  goToSection("statistiques");
+  const selectId = kind === "wod" ? "stats-wod-select" : "stats-exercise-select";
+  const select = document.getElementById(selectId);
+  if (!select || ![...select.options].some((o) => o.value === name)) return;
+  select.value = name;
+  if (kind === "wod") { if (typeof renderWodChart === "function") renderWodChart(); }
+  else if (typeof renderExerciseChart === "function") renderExerciseChart();
+  const panel = select.closest(".panel");
+  if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /** 87.5 → "87,5" ; 60 → "60" (kilos à la française). */
