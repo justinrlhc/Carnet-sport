@@ -1704,3 +1704,72 @@ button { font-family: inherit; }
   .app select,
   .app textarea { font-size: 16px !important; }
 }
+
+/* Année de naissance : pas d'espace vide tant qu'il n'y a pas de message */
+#birth-year-feedback:empty { display: none; }
+#birth-year-feedback { margin: 10px 0 0 0; }
+
+/* ==========================================================================
+   RÉGLAGES — installation sur l'écran d'accueil
+   ========================================================================== */
+.install-panel { border-color: rgba(211, 162, 78, 0.35); }
+.install-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px 0;
+  font-weight: 700;
+  color: var(--success);
+}
+.install-check {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(76, 175, 125, 0.16);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.install-steps {
+  margin: 0 0 14px 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.install-steps strong { color: var(--text-primary); }
+.install-share-icon {
+  display: inline-flex;
+  vertical-align: -4px;
+  margin-left: 4px;
+  color: var(--info);
+}
+.install-share-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.install-warning {
+  background: var(--accent-soft);
+  border: 1px solid rgba(211, 162, 78, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.install-warning strong { color: var(--accent-strong); }
+.install-warning ol { margin: 8px 0 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+
+/* Appli installée sur iPhone : le contenu ne passe pas sous la barre d'accueil */
+@media (max-width: 720px) {
+  .main { padding-bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px)); }
+}

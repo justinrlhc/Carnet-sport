@@ -5,11 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Carnet — Suivi d'entraînement</title>
 
+  <!-- Installation sur l'écran d'accueil (iPhone et Android) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0B0C0E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Carnet">
+  <!-- Barre d'état transparente : le contenu passe dessous, la barre du haut
+       de l'appli tient déjà compte de l'encoche (safe-area dans style.css) -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+
   <!-- Polices Google Fonts : Space Grotesk pour les titres/chiffres, Manrope pour le texte courant -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 
@@ -328,6 +340,16 @@
         </div>
 
         <div class="panel" style="margin-top: 16px;">
+          <h2 class="panel-title">Ton année de naissance</h2>
+          <div class="height-row">
+            <input type="number" id="birth-year-input" min="1930" step="1" inputmode="numeric" placeholder="Année (ex : 1998)">
+            <button type="button" id="birth-year-save-btn" class="btn btn-secondary btn-small">Enregistrer</button>
+          </div>
+          <p class="form-feedback" id="birth-year-feedback"></p>
+          <p class="form-hint">Sert aux barèmes d'endurance de la page Profil (rameur 2000 m, course 5 km), qui dépendent de l'âge. À saisir une seule fois : ton âge se met à jour tout seul chaque année.</p>
+        </div>
+
+        <div class="panel" style="margin-top: 16px;">
           <h2 class="panel-title">IMC (indice de masse corporelle)</h2>
           <div id="bmi-gauge-container"></div>
         </div>
@@ -470,13 +492,20 @@
       <!-- ---------- SECTION : RÉGLAGES ---------- -->
       <section class="section" id="section-reglages">
 
-        <div class="panel">
+        <!-- Installation sur l'écran d'accueil : le contenu dépend de l'endroit
+             où l'appli est ouverte (Safari ou appli installée), voir settings.js -->
+        <div class="panel install-panel" id="install-panel">
+          <h2 class="panel-title">Appli sur l'écran d'accueil</h2>
+          <div id="install-content"></div>
+        </div>
+
+        <div class="panel" style="margin-top: 16px;">
           <h2 class="panel-title">Sauvegarde de tes données</h2>
           <p class="settings-text">
-            Tes données sont stockées uniquement dans ce navigateur, sur cet ordinateur (c'est ce qu'on appelle le
-            <strong>stockage local</strong>). Elles ne sont copiées nulle part ailleurs automatiquement. Exporte
-            régulièrement une sauvegarde pour ne jamais les perdre — par exemple avant de changer d'ordinateur ou de
-            nettoyer ton navigateur.
+            Tes données sont stockées uniquement sur cet appareil, dans cette appli ou ce navigateur (c'est ce qu'on
+            appelle le <strong>stockage local</strong>). Elles ne sont copiées nulle part ailleurs automatiquement.
+            Exporte régulièrement une sauvegarde pour ne jamais les perdre — par exemple avant de changer de
+            téléphone. Sur iPhone, choisis « Enregistrer dans Fichiers » après avoir touché Exporter.
           </p>
           <div class="settings-actions">
             <button type="button" class="btn btn-primary" id="btn-export-data">Exporter mes données (.json)</button>
@@ -523,15 +552,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=9"></script>
-  <script src="js/musculation.js?v=9"></script>
-  <script src="js/crossfit.js?v=9"></script>
-  <script src="js/mensurations.js?v=9"></script>
-  <script src="js/stats.js?v=9"></script>
-  <script src="js/charts.js?v=9"></script>
-  <script src="js/ranks.js?v=9"></script>
-  <script src="js/settings.js?v=9"></script>
-  <script src="js/app.js?v=9"></script>
+  <script src="js/data.js?v=11"></script>
+  <script src="js/musculation.js?v=11"></script>
+  <script src="js/crossfit.js?v=11"></script>
+  <script src="js/mensurations.js?v=11"></script>
+  <script src="js/stats.js?v=11"></script>
+  <script src="js/charts.js?v=11"></script>
+  <script src="js/ranks.js?v=11"></script>
+  <script src="js/settings.js?v=11"></script>
+  <script src="js/app.js?v=11"></script>
 </body>
 </html>
 
