@@ -60,9 +60,11 @@ function isNoVolumeExercise(exerciseName) {
 // TESTS CARDIO
 // Un test cardio n'a pas de séries : son résultat est un temps. Il alimente
 // l'axe Endurance de la page Profil, et jamais le volume d'entraînement.
-// Stockage : { exercise: "Rameur 500 m", kind: "cardio", timeSeconds: 103 }
+// Stockage : { exercise: "Rameur 2000 m", kind: "cardio", timeSeconds: 452 }
+// Les anciens tests sprint ("Rameur 500 m", "Course 400 m") restent lisibles
+// dans l'historique, mais ne sont plus proposés et ne comptent plus aux rangs.
 // --------------------------------------------------------------------------
-const CARDIO_TESTS = ["Rameur 500 m", "Course 400 m"];
+const CARDIO_TESTS = ["Rameur 2000 m", "Course 5 km"];
 
 function isCardioEntry(entry) {
   return Boolean(entry) && entry.kind === "cardio";
@@ -315,9 +317,9 @@ function createCardioBlock(prefill) {
       <label>Temps réalisé</label>
       <!-- Deux champs séparés : le pavé numérique de l'iPhone n'a pas de touche ":" -->
       <div class="cardio-time-row">
-        <input type="text" class="cardio-block-min" inputmode="numeric" pattern="[0-9]*" placeholder="1" aria-label="Minutes">
+        <input type="text" class="cardio-block-min" inputmode="numeric" pattern="[0-9]*" placeholder="7" aria-label="Minutes">
         <span class="cardio-time-unit">min</span>
-        <input type="text" class="cardio-block-sec" inputmode="decimal" placeholder="43" aria-label="Secondes">
+        <input type="text" class="cardio-block-sec" inputmode="decimal" placeholder="45" aria-label="Secondes">
         <span class="cardio-time-unit">s</span>
       </div>
     </div>
@@ -337,7 +339,15 @@ function createCardioBlock(prefill) {
     block.remove();
   });
   if (prefill) {
-    if (CARDIO_TESTS.includes(prefill.exercise)) select.value = prefill.exercise;
+    // Ancien test qui n'est plus proposé : on le garde tel quel pour ne pas
+    // le transformer en un autre test par erreur en modifiant la séance
+    if (prefill.exercise && !CARDIO_TESTS.includes(prefill.exercise)) {
+      const legacy = document.createElement("option");
+      legacy.value = prefill.exercise;
+      legacy.textContent = `${prefill.exercise} (ancien test)`;
+      select.appendChild(legacy);
+    }
+    select.value = prefill.exercise;
     if (prefill.timeSeconds > 0) {
       const minutes = Math.floor(prefill.timeSeconds / 60);
       const seconds = Math.round((prefill.timeSeconds - minutes * 60) * 10) / 10;

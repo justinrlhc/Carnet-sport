@@ -138,6 +138,32 @@ heightSaveBtn.addEventListener("click", () => {
 });
 
 // --------------------------------------------------------------------------
+// ANNÉE DE NAISSANCE (barèmes d'endurance du Profil)
+// --------------------------------------------------------------------------
+
+const birthYearInput = document.getElementById("birth-year-input");
+const birthYearSaveBtn = document.getElementById("birth-year-save-btn");
+const birthYearFeedback = document.getElementById("birth-year-feedback");
+
+birthYearInput.value = getBirthYear() || "";
+
+birthYearSaveBtn.addEventListener("click", () => {
+  const year = Number(birthYearInput.value);
+  const currentYear = parseLocalDate(todayLocalDateString()).getFullYear();
+  if (!Number.isInteger(year) || year < 1930 || year > currentYear - 10) {
+    birthYearFeedback.textContent = "Merci d'indiquer une année valide (ex : 1998).";
+    birthYearFeedback.className = "form-feedback form-feedback-error";
+    return;
+  }
+  setBirthYear(year);
+  birthYearFeedback.textContent = `Enregistré : barème d'endurance pour ${getAge()} ans.`;
+  birthYearFeedback.className = "form-feedback form-feedback-success";
+  // L'âge change les seuils d'endurance : on recalcule les rangs
+  if (typeof notifyRankProgress === "function") notifyRankProgress();
+  if (typeof renderDashboard === "function") renderDashboard();
+});
+
+// --------------------------------------------------------------------------
 // JAUGE D'IMC (demi-cercle coloré par catégorie, avec une aiguille)
 // --------------------------------------------------------------------------
 

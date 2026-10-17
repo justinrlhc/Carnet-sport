@@ -251,6 +251,36 @@ function computeBmi() {
 }
 
 // --------------------------------------------------------------------------
+// ANNÉE DE NAISSANCE
+// Sert aux barèmes d'endurance (rameur 2000 m, course 5 km), qui dépendent de
+// l'âge. On garde l'année plutôt que l'âge pour que celui-ci suive tout seul
+// au fil des années.
+// --------------------------------------------------------------------------
+
+const STORAGE_KEY_BIRTH_YEAR = "carnet_birth_year";
+
+/** Année de naissance enregistrée, ou null. */
+function getBirthYear() {
+  const value = Number(localStorage.getItem(STORAGE_KEY_BIRTH_YEAR));
+  return Number.isInteger(value) && value > 1900 ? value : null;
+}
+
+function setBirthYear(year) {
+  localStorage.setItem(STORAGE_KEY_BIRTH_YEAR, String(year));
+}
+
+/**
+ * Âge approximatif : l'âge atteint cette année (année en cours − année de
+ * naissance). Sans le jour exact on peut avoir un an d'avance avant
+ * l'anniversaire, sans effet sensible sur les barèmes. Null si inconnu.
+ */
+function getAge() {
+  const birthYear = getBirthYear();
+  if (birthYear === null) return null;
+  return parseLocalDate(todayLocalDateString()).getFullYear() - birthYear;
+}
+
+// --------------------------------------------------------------------------
 // RECORDS SAISIS MANUELLEMENT
 // Certains records (1RM connu en conditions optimales, meilleur temps
 // obtenu avant même d'utiliser l'application...) ne viennent pas d'une
@@ -401,6 +431,7 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_KEY_MANUAL_1RM);
   localStorage.removeItem(STORAGE_KEY_MANUAL_CF_BEST);
   localStorage.removeItem(STORAGE_KEY_HEIGHT);
+  localStorage.removeItem(STORAGE_KEY_BIRTH_YEAR);
   // Rangs et succès : on repart de zéro aussi
   localStorage.removeItem("carnet_achievements");
   localStorage.removeItem("carnet_rank_snapshot");
@@ -424,6 +455,7 @@ function exportAllData() {
     manualOneRMs: getManualOneRMs(),
     manualCfBests: getManualCfBests(),
     heightCm: getHeight(),
+    birthYear: getBirthYear(),
     // Succès débloqués (avec leur date) : ils restent acquis même après un import
     achievements: JSON.parse(localStorage.getItem("carnet_achievements") || "{}"),
   };
@@ -451,6 +483,7 @@ function importAllData(jsonString) {
   localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(payload.manualOneRMs || {}));
   localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(payload.manualCfBests || {}));
   if (payload.heightCm) setHeight(payload.heightCm);
+  if (Number.isInteger(payload.birthYear) && payload.birthYear > 1900) setBirthYear(payload.birthYear);
 
   // Succès : on restaure ceux de la sauvegarde (une ancienne sauvegarde n'en a pas)
   const achievements = payload.achievements && typeof payload.achievements === "object" ? payload.achievements : {};
