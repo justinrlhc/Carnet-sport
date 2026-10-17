@@ -215,3 +215,22 @@ function formatRelativeDate(dateStr) {
 // --------------------------------------------------------------------------
 
 renderDashboard(); // ensureDemoData() a déjà été exécuté par data.js, avant ce fichier
+
+// --------------------------------------------------------------------------
+// 4. MODE HORS LIGNE ET INSTALLATION
+// Le service worker (sw.js) garde une copie de l'appli sur l'appareil pour
+// qu'elle s'ouvre sans réseau. Il ne fonctionne qu'une fois en ligne
+// (https), pas en ouvrant le fichier index.html directement.
+// --------------------------------------------------------------------------
+
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch((error) => console.warn("Mode hors ligne indisponible :", error));
+  });
+}
+
+// On demande au navigateur de ne jamais effacer les données de l'appli
+// d'office (il peut refuser ; l'appli installée est de toute façon protégée).
+if (navigator.storage && typeof navigator.storage.persist === "function") {
+  navigator.storage.persist().catch(() => {});
+}

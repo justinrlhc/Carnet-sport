@@ -19,6 +19,15 @@ const CHART_COLORS = {
   success: "#4CAF7D",
 };
 
+/**
+ * Chart.js vient d'internet. Si l'appli s'ouvre hors ligne avant d'avoir pu
+ * le garder en réserve, on saute simplement les graphiques au lieu de
+ * bloquer le reste de la page.
+ */
+function chartsAvailable() {
+  return typeof Chart !== "undefined";
+}
+
 /** Vrai sur un écran de téléphone (même seuil que le CSS mobile). */
 function isNarrowScreen() {
   return Boolean(window.matchMedia) && window.matchMedia("(max-width: 720px)").matches;
@@ -113,6 +122,7 @@ function computeWeeklySessionsSeries(nbWeeks) {
 let dashboardChartInstance = null;
 
 function renderDashboardChart() {
+  if (!chartsAvailable()) return;
   const canvas = document.getElementById("chart-dashboard-recent");
   if (!canvas) return;
 
@@ -137,6 +147,7 @@ function renderDashboardChart() {
 let bodyweightChartInstance = null;
 
 function renderBodyweightChart() {
+  if (!chartsAvailable()) return;
   const canvas = document.getElementById("chart-bodyweight");
   if (!canvas) return;
 
@@ -183,6 +194,7 @@ function populateStatsExerciseSelect() {
 }
 
 function renderExerciseChart() {
+  if (!chartsAvailable()) return;
   const canvas = document.getElementById("chart-exercise");
   const select = document.getElementById("stats-exercise-select");
   if (!canvas || !select || !select.value) return;
@@ -246,6 +258,7 @@ let volumeChartInstance = null;
 let sessionsChartInstance = null;
 
 function renderVolumeChart() {
+  if (!chartsAvailable()) return;
   const canvas = document.getElementById("chart-volume");
   if (!canvas) return;
 
@@ -261,6 +274,7 @@ function renderVolumeChart() {
 }
 
 function renderSessionsChart() {
+  if (!chartsAvailable()) return;
   const canvas = document.getElementById("chart-sessions");
   if (!canvas) return;
 
@@ -298,6 +312,7 @@ function populateStatsWodSelect() {
 }
 
 function renderWodChart() {
+  if (!chartsAvailable()) return;
   const canvas = document.getElementById("chart-wod");
   const select = document.getElementById("stats-wod-select");
   if (!canvas || !select || !select.value) return;
