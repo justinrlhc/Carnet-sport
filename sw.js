@@ -13,7 +13,8 @@
 // Tes DONNÉES ne passent jamais par ici : elles restent dans le stockage local.
 // ==========================================================================
 
-const CACHE_NAME = "carnet-cache-v1";
+// Changer ce nom force une réserve toute neuve (l'ancienne est supprimée).
+const CACHE_NAME = "carnet-cache-v2";
 const NETWORK_TIMEOUT_MS = 3000;
 
 const BASE_FILES = [
@@ -95,7 +96,10 @@ async function handlePage(event) {
   const cache = await caches.open(CACHE_NAME);
   const pageKey = new URL("./index.html", self.registration.scope).href;
 
-  const fromNetwork = fetch(event.request).then((response) => {
+  // "no-store" : on demande TOUJOURS la page au serveur, sans passer par la
+  // mémoire du navigateur (sinon GitHub autorise à resservir une ancienne
+  // version pendant 10 minutes, ce qui bloquait les mises à jour).
+  const fromNetwork = fetch(new Request(event.request.url, { cache: "no-store", credentials: "same-origin" })).then((response) => {
     if (response.ok) {
       const copy = response.clone();
       const saving = (async () => {
@@ -138,6 +142,8 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (!url.protocol.startsWith("http")) return;
+  // Vérification de version (app.js) : toujours le vrai réseau, jamais une copie
+  if (url.searchParams.has("check")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(handlePage(event));
