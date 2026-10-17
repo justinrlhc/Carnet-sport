@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 
@@ -510,6 +510,20 @@
       <!-- ---------- SECTION : RÉGLAGES ---------- -->
       <section class="section" id="section-reglages">
 
+        <!-- Barèmes hommes / femmes (settings.js) -->
+        <div class="panel" style="margin-bottom: 16px;">
+          <h2 class="panel-title">Ton profil</h2>
+          <div class="ob-field">
+            <label id="sex-choice-label">Barèmes des rangs</label>
+            <div class="ob-seg" role="radiogroup" aria-labelledby="sex-choice-label" id="settings-sex-choice">
+              <button type="button" data-sex="male" role="radio">Homme</button>
+              <button type="button" data-sex="female" role="radio">Femme</button>
+            </div>
+          </div>
+          <p class="form-feedback" id="sex-feedback"></p>
+          <p class="form-hint">Change les seuils et les objectifs de la page Profil (force, haltéro, gym, endurance, succès). Ton poids et ton année de naissance se règlent dans Mensurations.</p>
+        </div>
+
         <!-- Installation sur l'écran d'accueil : le contenu dépend de l'endroit
              où l'appli est ouverte (Safari ou appli installée), voir settings.js -->
         <div class="panel install-panel" id="install-panel">
@@ -569,6 +583,62 @@
     </div>
   </div>
 
+  <!-- ===== ACCUEIL DU PREMIER LANCEMENT (3 écrans, voir settings.js) =====
+       Ne s'affiche qu'à la toute première ouverture, sur une appli vide. -->
+  <div class="ob" id="onboarding-1" role="dialog" aria-modal="true" aria-label="Bienvenue">
+    <div class="ob-logo" aria-hidden="true"><span></span></div>
+    <h1>Bienvenue sur Carnet</h1>
+    <p class="lead">Ton carnet d'entraînement de musculation et de CrossFit, toujours dans ta poche.</p>
+    <div class="ob-features">
+      <div class="ob-feature"><div class="ic" aria-hidden="true">+</div><div><strong>Note tes séances</strong><p>Séries, charges, WOD, temps : en quelques touchers, même sans réseau à la salle.</p></div></div>
+      <div class="ob-feature"><div class="ic" aria-hidden="true">PR</div><div><strong>Suis tes records</strong><p>Chaque record battu est enregistré, avec ta progression semaine après semaine.</p></div></div>
+      <div class="ob-feature"><div class="ic" aria-hidden="true">S</div><div><strong>Gagne des rangs</strong><p>De E à S, comparés à des standards adaptés à ton sexe, ton âge et ton poids.</p></div></div>
+    </div>
+    <div class="ob-actions">
+      <button type="button" class="btn btn-primary" id="ob-start">Commencer</button>
+      <button type="button" class="ob-link" id="ob-import">J'ai déjà une sauvegarde : l'importer</button>
+      <p class="form-feedback" id="ob-import-feedback"></p>
+    </div>
+  </div>
+
+  <div class="ob" id="onboarding-2" role="dialog" aria-modal="true" aria-label="Faisons connaissance">
+    <div class="ob-steps" aria-hidden="true"><span class="on"></span><span></span></div>
+    <h1>Faisons connaissance</h1>
+    <p class="lead">Trois infos pour calculer des rangs justes. Tu pourras les modifier à tout moment.</p>
+    <div class="ob-field">
+      <label id="ob-sex-label">Les barèmes à utiliser</label>
+      <div class="ob-seg" role="radiogroup" aria-labelledby="ob-sex-label" id="ob-sex-choice">
+        <button type="button" data-sex="male" role="radio">Homme</button>
+        <button type="button" data-sex="female" role="radio">Femme</button>
+      </div>
+    </div>
+    <div class="ob-row">
+      <div class="ob-field"><label for="ob-birth-year">Année de naissance</label><input type="number" id="ob-birth-year" inputmode="numeric" placeholder="ex : 1998"></div>
+      <div class="ob-field"><label for="ob-weight">Poids (kg)</label><input type="text" id="ob-weight" inputmode="decimal" placeholder="ex : 70,5"></div>
+    </div>
+    <div class="ob-field"><label for="ob-height">Taille (cm) <span class="opt">— facultatif, pour l'IMC</span></label><input type="number" id="ob-height" inputmode="numeric" placeholder="ex : 175"></div>
+    <p class="form-feedback form-feedback-error" id="ob-profile-feedback"></p>
+    <p class="why">Pourquoi ? À 55 kg, une femme qui squatte 65 kg est au rang B (Confirmé) ; un homme du même poids doit soulever 79 kg pour le même rang.</p>
+    <div class="ob-actions">
+      <button type="button" class="btn btn-primary" id="ob-profile-next">Continuer</button>
+      <button type="button" class="ob-link" id="ob-profile-skip">Passer cette étape</button>
+    </div>
+  </div>
+
+  <div class="ob" id="onboarding-3" role="dialog" aria-modal="true" aria-label="Tout est prêt">
+    <div class="ob-steps" aria-hidden="true"><span class="on"></span><span class="on"></span></div>
+    <h1>Tout est prêt</h1>
+    <p class="lead">Trois conseils avant ta première séance :</p>
+    <div>
+      <div class="ob-tip"><span class="n">1</span><div id="ob-install-tip"><b>Installe l'appli</b> : dans Safari, bouton Partager puis « Sur l'écran d'accueil ». Elle s'ouvrira en plein écran, même sans réseau.</div></div>
+      <div class="ob-tip"><span class="n">2</span><div><b>Tes données restent sur ton téléphone</b>, personne d'autre n'y a accès. Pas de compte, pas de mot de passe.</div></div>
+      <div class="ob-tip"><span class="n">3</span><div><b>Exporte une sauvegarde</b> de temps en temps (Réglages) : si tu changes de téléphone, tu pourras tout récupérer.</div></div>
+    </div>
+    <div class="ob-actions ob-actions-bottom">
+      <button type="button" class="btn btn-primary" id="ob-finish">C'est parti</button>
+    </div>
+  </div>
+
   <!-- ===== FENÊTRE "RANG SUPÉRIEUR" (s'ouvre quand un exercice monte de rang) ===== -->
   <div class="modal-overlay" id="rank-up-modal">
     <div class="modal rank-up-modal" role="dialog" aria-modal="true" aria-label="Rang supérieur">
@@ -579,15 +649,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=16"></script>
-  <script src="js/musculation.js?v=16"></script>
-  <script src="js/crossfit.js?v=16"></script>
-  <script src="js/mensurations.js?v=16"></script>
-  <script src="js/stats.js?v=16"></script>
-  <script src="js/charts.js?v=16"></script>
-  <script src="js/ranks.js?v=16"></script>
-  <script src="js/settings.js?v=16"></script>
-  <script src="js/app.js?v=16"></script>
+  <script src="js/data.js?v=17"></script>
+  <script src="js/musculation.js?v=17"></script>
+  <script src="js/crossfit.js?v=17"></script>
+  <script src="js/mensurations.js?v=17"></script>
+  <script src="js/stats.js?v=17"></script>
+  <script src="js/charts.js?v=17"></script>
+  <script src="js/ranks.js?v=17"></script>
+  <script src="js/settings.js?v=17"></script>
+  <script src="js/app.js?v=17"></script>
 </body>
 </html>
 

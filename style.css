@@ -1907,3 +1907,60 @@ button { font-family: inherit; }
 @media (max-width: 720px) {
   .record-link { min-height: 36px; padding: 6px 0; }
 }
+
+/* ==========================================================================
+   ACCUEIL DU PREMIER LANCEMENT (3 écrans)
+   ========================================================================== */
+body.ob-open { overflow: hidden; }
+.ob {
+  position: fixed; inset: 0; z-index: 200; background: var(--bg);
+  display: none; flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: max(24px, env(safe-area-inset-top)) max(22px, calc((100% - 480px) / 2)) max(22px, env(safe-area-inset-bottom));
+}
+.ob.is-visible { display: flex; }
+.ob-steps { display: flex; gap: 6px; margin-bottom: 26px; flex-shrink: 0; }
+.ob-steps span { flex: 1; height: 4px; border-radius: 4px; background: var(--surface-raised); }
+.ob-steps span.on { background: var(--accent); }
+.ob-logo {
+  width: 84px; height: 84px; border-radius: 22px; flex-shrink: 0;
+  background: radial-gradient(circle at 50% 45%, rgba(211,162,78,0.35), #0B0C0E 70%);
+  border: 1px solid rgba(211,162,78,0.4);
+  display: flex; align-items: center; justify-content: center; margin: 30px 0 22px;
+}
+.ob-logo span { width: 34px; height: 34px; background: linear-gradient(180deg, #ECC070, #C48E3A); transform: rotate(45deg) scaleY(1.2); border-radius: 3px; }
+.ob h1 { font-family: var(--font-display); font-size: 30px; line-height: 1.15; margin: 0 0 10px; color: var(--text-primary); }
+.ob .lead { color: var(--text-secondary); font-size: 15px; line-height: 1.5; margin: 0 0 24px; }
+.ob-features { display: flex; flex-direction: column; gap: 14px; margin-bottom: auto; }
+.ob-feature { display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; }
+.ob-feature .ic { width: 38px; height: 38px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-strong); display: flex; align-items: center; justify-content: center; font-weight: 800; font-family: var(--font-display); flex-shrink: 0; }
+.ob-feature strong { display: block; font-size: 15px; margin-bottom: 2px; color: var(--text-primary); }
+.ob-feature p { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+.ob-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; flex-shrink: 0; }
+.ob-actions-bottom { margin-top: auto; padding-top: 24px; }
+.ob-actions .btn { width: 100%; min-height: 52px; font-size: 16px; justify-content: center; }
+.ob-actions .form-feedback { text-align: center; margin: 0; }
+.ob-actions .form-feedback:empty { display: none; }
+.ob-link { background: none; border: none; color: var(--accent-strong); font-weight: 700; font-size: 14px; padding: 10px; font-family: var(--font-body); cursor: pointer; }
+.ob-field { margin-bottom: 18px; min-width: 0; }
+.ob-field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+.ob-field .opt { color: var(--text-muted); font-weight: 400; }
+.ob-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ob-seg button { min-height: 52px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); font-size: 16px; font-weight: 700; font-family: var(--font-body); cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.ob-seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
+.ob-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ob .why { font-size: 13px; color: var(--text-muted); line-height: 1.45; background: var(--surface); border-radius: 12px; padding: 12px 14px; margin: 4px 0 0; }
+.ob #ob-profile-feedback { margin: -6px 0 12px; }
+.ob #ob-profile-feedback:empty { display: none; }
+.ob-tip { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
+.ob-tip:last-child { border-bottom: none; }
+.ob-tip b { color: var(--text-primary); }
+.ob-tip .n { width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-strong); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex-shrink: 0; }
+.ob input { width: 100%; box-sizing: border-box; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 12px; color: var(--text-primary); padding: 14px; font-size: 17px; font-family: var(--font-body); }
+.ob input::placeholder { color: var(--text-muted); }
+.ob input:focus { outline: none; border-color: var(--accent); }
+/* Réglages → Ton profil : mêmes boutons Homme / Femme, un peu plus compacts */
+.panel .ob-field { margin-bottom: 8px; }
+.panel .ob-seg { max-width: 360px; }
+.panel .ob-seg button { min-height: 46px; font-size: 15px; }
+.ob-seg button, .ob-link { -webkit-tap-highlight-color: transparent; }
+#sex-feedback:empty { display: none; }
