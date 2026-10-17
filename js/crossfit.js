@@ -667,7 +667,7 @@ function getMovementLabel(entry) {
 function cfSessionMatchesSearch(session, query) {
   if (!query) return true;
   if (normalizeSearchText(session.wodName).includes(query)) return true;
-  return (session.exercises || []).some((entry) => normalizeSearchText(getMovementLabel(entry)).includes(query));
+  return (session.exercises || []).some((entry) => exerciseMatchesSearch(getMovementLabel(entry), query));
 }
 
 /** Encart "Dernière fois" pendant une recherche : le WOD le plus récent qui correspond, avec charges. */
@@ -677,7 +677,7 @@ function renderCfLastSeen(sessions, query) {
     cfLastSeen.style.display = "none";
     return;
   }
-  const matching = (latest.exercises || []).filter((entry) => normalizeSearchText(getMovementLabel(entry)).includes(query));
+  const matching = (latest.exercises || []).filter((entry) => exerciseMatchesSearch(getMovementLabel(entry), query));
   const lines = matching
     .map((entry) => {
       if (typeof entry === "object" && entry !== null) {

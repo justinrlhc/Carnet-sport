@@ -54,7 +54,7 @@ const STANDARD_TABLES = {
   pushUp: [[50,1,18,42,70,102],[55,2,19,42,69,99],[60,4,19,41,67,95],[65,4,20,41,65,92],[70,5,20,40,64,89],[75,6,20,39,62,87],[80,6,20,38,60,84],[85,6,20,38,59,81],[90,6,19,37,57,79],[95,6,19,36,56,77],[100,6,19,35,54,74]],
   toesToBar: [[50,1,3,12,25,39],[55,1,4,14,26,39],[60,1,5,14,26,39],[65,1,6,15,26,38],[70,1,6,15,26,38],[75,1,7,15,26,37],[80,1,7,15,26,36],[85,1,7,15,25,36],[90,1,7,15,25,35],[95,1,7,15,24,34],[100,1,7,15,24,33]],
   handstandPushUp: [[50,1,1,8,20,35],[55,1,1,9,21,35],[60,1,1,10,21,34],[65,1,1,10,22,34],[70,1,2,10,22,33],[75,1,2,11,21,33],[80,1,3,11,21,32],[85,1,3,11,21,32],[90,1,3,11,21,31],[95,1,3,11,20,30],[100,1,3,10,20,29]],
-  // Rowing Level (rameur 2000 m) et Running Level (course 5 km) : ces
+  // Rowing Level (Row 2000 m) et Running Level (Run 5 km) : ces
   // barèmes dépendent de l'ÂGE, pas du poids de corps. Ligne : [âge, D, C, B, A, S],
   // temps en secondes (plus bas = mieux).
   rowing2000: [[15,608.9,528.9,476.1,439.1,412.2],[20,561.2,487.4,438.8,404.7,379.9],[25,561,487.2,438.6,404.5,379.7],[30,561.2,487.4,438.8,404.6,379.9],[35,567.2,492.6,443.5,409,383.9],[40,579,502.9,452.7,417.5,391.9],[45,591.4,513.6,462.4,426.4,400.3],[50,604.4,524.9,472.6,435.8,409.1],[55,617.9,536.7,483.1,445.5,418.3],[60,632.1,548.9,494.2,455.7,427.8],[65,648,562.8,506.6,467.2,438.6],[70,670.3,582.1,524.1,483.3,453.7]],
@@ -118,10 +118,10 @@ const RANK_CATEGORIES = [
   ] },
   { id: "endurance", name: "Endurance", items: [
     // Efforts longs. Barèmes par âge (calculé depuis ton année de naissance).
-    // Les anciens tests sprint (Rameur 500 m, Course 400 m) restent dans
+    // Les anciens tests sprint (Row 500 m, Run 400 m) restent dans
     // l'historique mais ne comptent plus ici.
-    { id: "row2000", name: "Rameur 2000 m", kind: "time", sources: ["Rameur 2000 m"], ageTable: "rowing2000" },
-    { id: "run5k", name: "Course 5 km", kind: "time", sources: ["Course 5 km"], ageTable: "run5k" },
+    { id: "row2000", name: "Row 2000 m", kind: "time", sources: ["Row 2000 m"], ageTable: "rowing2000" },
+    { id: "run5k", name: "Run 5 km", kind: "time", sources: ["Run 5 km"], ageTable: "run5k" },
   ] },
   { id: "regularite", name: "Régularité", items: [
     { id: "frequency", name: "Séances par semaine", kind: "frequency", fixed: [1, 2, 3, 4, 5] },
@@ -770,7 +770,7 @@ function renderProfile() {
       <div class="profile-category-header"><h3>Succès</h3><span class="profile-category-basis profile-accent-text">${unlockedCount} débloqués sur ${ACHIEVEMENTS.length}</span></div>
       <div class="achievement-grid">${achievementsHtml}</div>
     </section>
-    <p class="records-footnote">Barèmes : standards ${profile.sex === "female" ? "féminins" : "masculins"} StrengthLog (squat, bench, deadlift, strict press) et Strength Level (front squat, haltéro, gym), ajustés à ton poids de corps. Rameur 2000 m et course 5 km : standards Rowing Level et Running Level, ajustés à ton âge. 1RM estimés avec la formule d’Epley sur les séries de 10 répétitions maximum.</p>
+    <p class="records-footnote">Barèmes : standards ${profile.sex === "female" ? "féminins" : "masculins"} StrengthLog (squat, bench, deadlift, strict press) et Strength Level (front squat, haltéro, gym), ajustés à ton poids de corps. Row 2000 m et Run 5 km : standards Rowing Level et Running Level, ajustés à ton âge. 1RM estimés avec la formule d’Epley sur les séries de 10 répétitions maximum.</p>
   `;
 }
 

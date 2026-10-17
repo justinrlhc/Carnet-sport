@@ -11,15 +11,15 @@
 // Liste des exercices proposés par défaut. Le joueur peut aussi taper
 // le nom d'un exercice personnalisé grâce à l'option "Autre".
 const DEFAULT_EXERCISES = [
-  "Back Squat", "Front Squat", "Overhead Squat", "Air Squat", "Goblet Squat", "Fente bulgare",
+  "Back Squat", "Front Squat", "Overhead Squat", "Air Squat", "Goblet Squat", "Bulgarian Split Squat",
   "Deadlift", "Sumo Deadlift", "Romanian Deadlift", "Good Morning",
   "Bench Press", "Incline Bench Press",
   "Strict Press", "Push Press", "Push Jerk", "Split Jerk",
-  "Rowing barre", "Rowing haltères", "Shrugs", "Oiseau deltoïdes",
+  "Barbell Row", "Dumbbell Row", "Shrugs", "Rear Delt Fly",
   "Barbell Lunge", "Barbell Reverse Lunge", "Walking Lunge",
   "Snatch", "Power Snatch", "Squat Snatch", "Snatch Pull", "Snatch Balance",
   "Clean", "Power Clean", "Clean & Jerk", "Squat Clean", "Hang Power Clean", "Clean Pull",
-  "Barbell Thruster", "Curl barre", "Curl haltères", "Barre au front", "Élévations latérales",
+  "Barbell Thruster", "Barbell Curl", "Dumbbell Curl", "Skull Crusher", "Lateral Raise",
   "Dumbbell Bench Press", "Dumbbell Incline Bench Press", "Dumbbell Floor Press",
   "Dumbbell Shoulder Press", "Dumbbell Clean & Jerk", "Dumbbell Snatch",
   "Dumbbell Thruster", "Dumbbell Walking Lunge", "Devil Press", "Wall Ball", "Kettlebell Swing",
@@ -49,15 +49,15 @@ const BODYWEIGHT_EXERCISES = [
 // "répétitions × kg" : on note une quantité avec son unité. Ils ne sont
 // proposés que dans les exercices structurés des WOD (CrossFit) et n'entrent
 // ni dans le volume, ni dans les records de charge, ni dans les rangs.
-// Stockage : { exercise: "Rameur", reps: 500, unit: "m", weight: 0, extraReps: 0 }
+// Stockage : { exercise: "Row", reps: 500, unit: "m", weight: 0, extraReps: 0 }
 // ("reps" contient alors la quantité ; une entrée sans "unit" = des reps)
 // --------------------------------------------------------------------------
 const MEASURED_EXERCISES = {
-  "Rameur": ["cal", "m"],
+  "Row": ["cal", "m"],
   "SkiErg": ["cal", "m"],
   "Assault Bike": ["cal"],
   "Echo Bike": ["cal"],
-  "Course": ["m"],
+  "Run": ["m"],
   "Handstand Walk": ["m"],
 };
 const UNIT_LABELS = { reps: "reps", cal: "cal", m: "m" };
@@ -96,11 +96,87 @@ function isNoVolumeExercise(exerciseName) {
 // TESTS CARDIO
 // Un test cardio n'a pas de séries : son résultat est un temps. Il alimente
 // l'axe Endurance de la page Profil, et jamais le volume d'entraînement.
-// Stockage : { exercise: "Rameur 2000 m", kind: "cardio", timeSeconds: 452 }
-// Les anciens tests sprint ("Rameur 500 m", "Course 400 m") restent lisibles
+// Stockage : { exercise: "Row 2000 m", kind: "cardio", timeSeconds: 452 }
+// Les anciens tests sprint ("Row 500 m", "Run 400 m") restent lisibles
 // dans l'historique, mais ne sont plus proposés et ne comptent plus aux rangs.
 // --------------------------------------------------------------------------
-const CARDIO_TESTS = ["Rameur 2000 m", "Course 5 km"];
+const CARDIO_TESTS = ["Row 2000 m", "Run 5 km"];
+
+// --------------------------------------------------------------------------
+// NOMS D'EXERCICES : tout en anglais (comme au tableau de la box), avec un
+// rappel en français dans les listes pour ceux qui avaient un nom français,
+// et une recherche qui marche dans les deux langues.
+// --------------------------------------------------------------------------
+
+// Rappel affiché dans les listes déroulantes : "Skull Crusher · barre au front"
+const EXERCISE_FRENCH_HINTS = {
+  "Bulgarian Split Squat": "fente bulgare",
+  "Barbell Row": "rowing barre",
+  "Dumbbell Row": "rowing haltères",
+  "Rear Delt Fly": "oiseau",
+  "Barbell Curl": "curl barre",
+  "Dumbbell Curl": "curl haltères",
+  "Skull Crusher": "barre au front",
+  "Lateral Raise": "élévations latérales",
+  "Row": "rameur",
+  "Run": "course",
+  "Row 2000 m": "rameur",
+  "Run 5 km": "course",
+  "Row 500 m": "rameur",
+  "Run 400 m": "course",
+};
+
+// Mots français reconnus par la recherche : si le nom contient la clé, on
+// trouve aussi l'exercice avec ces mots ("arraché" → Snatch, Power Snatch…)
+const SEARCH_KEYWORD_ALIASES = {
+  "snatch": "arraché arrache",
+  "clean": "épaulé epaule",
+  "jerk": "jeté jete",
+  "deadlift": "soulevé de terre",
+  "bench": "développé couché",
+  "press": "développé",
+  "pull-up": "traction tractions",
+  "push-up": "pompe pompes",
+  "lunge": "fente fentes",
+  "split squat": "fente fentes",
+  "row": "rowing tirage",
+  "run": "course courir",
+  "curl": "biceps",
+  "skull crusher": "barre au front triceps",
+  "lateral raise": "élévations latérales épaules",
+  "rear delt": "oiseau deltoïdes",
+  "shrugs": "haussements d'épaules trapèzes",
+  "toes-to-bar": "relevés de jambes",
+  "sit-up": "abdos",
+  "v-up": "abdos",
+  "handstand": "poirier équilibre",
+  "box": "boîte caisse",
+  "under": "corde à sauter",
+  "farmer": "marche du fermier",
+  "bike": "vélo",
+  "ski": "skierg",
+  "kettlebell": "kettlebell",
+  "hip thrust": "fessiers",
+  "good morning": "ischios",
+};
+
+/** Libellé d'un exercice dans une liste déroulante (avec son rappel français). */
+function exerciseOptionLabel(name) {
+  const hint = EXERCISE_FRENCH_HINTS[name];
+  return hint ? `${name} · ${hint}` : name;
+}
+
+/** Vrai si le nom (anglais) ou l'un de ses équivalents français contient le texte cherché (déjà normalisé). */
+function exerciseMatchesSearch(name, query) {
+  if (!query) return true;
+  const normalizedName = normalizeSearchText(name);
+  if (normalizedName.includes(query)) return true;
+  const extras = [EXERCISE_FRENCH_HINTS[name] || ""];
+  Object.keys(SEARCH_KEYWORD_ALIASES).forEach((key) => {
+    if (normalizedName.includes(key)) extras.push(SEARCH_KEYWORD_ALIASES[key]);
+  });
+  return normalizeSearchText(extras.join(" ")).includes(query);
+}
 
 function isCardioEntry(entry) {
   return Boolean(entry) && entry.kind === "cardio";
@@ -180,25 +256,64 @@ function getAllKnownExercises() {
 /**
  * Remplit un <select> avec la liste des exercices connus + option "Autre".
  * options.includeMeasured : ajoute aussi le groupe "Cardio et distance"
- * (rameur, bike, course...), proposé uniquement dans les WOD.
+ * (row, bike, run...), proposé uniquement dans les WOD.
  */
+/**
+ * Les derniers exercices utilisés (séances de muscu et exercices structurés
+ * des WOD), du plus récent au plus ancien, sans doublons. Les tests cardio
+ * n'en font pas partie (ils ont leur propre bouton).
+ */
+function getRecentExercises(limit, includeMeasured) {
+  const sessions = getAllSessions().slice().reverse() // à date égale : la dernière ajoutée d'abord
+    .filter((s) => Array.isArray(s.exercises))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const recent = [];
+  for (const session of sessions) {
+    for (const entry of session.exercises) {
+      if (!entry || typeof entry !== "object" || isCardioEntry(entry)) continue;
+      const name = String(entry.exercise || "").trim();
+      if (!name || recent.includes(name)) continue;
+      if (!includeMeasured && isMeasuredExercise(name)) continue;
+      recent.push(name);
+      if (recent.length >= limit) return recent;
+    }
+  }
+  return recent;
+}
+
+const RECENT_EXERCISES_COUNT = 5;
+
+function createExerciseOption(name, label) {
+  const opt = document.createElement("option");
+  opt.value = name;
+  opt.textContent = label || exerciseOptionLabel(name);
+  return opt;
+}
+
 function populateExerciseSelectElement(selectEl, options) {
+  const includeMeasured = Boolean(options && options.includeMeasured);
+  const measuredLabel = (ex) => `${exerciseOptionLabel(ex)} (${MEASURED_EXERCISES[ex].map((u) => UNIT_LABELS[u]).join(" ou ")})`;
   selectEl.innerHTML = "";
-  getAllKnownExercises().forEach((ex) => {
-    const opt = document.createElement("option");
-    opt.value = ex;
-    opt.textContent = ex;
-    selectEl.appendChild(opt);
-  });
-  if (options && options.includeMeasured) {
+
+  // "Récents" tout en haut : les 5 derniers exercices utilisés (ils restent
+  // aussi à leur place dans la liste complète, juste en dessous)
+  const recent = getRecentExercises(RECENT_EXERCISES_COUNT, includeMeasured);
+  let mainContainer = selectEl;
+  if (recent.length > 0) {
+    const recentGroup = document.createElement("optgroup");
+    recentGroup.label = "Récents";
+    recent.forEach((ex) => recentGroup.appendChild(createExerciseOption(ex, isMeasuredExercise(ex) ? measuredLabel(ex) : null)));
+    selectEl.appendChild(recentGroup);
+    mainContainer = document.createElement("optgroup");
+    mainContainer.label = "Tous les exercices";
+    selectEl.appendChild(mainContainer);
+  }
+
+  getAllKnownExercises().forEach((ex) => mainContainer.appendChild(createExerciseOption(ex)));
+  if (includeMeasured) {
     const group = document.createElement("optgroup");
     group.label = "Cardio et distance";
-    Object.keys(MEASURED_EXERCISES).sort().forEach((ex) => {
-      const opt = document.createElement("option");
-      opt.value = ex;
-      opt.textContent = `${ex} (${MEASURED_EXERCISES[ex].map((u) => UNIT_LABELS[u]).join(" ou ")})`;
-      group.appendChild(opt);
-    });
+    Object.keys(MEASURED_EXERCISES).sort().forEach((ex) => group.appendChild(createExerciseOption(ex, measuredLabel(ex))));
     selectEl.appendChild(group);
   }
   const customOpt = document.createElement("option");
@@ -217,12 +332,7 @@ function populateExerciseFilterSelect() {
   allOpt.value = "all";
   allOpt.textContent = "Tous les exercices";
   muscuFilterSelect.appendChild(allOpt);
-  getAllKnownExercises().forEach((ex) => {
-    const opt = document.createElement("option");
-    opt.value = ex;
-    opt.textContent = ex;
-    muscuFilterSelect.appendChild(opt);
-  });
+  getAllKnownExercises().forEach((ex) => muscuFilterSelect.appendChild(createExerciseOption(ex)));
 }
 
 // --------------------------------------------------------------------------
@@ -376,12 +486,7 @@ function createCardioBlock(prefill) {
     </div>
   `;
   const select = block.querySelector(".cardio-block-select");
-  CARDIO_TESTS.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    select.appendChild(opt);
-  });
+  CARDIO_TESTS.forEach((name) => select.appendChild(createExerciseOption(name)));
   block.querySelector(".exercise-block-remove").addEventListener("click", () => {
     if (muscuExercisesList.children.length <= 1) {
       showMuscuFeedback("Une séance doit contenir au moins un exercice.", true);
@@ -615,7 +720,7 @@ function renderMuscuLastSeen(sessions, query) {
     muscuLastSeen.style.display = "none";
     return;
   }
-  const matching = (latest.exercises || []).filter((ex) => normalizeSearchText(ex.exercise).includes(query));
+  const matching = (latest.exercises || []).filter((ex) => exerciseMatchesSearch(ex.exercise, query));
   const lines = matching
     .map((entry) => {
       if (isCardioEntry(entry)) {
@@ -640,7 +745,7 @@ function renderMuscuHistory() {
   const sessions = getAllSessions()
     .filter((s) => s.type === "musculation")
     .filter((s) => filter === "all" || (s.exercises || []).some((ex) => ex.exercise === filter))
-    .filter((s) => !query || (s.exercises || []).some((ex) => normalizeSearchText(ex.exercise).includes(query)))
+    .filter((s) => !query || (s.exercises || []).some((ex) => exerciseMatchesSearch(ex.exercise, query)))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   renderMuscuLastSeen(sessions, query);

@@ -767,7 +767,7 @@ function populateManual1rmExerciseSelect() {
   exercises.forEach((ex) => {
     const opt = document.createElement("option");
     opt.value = ex;
-    opt.textContent = ex;
+    opt.textContent = typeof exerciseOptionLabel === "function" ? exerciseOptionLabel(ex) : ex;
     manual1rmExerciseSelect.appendChild(opt);
   });
   const customOpt = document.createElement("option");

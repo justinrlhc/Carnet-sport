@@ -292,7 +292,7 @@ function computeBmi() {
 
 // --------------------------------------------------------------------------
 // ANNÉE DE NAISSANCE
-// Sert aux barèmes d'endurance (rameur 2000 m, course 5 km), qui dépendent de
+// Sert aux barèmes d'endurance (Row 2000 m, Run 5 km), qui dépendent de
 // l'âge. On garde l'année plutôt que l'âge pour que celui-ci suive tout seul
 // au fil des années.
 // --------------------------------------------------------------------------
@@ -522,6 +522,8 @@ function importAllData(jsonString) {
   localStorage.setItem("carnet_achievements", JSON.stringify(achievements));
   // La "photo" des rangs est recalculée sans annonce au prochain calcul
   localStorage.removeItem("carnet_rank_snapshot");
+  // Une sauvegarde d'avant la version 18 a encore des noms en français
+  ensureExerciseRenames();
 
   return { success: true };
 }
@@ -533,7 +535,22 @@ function importAllData(jsonString) {
 // que l'historique et les records restent regroupés sous un seul nom.
 // --------------------------------------------------------------------------
 const EXERCISE_RENAMES = {
-  "Bent-Over Row": "Rowing barre",
+  "Bent-Over Row": "Barbell Row",
+  // Version 18 : tous les noms d'exercices en anglais
+  "Rowing barre": "Barbell Row",
+  "Rowing haltères": "Dumbbell Row",
+  "Fente bulgare": "Bulgarian Split Squat",
+  "Oiseau deltoïdes": "Rear Delt Fly",
+  "Curl barre": "Barbell Curl",
+  "Curl haltères": "Dumbbell Curl",
+  "Barre au front": "Skull Crusher",
+  "Élévations latérales": "Lateral Raise",
+  "Rameur": "Row",
+  "Course": "Run",
+  "Rameur 2000 m": "Row 2000 m",
+  "Course 5 km": "Run 5 km",
+  "Rameur 500 m": "Row 500 m",
+  "Course 400 m": "Run 400 m",
 };
 
 function ensureExerciseRenames() {
