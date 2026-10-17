@@ -88,7 +88,7 @@ function renderWeightHistory() {
     card.className = "history-card";
     card.innerHTML = `
       <div class="history-card-header">
-        <span class="history-card-title">${entry.weight.toString().replace(".", ",")} kg</span>
+        <span class="history-card-title">${escapeHtml(String(entry.weight).replace(".", ","))} kg</span>
         <span class="history-card-date">${new Date(entry.date).toLocaleDateString("fr-FR")}</span>
       </div>
       <div class="history-card-actions">

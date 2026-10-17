@@ -481,7 +481,7 @@ function showMuscuFeedback(message, isError) {
 
 /** Affiche un badge mis en avant quand la séance qu'on vient d'enregistrer bat un record. */
 function showMuscuRecordBadge(newRecords) {
-  const list = newRecords.map((r) => `${r.exercise} : ${r.value} kg`).join(" · ");
+  const list = newRecords.map((r) => `${escapeHtml(r.exercise)} : ${r.value} kg`).join(" · ");
   muscuFeedback.innerHTML = `
     <span class="record-badge">
       <svg viewBox="0 0 24 24" class="record-badge-icon"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>
@@ -564,12 +564,12 @@ function renderMuscuLastSeen(sessions, query) {
   const lines = matching
     .map((entry) => {
       if (isCardioEntry(entry)) {
-        return `<span><strong>${entry.exercise}</strong> — ${formatDuration(entry.timeSeconds)}</span>`;
+        return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${formatDuration(entry.timeSeconds)}</span>`;
       }
-      const setsText = (entry.sets || [])
+      const setsText = escapeHtml((entry.sets || [])
         .map((s) => (s.weight > 0 ? `${s.weight} kg × ${s.reps}` : `${s.reps} reps`))
-        .join(" · ");
-      return `<span><strong>${entry.exercise}</strong> — ${setsText}</span>`;
+        .join(" · "));
+      return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${setsText}</span>`;
     })
     .join("");
   muscuLastSeen.innerHTML = `
@@ -605,18 +605,18 @@ function renderMuscuHistory() {
         if (isCardioEntry(entry)) {
           return `
           <div class="history-card-exercise">
-            <span class="history-card-exercise-name">${entry.exercise}</span>
+            <span class="history-card-exercise-name">${escapeHtml(entry.exercise)}</span>
             <span class="history-card-sets">Test chrono : ${formatDuration(entry.timeSeconds)}</span>
           </div>`;
         }
-        const setsText = (entry.sets || [])
+        const setsText = escapeHtml((entry.sets || [])
           .map((s) => (s.weight > 0 ? `${s.weight} kg × ${s.reps}` : `${s.reps} reps`))
-          .join(" · ");
+          .join(" · "));
         return `
           <div class="history-card-exercise">
-            <span class="history-card-exercise-name">${entry.exercise}</span>
+            <span class="history-card-exercise-name">${escapeHtml(entry.exercise)}</span>
             <span class="history-card-sets">${setsText}</span>
-            ${entry.rpe ? `<span class="badge-rpe ${getRpeBadgeClass(entry.rpe)}">RPE ${entry.rpe}</span>` : ""}
+            ${entry.rpe ? `<span class="badge-rpe ${getRpeBadgeClass(entry.rpe)}">RPE ${escapeHtml(entry.rpe)}</span>` : ""}
           </div>`;
       })
       .join("");
@@ -627,7 +627,7 @@ function renderMuscuHistory() {
         <span class="history-card-date">${new Date(session.date).toLocaleDateString("fr-FR")}</span>
       </div>
       ${exercisesHtml}
-      ${session.notes ? `<p class="history-card-notes">${session.notes}</p>` : ""}
+      ${session.notes ? `<p class="history-card-notes">${escapeHtml(session.notes)}</p>` : ""}
       <div class="history-card-actions">
         <button type="button" class="btn btn-secondary btn-small hist-repeat-btn">Refaire cette séance</button>
         <button type="button" class="btn btn-secondary btn-small hist-edit-btn">Modifier</button>

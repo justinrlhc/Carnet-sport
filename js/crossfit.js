@@ -431,8 +431,9 @@ cfForm.addEventListener("submit", (event) => {
     const muscuRecordsBefore = typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {};
     addSession(sessionData);
 
+    // Comparé uniquement aux WOD du même nom ET du même niveau (RX, Inter, Scaled)
     const newRecord = typeof detectCfNewRecords === "function"
-      ? detectCfNewRecords(recordsBefore, wodName, sessionData.date)
+      ? detectCfNewRecords(recordsBefore, wodName, sessionData.rxOrScaled || "RX", sessionData.date)
       : null;
 
     // Les exercices structurés du WOD sont comparés à la charge maximale
@@ -568,9 +569,9 @@ function showCfRecordBadge(wodName, wodRecord, liftRecords) {
   const parts = [];
   if (wodRecord) {
     const label = wodRecord.type === "time" ? "meilleur temps" : "meilleure performance";
-    parts.push(`${wodName} — ${label} : ${wodRecord.value}`);
+    parts.push(`${escapeHtml(wodName)} ${wodRecord.level} — ${label} : ${wodRecord.value}`);
   }
-  (liftRecords || []).forEach((r) => parts.push(`${r.exercise} : ${r.value} kg`));
+  (liftRecords || []).forEach((r) => parts.push(`${escapeHtml(r.exercise)} : ${r.value} kg`));
 
   cfFeedback.innerHTML = `
     <span class="record-badge">
@@ -615,14 +616,14 @@ function renderCfLastSeen(sessions, query) {
   const lines = matching
     .map((entry) => {
       if (typeof entry === "object" && entry !== null) {
-        const weightText = entry.weight > 0 ? ` à ${entry.weight} kg` : "";
-        return `<span><strong>${entry.exercise}</strong> — ${entry.reps} reps${weightText}</span>`;
+        const weightText = entry.weight > 0 ? ` à ${escapeHtml(entry.weight)} kg` : "";
+        return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${escapeHtml(entry.reps)} reps${weightText}</span>`;
       }
-      return `<span>${entry}</span>`;
+      return `<span>${escapeHtml(entry)}</span>`;
     })
     .join("");
   cfLastSeen.innerHTML = `
-    <span class="history-last-seen-title">Dernière fois : ${latest.wodName} — ${parseLocalDate(latest.date).toLocaleDateString("fr-FR")}</span>
+    <span class="history-last-seen-title">Dernière fois : ${escapeHtml(latest.wodName)} — ${parseLocalDate(latest.date).toLocaleDateString("fr-FR")}</span>
     ${lines}`;
   cfLastSeen.style.display = "flex";
 }
@@ -671,12 +672,12 @@ function renderCfHistory() {
           const repsDetail = isAmrap
             ? `${entry.reps} reps × ${session.rounds} tours${entry.extraReps ? ` + ${entry.extraReps}` : ""} = ${totalReps} reps`
             : `${totalReps} reps`;
-          const weightText = entry.weight > 0 ? ` à ${entry.weight} kg` : "";
+          const weightText = entry.weight > 0 ? ` à ${escapeHtml(entry.weight)} kg` : "";
           const volume = typeof computeCrossfitStructuredVolume === "function"
             ? computeCrossfitStructuredVolume(session, entry)
             : 0;
           const volumeText = volume > 0 ? ` · Volume : ${Math.round(volume).toLocaleString("fr-FR")} kg` : "";
-          return `<p class="history-card-notes"><strong>${entry.exercise}</strong> — ${repsDetail}${weightText}${volumeText}</p>`;
+          return `<p class="history-card-notes"><strong>${escapeHtml(entry.exercise)}</strong> — ${escapeHtml(repsDetail)}${weightText}${volumeText}</p>`;
         }
         return null;
       })
@@ -685,21 +686,21 @@ function renderCfHistory() {
 
     const freeTextMovements = (session.exercises || []).filter((entry) => typeof entry === "string");
     const freeTextHtml = freeTextMovements
-      .map((movement) => `<p class="history-card-notes">${movement}</p>`)
+      .map((movement) => `<p class="history-card-notes">${escapeHtml(movement)}</p>`)
       .join("");
 
     card.innerHTML = `
       <div class="history-card-header">
-        <span class="history-card-title">${session.wodName}</span>
+        <span class="history-card-title">${escapeHtml(session.wodName)}</span>
         <span class="history-card-date">${new Date(session.date).toLocaleDateString("fr-FR")}</span>
       </div>
       ${isSpeSession(session.wodName)
         ? `<p class="history-card-sets">Séance spécifique</p>`
-        : `<p class="history-card-sets">${session.wodType || ""} — <strong>${formatWodResult(session)}</strong></p>`}
+        : `<p class="history-card-sets">${escapeHtml(session.wodType || "")} — <strong>${escapeHtml(formatWodResult(session))}</strong></p>`}
       ${exercisesHtml}
       ${freeTextHtml}
-      ${session.rxOrScaled ? `<span class="badge-rpe ${getLevelBadgeClass(session.rxOrScaled)}">${session.rxOrScaled}</span>` : ""}
-      ${session.notes ? `<p class="history-card-notes">${session.notes}</p>` : ""}
+      ${session.rxOrScaled ? `<span class="badge-rpe ${getLevelBadgeClass(session.rxOrScaled)}">${escapeHtml(session.rxOrScaled)}</span>` : ""}
+      ${session.notes ? `<p class="history-card-notes">${escapeHtml(session.notes)}</p>` : ""}
       <div class="history-card-actions">
         <button type="button" class="btn btn-secondary btn-small hist-repeat-btn">Refaire ce WOD</button>
         <button type="button" class="btn btn-secondary btn-small hist-edit-btn">Modifier</button>

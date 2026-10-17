@@ -625,7 +625,10 @@ function renderProfile() {
 
   // ----- En-tête : rang global -----
   let heroHtml;
-  if (profile.global) {
+  // Le rang global n'apparaît qu'avec au moins une vraie performance notée
+  // (sinon il ne reposerait que sur "0 séance par semaine")
+  const hasPerformance = profile.categories.some((c) => c.id !== "regularite" && c.hasRank);
+  if (profile.global && hasPerformance) {
     const letter = RANK_LETTERS[profile.global.rankIndex];
     const info = RANK_INFO[letter];
     const progressHtml = profile.global.rankIndex < 5
@@ -651,7 +654,7 @@ function renderProfile() {
       </div>
       <div class="profile-hero-radar">${radarSvg(profile)}</div>`;
   } else {
-    heroHtml = `<p class="empty-text">Enregistre tes séances pour obtenir ton premier rang.</p>`;
+    heroHtml = `<p class="empty-text">Ton rang global apparaîtra dès ta première performance classée : une série de squat, bench ou pull-ups, un 1RM noté, ou un test cardio. Pense aussi à renseigner ton poids dans Mensurations.</p>`;
   }
 
   // ----- Barème -----

@@ -37,6 +37,21 @@ function toLocalDateString(date) {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Rend un texte saisi (note, nom d'exercice perso, mouvement libre...) sans
+ * danger avant de l'insérer dans la page : "<", ">", "&" et les guillemets
+ * sont affichés tels quels au lieu d'être interprétés comme du code. À
+ * utiliser pour TOUT texte venant de l'utilisateur ou d'un fichier importé.
+ */
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** Raccourci : la date d'aujourd'hui au format "AAAA-MM-JJ", en heure locale. */
 function todayLocalDateString() {
   return toLocalDateString(new Date());
@@ -328,72 +343,18 @@ function deleteManualCfBest(wodName) {
 }
 
 // --------------------------------------------------------------------------
-// DONNÉES DE DÉMONSTRATION
-// Ne s'exécute QUE lors de la toute première ouverture de l'app sur cet
-// appareil — jamais après, même si les données sont vides suite à une
-// réinitialisation volontaire (Réglages > Réinitialiser toutes les
-// données). C'est le rôle de STORAGE_KEY_INITIALIZED : une fois posé, il
-// n'est plus jamais retiré (même par un reset), pour que "vide" signifie
-// vraiment "vide" et non "à remplir de nouveau avec la démo".
+// PREMIÈRE OUVERTURE
+// L'appli démarre VIDE : pas de séances d'exemple ni de faux poids de corps,
+// qui fausseraient les rangs et débloqueraient des succès non mérités chez
+// quelqu'un qui découvre l'appli. STORAGE_KEY_INITIALIZED marque simplement
+// la première ouverture (il n'est jamais retiré, même par un reset).
 // --------------------------------------------------------------------------
 
 const STORAGE_KEY_INITIALIZED = "carnet_initialized";
 
-function ensureDemoData() {
-  const alreadyInitialized = localStorage.getItem(STORAGE_KEY_INITIALIZED);
-  if (alreadyInitialized) return; // déjà initialisé une fois : on ne remet plus jamais la démo automatiquement
+function ensureInitialized() {
+  if (localStorage.getItem(STORAGE_KEY_INITIALIZED)) return;
   localStorage.setItem(STORAGE_KEY_INITIALIZED, "1");
-
-  if (getAllSessions().length > 0) return; // sécurité : ne touche à rien si des données existent déjà
-
-  const today = new Date();
-
-  // Petite aide pour générer une date "il y a X jours" au format AAAA-MM-JJ
-  function daysAgo(n) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - n);
-    return toLocalDateString(d);
-  }
-
-  const demoSessions = [
-    { type: "musculation", date: daysAgo(1), notes: "Bonne séance, technique stable",
-      exercises: [
-        { exercise: "Back Squat", sets: [{ reps: 5, weight: 120 }, { reps: 5, weight: 120 }, { reps: 4, weight: 120 }], rpe: 8 },
-        { exercise: "Romanian Deadlift", sets: [{ reps: 8, weight: 80 }, { reps: 8, weight: 80 }], rpe: 6 },
-      ] },
-
-    { type: "crossfit", date: daysAgo(2), wodName: "Fran", scheme: "21-15-9",
-      exercises: ["Thrusters 42,5 kg", "Pull-ups"], rxOrScaled: "RX",
-      timeSeconds: 402, notes: "" },
-
-    { type: "musculation", date: daysAgo(4), notes: "",
-      exercises: [
-        { exercise: "Bench Press", sets: [{ reps: 5, weight: 85 }, { reps: 5, weight: 85 }, { reps: 3, weight: 90 }], rpe: 9 },
-        { exercise: "Incline Bench Press", sets: [{ reps: 8, weight: 60 }, { reps: 8, weight: 60 }], rpe: 7 },
-      ] },
-
-    { type: "musculation", date: daysAgo(6), notes: "",
-      exercises: [
-        { exercise: "Deadlift", sets: [{ reps: 3, weight: 150 }, { reps: 3, weight: 150 }], rpe: 8 },
-      ] },
-
-    { type: "crossfit", date: daysAgo(9), wodName: "Cindy", scheme: "AMRAP 20",
-      exercises: ["Pull-ups", "Push-ups", "Air Squats"], rxOrScaled: "RX",
-      timeSeconds: null, rounds: 18, notes: "" },
-
-    { type: "musculation", date: daysAgo(11), notes: "",
-      exercises: [
-        { exercise: "Back Squat", sets: [{ reps: 5, weight: 115 }, { reps: 5, weight: 115 }, { reps: 5, weight: 115 }], rpe: 7 },
-      ] },
-  ];
-
-  demoSessions.forEach((s) => addSession(s));
-
-  // Quelques mesures de poids de corps sur les dernières semaines
-  addBodyweightEntry(daysAgo(30), 83.0);
-  addBodyweightEntry(daysAgo(20), 82.8);
-  addBodyweightEntry(daysAgo(10), 82.6);
-  addBodyweightEntry(daysAgo(1), 82.4);
 }
 
 /**
@@ -494,10 +455,6 @@ function importAllData(jsonString) {
   return { success: true };
 }
 
-// On s'assure que des données de démo existent dès le chargement de ce
-// fichier, AVANT que musculation.js ou app.js ne tentent d'afficher quoi
-// que ce soit. C'est pour ça que data.js doit toujours être chargé en
-// premier dans index.html.
 // --------------------------------------------------------------------------
 // RENOMMAGE D'EXERCICES
 // Quand un exercice est retiré de la liste parce qu'il faisait doublon avec
@@ -541,7 +498,7 @@ function ensureExerciseRenames() {
   if (manualChanged) localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(manual));
 }
 
-ensureDemoData();
+ensureInitialized();
 ensureBodyweightIds();
 ensureMuscuSessionsMigrated();
 ensureExerciseRenames();

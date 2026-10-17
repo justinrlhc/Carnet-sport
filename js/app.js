@@ -117,7 +117,7 @@ function renderDashboard() {
 
   if (bodyweightEntries.length > 0) {
     const latest = bodyweightEntries[bodyweightEntries.length - 1];
-    weightEl.innerHTML = `${latest.weight.toString().replace(".", ",")} <small>kg</small>`;
+    weightEl.innerHTML = `${escapeHtml(String(latest.weight).replace(".", ","))} <small>kg</small>`;
 
     // On compare à la mesure la plus ancienne dont on dispose (approx. "récemment")
     const oldest = bodyweightEntries[0];
@@ -152,12 +152,13 @@ function renderDashboard() {
   document.getElementById("stat-volume").innerHTML =
     `${weeklyVolume.toLocaleString("fr-FR")} <small>kg</small>`;
 
-  // ----- Records personnels (version simple pour l'instant) -----
-  // Ici on compte juste le nombre d'exercices différents pratiqués comme
-  // approximation temporaire. Le vrai calcul de PR (1RM estimé, etc.)
-  // se trouve sur la page Records, qui utilise cette même fonction.
-  const exerciseCount = typeof computeMuscuRecords === "function" ? Object.keys(computeMuscuRecords()).length : 0;
-  document.getElementById("stat-pr").textContent = exerciseCount;
+  // ----- Records battus ce mois-ci -----
+  // Records d'avant le 1er du mois comparés à ceux d'aujourd'hui (stats.js).
+  const now = new Date();
+  const monthStart = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+  const beaten = typeof countRecordsBeatenSince === "function" ? countRecordsBeatenSince(monthStart) : 0;
+  document.getElementById("stat-pr").textContent = beaten;
+  document.getElementById("stat-pr-trend").textContent = beaten > 0 ? "ce mois-ci" : "ce mois-ci, pour l'instant";
 
   // ----- Dernières séances -----
   // ----- Prochain palier (rangs, voir ranks.js) -----
@@ -186,7 +187,7 @@ function renderDashboard() {
 
     li.innerHTML = `
       <span class="session-tag ${tagClass}">${tagLabel}</span>
-      <span class="session-name">${name}</span>
+      <span class="session-name">${escapeHtml(name)}</span>
       <span class="session-meta">${formatRelativeDate(session.date)}</span>
     `;
     recentList.appendChild(li);
@@ -214,7 +215,7 @@ function formatRelativeDate(dateStr) {
 // 3. DÉMARRAGE DE L'APPLICATION
 // --------------------------------------------------------------------------
 
-renderDashboard(); // ensureDemoData() a déjà été exécuté par data.js, avant ce fichier
+renderDashboard();
 
 // --------------------------------------------------------------------------
 // 4. MODE HORS LIGNE ET INSTALLATION

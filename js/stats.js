@@ -120,7 +120,8 @@ function estimateOneRepMax(weight, reps) {
  * séries) — jamais le 1RM estimé ni les reps max, qui restent réservés
  * aux vraies séries enregistrées dans l'onglet Musculation.
  */
-function computeMuscuRecords() {
+function computeMuscuRecords(options) {
+  const before = options && options.before; // "AAAA-MM-JJ" : ne compter que les séances antérieures
   const records = {}; // { "Back Squat": { oneRM: {...}, maxWeight: {...}, maxReps: {...} } }
 
   function ensureRecord(exercise) {
@@ -156,6 +157,7 @@ function computeMuscuRecords() {
   }
 
   getAllSessions().forEach((session) => {
+    if (before && session.date >= before) return;
     if (session.type === "musculation") {
       (session.exercises || []).forEach((entry) => {
         if (!entry || !Array.isArray(entry.sets)) return; // donnée malformée : on l'ignore sans planter
@@ -198,41 +200,55 @@ function detectStructuredWeightRecords(recordsBefore, structuredEntries) {
   return hits;
 }
 
-/**
- * Parcourt toutes les séances de CrossFit et calcule, pour chaque WOD :
- *  - le meilleur temps jamais réalisé (le plus petit, pour les WOD chronométrés)
- *  - la meilleure performance en rounds/reps (la plus grande, pour les AMRAP)
- */
-function computeCfRecords() {
-  // Les séances de spé (gym, haltéro) n'ont pas de score : elles n'ont pas
-  // leur place dans les records ni dans les graphiques de progression de WOD.
-  const sessions = getAllSessions().filter(
-    (s) => s.type === "crossfit" && !(typeof isSpeSession === "function" && isSpeSession(s.wodName))
-  );
-  const records = {}; // { "Fran": { bestTime: {...}, bestPerformance: {...} } }
+/** Ordre d'affichage des niveaux CrossFit (du plus exigeant au plus adapté). */
+const CF_LEVEL_ORDER = ["RX", "Inter", "Scaled"];
 
-  sessions.forEach((session) => {
-    if (!records[session.wodName]) {
-      records[session.wodName] = { bestTime: null, bestPerformance: null };
-    }
-    const rec = records[session.wodName];
+/** Niveau d'une séance ou d'un résultat noté ; les anciennes données sans niveau comptent comme RX. */
+function getCfLevel(entry) {
+  return entry && CF_LEVEL_ORDER.includes(entry.rxOrScaled || entry.level) ? (entry.rxOrScaled || entry.level) : "RX";
+}
+
+/** Un WOD "avec un nom" peut avoir des records : pas le WOD du jour (différent à chaque fois), ni les cours de spé. */
+function isRecordableWod(wodName) {
+  if (!wodName) return false;
+  if (typeof DAILY_WOD_LABEL !== "undefined" && wodName === DAILY_WOD_LABEL) return false;
+  if (typeof isSpeSession === "function" && isSpeSession(wodName)) return false;
+  return true;
+}
+
+/** Vrai si la performance a (rounds + reps) bat la performance b. */
+function isBetterPerformance(a, b) {
+  return !b || a.rounds > b.rounds || (a.rounds === b.rounds && (a.extraReps || 0) > (b.extraReps || 0));
+}
+
+/**
+ * Parcourt les séances de CrossFit et calcule, pour chaque WOD et chaque
+ * NIVEAU (RX, Inter, Scaled) — un Fran en Scaled ne se compare pas à un Fran RX :
+ *  - le meilleur temps (le plus petit, pour les WOD chronométrés)
+ *  - la meilleure performance en rounds/reps (la plus grande, pour les AMRAP)
+ * Le "WOD du jour" et les cours de spé sont exclus : ce ne sont pas des WOD
+ * comparables d'une fois sur l'autre.
+ * Forme : { "Fran": { "RX": { bestTime, bestPerformance }, "Scaled": {...} } }
+ */
+function computeCfRecords(options) {
+  const before = options && options.before;
+  const records = {};
+
+  getAllSessions().forEach((session) => {
+    if (session.type !== "crossfit" || !isRecordableWod(session.wodName)) return;
+    if (before && session.date >= before) return;
+    const level = getCfLevel(session);
+    records[session.wodName] = records[session.wodName] || {};
+    const rec = (records[session.wodName][level] = records[session.wodName][level] || { bestTime: null, bestPerformance: null });
 
     if (session.timeSeconds !== null && session.timeSeconds !== undefined) {
       if (!rec.bestTime || session.timeSeconds < rec.bestTime.value) {
         rec.bestTime = { value: session.timeSeconds, date: session.date };
       }
     }
-
     if (session.rounds !== null && session.rounds !== undefined) {
-      const extra = session.extraReps || 0;
-      const isBetter =
-        !rec.bestPerformance ||
-        session.rounds > rec.bestPerformance.rounds ||
-        (session.rounds === rec.bestPerformance.rounds && extra > rec.bestPerformance.extraReps);
-
-      if (isBetter) {
-        rec.bestPerformance = { rounds: session.rounds, extraReps: extra, date: session.date };
-      }
+      const perf = { rounds: session.rounds, extraReps: session.extraReps || 0, date: session.date };
+      if (isBetterPerformance(perf, rec.bestPerformance)) rec.bestPerformance = perf;
     }
   });
 
@@ -265,29 +281,24 @@ function detectMuscuNewRecords(recordsBeforeSave, newExercises, sessionDate) {
 
 /**
  * Même principe pour le CrossFit : détecte si le WOD qu'on vient d'enregistrer
- * bat le meilleur temps ou la meilleure performance précédente.
+ * bat le meilleur temps ou la meilleure performance précédente AU MÊME NIVEAU
+ * (comme en musculation, un tout premier résultat compte comme un record).
  */
-function detectCfNewRecords(recordsBeforeSave, wodName, sessionDate) {
-  const recordsAfterSave = computeCfRecords();
-  const before = recordsBeforeSave[wodName];
-  const after = recordsAfterSave[wodName];
+function detectCfNewRecords(recordsBeforeSave, wodName, level, sessionDate) {
+  if (!isRecordableWod(wodName)) return null;
+  const before = (recordsBeforeSave[wodName] && recordsBeforeSave[wodName][level]) || { bestTime: null, bestPerformance: null };
+  const afterAll = computeCfRecords()[wodName];
+  const after = afterAll && afterAll[level];
   if (!after) return null;
 
-  if (after.bestTime && after.bestTime.date === sessionDate) {
-    const isNewRecord = !before || !before.bestTime || after.bestTime.value < before.bestTime.value;
-    if (isNewRecord) return { type: "time", value: formatSecondsToTime(after.bestTime.value) };
+  if (after.bestTime && after.bestTime.date === sessionDate && (!before.bestTime || after.bestTime.value < before.bestTime.value)) {
+    return { type: "time", level, value: formatSecondsToTime(after.bestTime.value) };
   }
-
-  if (after.bestPerformance && after.bestPerformance.date === sessionDate) {
-    const isNewRecord = !before || !before.bestPerformance ||
-      after.bestPerformance.rounds > before.bestPerformance.rounds ||
-      (after.bestPerformance.rounds === before.bestPerformance.rounds && after.bestPerformance.extraReps > before.bestPerformance.extraReps);
-    if (isNewRecord) {
-      const extra = after.bestPerformance.extraReps ? ` + ${after.bestPerformance.extraReps}` : "";
-      return { type: "performance", value: `${after.bestPerformance.rounds}${extra}` };
-    }
+  if (after.bestPerformance && after.bestPerformance.date === sessionDate &&
+      isBetterPerformance(after.bestPerformance, before.bestPerformance)) {
+    const extra = after.bestPerformance.extraReps ? ` + ${after.bestPerformance.extraReps}` : "";
+    return { type: "performance", level, value: `${after.bestPerformance.rounds}${extra}` };
   }
-
   return null;
 }
 
@@ -317,6 +328,7 @@ const manualCfRoundsInput = document.getElementById("manual-cf-rounds");
 const manualCfExtraRepsInput = document.getElementById("manual-cf-extra-reps");
 const manualCfDateInput = document.getElementById("manual-cf-date");
 const manualCfNotesInput = document.getElementById("manual-cf-notes");
+const manualCfLevelSelect = document.getElementById("manual-cf-level");
 const btnToggleCfForm = document.getElementById("btn-toggle-cf-record-form");
 const btnCancelCfForm = document.getElementById("btn-cancel-cf-record-form");
 
@@ -340,43 +352,50 @@ function renderRecords() {
     const manual = manualOneRMs[exercise] || null;
     const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exercise);
 
-    // On choisit la valeur la plus élevée entre l'estimation calculée et
-    // la valeur saisie manuellement, en gardant toujours une trace de sa source.
-    let headline;
-    if (manual && (!sessionRec || !sessionRec.oneRM || manual.weight >= sessionRec.oneRM.value)) {
-      headline = { value: manual.weight, source: "manual", date: manual.date };
-    } else if (sessionRec && sessionRec.oneRM) {
-      headline = { value: sessionRec.oneRM.value, source: "estimated", date: sessionRec.oneRM.date };
-    } else {
-      headline = null;
-    }
+    // Exercice au poids du corps (pull-up, dips...) : ce qui compte, ce sont
+    // les répétitions max en une série. Un "1RM" n'aurait pas de sens (il
+    // vaudrait 0 kg sans lest) : le lest max apparaît seulement en dessous.
+    const showRepsHeadline = isBW && sessionRec && sessionRec.maxReps && sessionRec.maxReps.value > 0;
 
-    // Pour un exercice au poids du corps jamais réalisé avec un lest, un
-    // "1RM à 0 kg" n'a pas de sens : on met plutôt en avant les reps max.
-    const showRepsHeadline = !headline && isBW && sessionRec && sessionRec.maxReps;
+    // Sinon : la valeur la plus élevée entre l'estimation calculée et la
+    // valeur saisie manuellement, en gardant toujours une trace de sa source.
+    const estimate = sessionRec && sessionRec.oneRM && sessionRec.oneRM.value > 0 ? sessionRec.oneRM : null;
+    let headline = null;
+    if (!showRepsHeadline) {
+      if (manual && (!estimate || manual.weight >= estimate.value)) {
+        headline = { value: manual.weight, source: "manual", date: manual.date };
+      } else if (estimate) {
+        headline = { value: estimate.value, source: "estimated", date: estimate.date };
+      }
+    }
     // Exercice jamais vu en musculation, seulement dans un WOD : on n'a
     // qu'une charge max utilisée, jamais de 1RM (voir note plus haut).
     const showWeightOnlyHeadline = !headline && !showRepsHeadline && sessionRec && sessionRec.maxWeight;
 
-    const otherValueNote =
-      manual && sessionRec && sessionRec.oneRM && Math.round(sessionRec.oneRM.value) !== Math.round(manual.weight)
-        ? `<span>Estimé à partir des séances : ${Math.round(sessionRec.oneRM.value)} kg</span>`
-        : "";
+    let otherValueNote = "";
+    if (manual && showRepsHeadline) {
+      otherValueNote = `<span>Lest max noté (1 rep) : ${formatKgValue(manual.weight)} kg</span>`;
+    } else if (manual && estimate && Math.round(estimate.value) !== Math.round(manual.weight)) {
+      otherValueNote = `<span>Estimé à partir des séances : ${Math.round(estimate.value)} kg</span>`;
+    }
 
     const subLineParts = [];
     if (sessionRec && sessionRec.maxWeight && sessionRec.maxWeight.value > 0) {
       const repsText = sessionRec.maxWeight.reps ? ` × ${sessionRec.maxWeight.reps}` : "";
       const fromWod = sessionRec.maxWeight.source === "crossfit" ? " (vu en WOD)" : "";
-      subLineParts.push(`<span>${isBW ? "Lest max" : "Charge max"} : ${sessionRec.maxWeight.value} kg${repsText}${fromWod}</span>`);
+      subLineParts.push(`<span>${isBW ? "Lest max" : "Charge max"} : ${formatKgValue(sessionRec.maxWeight.value)} kg${repsText}${fromWod}</span>`);
     }
-    if (sessionRec && sessionRec.maxReps) {
-      subLineParts.push(`<span>Reps max : ${sessionRec.maxReps.value}${sessionRec.maxReps.weight > 0 ? ` (à ${sessionRec.maxReps.weight} kg)` : ""}</span>`);
+    if (sessionRec && sessionRec.maxReps && !showRepsHeadline) {
+      subLineParts.push(`<span>Reps max : ${sessionRec.maxReps.value}${sessionRec.maxReps.weight > 0 ? ` (à ${formatKgValue(sessionRec.maxReps.weight)} kg)` : ""}</span>`);
     }
     if (otherValueNote) subLineParts.push(otherValueNote);
 
-    const subLines = subLineParts.length > 0
-      ? `<div class="record-sub">${subLineParts.join("")}</div>`
-      : `<p class="empty-text" style="margin-top:8px;">Aucune séance de musculation enregistrée pour cet exercice.</p>`;
+    let subLines = "";
+    if (subLineParts.length > 0) {
+      subLines = `<div class="record-sub">${subLineParts.join("")}</div>`;
+    } else if (!showRepsHeadline) {
+      subLines = `<p class="empty-text" style="margin-top:8px;">Aucune séance de musculation enregistrée pour cet exercice.</p>`;
+    }
 
     const manageLinks = manual
       ? `
@@ -384,7 +403,7 @@ function renderRecords() {
           <button type="button" class="record-link edit-1rm-link">Modifier le 1RM connu</button>
           <button type="button" class="record-link record-link-danger delete-1rm-link">Supprimer</button>
         </div>`
-      : `<div class="record-manage"><button type="button" class="record-link add-1rm-link">+ Noter mon 1RM connu</button></div>`;
+      : `<div class="record-manage"><button type="button" class="record-link add-1rm-link">${isBW ? "+ Noter mon lest max (1 rep)" : "+ Noter mon 1RM connu"}</button></div>`;
 
     let mainBlock;
     if (headline) {
@@ -396,13 +415,13 @@ function renderRecords() {
     } else if (showRepsHeadline) {
       mainBlock = `
         <div class="record-main">
-          <span class="record-value">${sessionRec.maxReps.value}</span>
-          <span class="record-label">Reps max (poids de corps)</span>
+          <span class="record-value">${sessionRec.maxReps.value} <small>reps</small></span>
+          <span class="record-label">Reps max en une série${sessionRec.maxReps.weight > 0 ? ` (lesté ${formatKgValue(sessionRec.maxReps.weight)} kg)` : ""}</span>
         </div>`;
     } else if (showWeightOnlyHeadline) {
       mainBlock = `
         <div class="record-main">
-          <span class="record-value">${sessionRec.maxWeight.value} <small>kg</small></span>
+          <span class="record-value">${formatKgValue(sessionRec.maxWeight.value)} <small>kg</small></span>
           <span class="record-label">Charge max utilisée (WOD)</span>
         </div>`;
     } else {
@@ -412,7 +431,7 @@ function renderRecords() {
     const card = document.createElement("div");
     card.className = "record-card";
     card.innerHTML = `
-      <span class="record-card-title">${exercise}</span>
+      <span class="record-card-title">${escapeHtml(exercise)}</span>
       ${mainBlock}
       ${subLines}
       ${manageLinks}
@@ -440,49 +459,62 @@ function renderRecords() {
   });
 
   // ========== CROSSFIT ==========
+  // Un record par WOD ET par niveau (RX, Inter, Scaled) : un Fran Scaled ne
+  // se compare pas à un Fran RX. Le WOD du jour n'a pas de record.
   const sessionCfRecords = computeCfRecords();
   const manualCfBests = getManualCfBests();
-  const wodNames = Array.from(new Set([...Object.keys(sessionCfRecords), ...Object.keys(manualCfBests)])).sort();
+  const wodNames = Array.from(new Set([
+    ...Object.keys(sessionCfRecords),
+    ...Object.keys(manualCfBests).filter((name) => isRecordableWod(name)),
+  ])).sort();
 
   cfGrid.innerHTML = "";
   if (wodNames.length === 0) {
-    cfGrid.innerHTML = `<p class="empty-text">Ajoute un WOD ou note un résultat connu pour voir apparaître tes records ici.</p>`;
+    cfGrid.innerHTML = `<p class="empty-text">Ajoute un WOD avec un nom (Fran, Murph...) ou note un résultat connu pour voir apparaître tes records ici. Le « WOD du jour » change à chaque fois : il n'a pas de record.</p>`;
   }
 
   wodNames.forEach((wodName) => {
-    const sessionRec = sessionCfRecords[wodName] || { bestTime: null, bestPerformance: null };
+    const byLevel = JSON.parse(JSON.stringify(sessionCfRecords[wodName] || {}));
     const manual = manualCfBests[wodName] || null;
 
-    let bestTime = sessionRec.bestTime;
-    if (manual && manual.timeSeconds !== null && manual.timeSeconds !== undefined) {
-      if (!bestTime || manual.timeSeconds < bestTime.value) {
-        bestTime = { value: manual.timeSeconds, date: manual.date, source: "manual" };
+    // Le résultat noté à la main rejoint son niveau (RX par défaut pour les anciens)
+    if (manual) {
+      const level = getCfLevel(manual);
+      const rec = (byLevel[level] = byLevel[level] || { bestTime: null, bestPerformance: null });
+      if (manual.timeSeconds !== null && manual.timeSeconds !== undefined && (!rec.bestTime || manual.timeSeconds < rec.bestTime.value)) {
+        rec.bestTime = { value: manual.timeSeconds, date: manual.date, source: "manual" };
+      }
+      if (manual.rounds !== null && manual.rounds !== undefined) {
+        const perf = { rounds: manual.rounds, extraReps: manual.extraReps || 0, date: manual.date, source: "manual" };
+        if (isBetterPerformance(perf, rec.bestPerformance)) rec.bestPerformance = perf;
       }
     }
 
-    let bestPerf = sessionRec.bestPerformance;
-    if (manual && manual.rounds !== null && manual.rounds !== undefined) {
-      const extra = manual.extraReps || 0;
-      const isBetter = !bestPerf || manual.rounds > bestPerf.rounds || (manual.rounds === bestPerf.rounds && extra > bestPerf.extraReps);
-      if (isBetter) bestPerf = { rounds: manual.rounds, extraReps: extra, date: manual.date, source: "manual" };
-    }
-
-    let mainBlock = "";
-    if (bestTime) {
-      mainBlock += `
-        <div class="record-main">
-          <span class="record-value">${formatSecondsToTime(bestTime.value)}</span>
-          <span class="record-label">Meilleur temps${bestTime.source === "manual" ? " (saisi)" : ""}</span>
+    const levels = CF_LEVEL_ORDER.filter((level) => byLevel[level]);
+    const mainBlock = levels.map((level) => {
+      const rec = byLevel[level];
+      const parts = [];
+      if (rec.bestTime) {
+        parts.push(`
+          <div class="record-main">
+            <span class="record-value">${formatSecondsToTime(rec.bestTime.value)}</span>
+            <span class="record-label">Meilleur temps${rec.bestTime.source === "manual" ? " (saisi)" : ""}</span>
+          </div>`);
+      }
+      if (rec.bestPerformance) {
+        const extraText = rec.bestPerformance.extraReps ? ` + ${rec.bestPerformance.extraReps}` : "";
+        parts.push(`
+          <div class="record-main">
+            <span class="record-value">${rec.bestPerformance.rounds}${extraText}</span>
+            <span class="record-label">rounds${rec.bestPerformance.source === "manual" ? " (saisi)" : ""}</span>
+          </div>`);
+      }
+      return `
+        <div class="record-level">
+          <span class="badge-rpe ${getLevelBadgeClass(level)} record-level-badge">${level}</span>
+          ${parts.join("")}
         </div>`;
-    }
-    if (bestPerf) {
-      const extraText = bestPerf.extraReps ? ` + ${bestPerf.extraReps}` : "";
-      mainBlock += `
-        <div class="record-main">
-          <span class="record-value">${bestPerf.rounds}${extraText}</span>
-          <span class="record-label">Meilleure performance${bestPerf.source === "manual" ? " (saisie)" : ""}</span>
-        </div>`;
-    }
+    }).join("");
 
     const manageLinks = manual
       ? `
@@ -494,7 +526,7 @@ function renderRecords() {
 
     const card = document.createElement("div");
     card.className = "record-card";
-    card.innerHTML = `<span class="record-card-title">${wodName}</span>${mainBlock}${manageLinks}`;
+    card.innerHTML = `<span class="record-card-title">${escapeHtml(wodName)}</span>${mainBlock}${manageLinks}`;
 
     const editLink = card.querySelector(".edit-cf-link");
     if (editLink) editLink.addEventListener("click", () => openCfRecordForm(wodName, manual));
@@ -514,6 +546,51 @@ function renderRecords() {
 
     cfGrid.appendChild(card);
   });
+}
+
+/**
+ * Nombre de records BATTUS depuis une date ("AAAA-MM-JJ") : on compare les
+ * records d'avant cette date à ceux d'aujourd'hui. Un exercice ou un WOD fait
+ * pour la toute première fois ne compte pas (il n'y avait rien à battre).
+ *  - musculation : 1RM estimé (reps max pour un exercice au poids du corps) ;
+ *  - CrossFit : meilleur temps ou meilleure performance, à niveau égal.
+ */
+function countRecordsBeatenSince(startDate) {
+  let count = 0;
+
+  const muscuBefore = computeMuscuRecords({ before: startDate });
+  const muscuNow = computeMuscuRecords();
+  Object.keys(muscuNow).forEach((exercise) => {
+    const prev = muscuBefore[exercise];
+    const now = muscuNow[exercise];
+    if (!prev) return;
+    const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exercise);
+    if (isBW) {
+      if (prev.maxReps && now.maxReps && now.maxReps.value > prev.maxReps.value) count++;
+    } else if (prev.oneRM && prev.oneRM.value > 0 && now.oneRM && now.oneRM.value > prev.oneRM.value + 1e-9) {
+      count++;
+    }
+  });
+
+  const cfBefore = computeCfRecords({ before: startDate });
+  const cfNow = computeCfRecords();
+  Object.keys(cfNow).forEach((wodName) => {
+    Object.keys(cfNow[wodName]).forEach((level) => {
+      const prev = cfBefore[wodName] && cfBefore[wodName][level];
+      const now = cfNow[wodName][level];
+      if (!prev) return;
+      const fasterTime = prev.bestTime && now.bestTime && now.bestTime.value < prev.bestTime.value;
+      const betterPerf = prev.bestPerformance && now.bestPerformance && isBetterPerformance(now.bestPerformance, prev.bestPerformance);
+      if (fasterTime || betterPerf) count++;
+    });
+  });
+
+  return count;
+}
+
+/** 87.5 → "87,5" ; 60 → "60" (kilos à la française). */
+function formatKgValue(value) {
+  return Number(value).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 }
 
 // --------------------------------------------------------------------------
@@ -639,6 +716,7 @@ function openCfRecordForm(wodToPrefill, existingManualEntry) {
   manualCfExtraRepsInput.value = existingManualEntry && existingManualEntry.extraReps != null ? existingManualEntry.extraReps : "";
   manualCfDateInput.value = existingManualEntry ? existingManualEntry.date : todayLocalDateString();
   manualCfNotesInput.value = existingManualEntry ? existingManualEntry.notes || "" : "";
+  if (manualCfLevelSelect) manualCfLevelSelect.value = existingManualEntry ? getCfLevel(existingManualEntry) : "RX";
 
   manualCfForm.style.display = "block";
   manualCfForm.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -676,6 +754,7 @@ if (manualCfForm) {
       timeSeconds,
       rounds,
       extraReps,
+      level: manualCfLevelSelect ? manualCfLevelSelect.value : "RX",
       date: manualCfDateInput.value || todayLocalDateString(),
       notes: manualCfNotesInput.value.trim(),
     });

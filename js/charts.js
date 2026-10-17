@@ -315,20 +315,36 @@ function renderWodChart() {
   if (!chartsAvailable()) return;
   const canvas = document.getElementById("chart-wod");
   const select = document.getElementById("stats-wod-select");
-  if (!canvas || !select || !select.value) return;
+  if (!canvas || !select) return;
+  if (!select.value) {
+    if (wodChartInstance) { wodChartInstance.destroy(); wodChartInstance = null; }
+    return;
+  }
 
   const sessions = getAllSessions()
     .filter((s) => s.type === "crossfit" && s.wodName === select.value)
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  const labels = sessions.map((s) => new Date(s.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }));
-
-  // On regarde si ce WOD est plutôt suivi en "temps" ou en "rounds"
+  // Une seule chronologie de dates, puis une courbe par niveau (RX, Inter,
+  // Scaled) : un Fran Scaled ne doit pas se mélanger à un Fran RX.
+  const labels = sessions.map((s) => parseLocalDate(s.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }));
   const isTimeBased = sessions.some((s) => s.timeSeconds !== null && s.timeSeconds !== undefined);
+  const levelColors = { RX: "#E1584F", Inter: CHART_COLORS.accent, Scaled: "#5B9BD9" };
 
-  const data = isTimeBased
-    ? sessions.map((s) => s.timeSeconds ?? null)
-    : sessions.map((s) => (s.rounds ?? 0) + (s.extraReps ?? 0) / 100);
+  const datasets = CF_LEVEL_ORDER
+    .filter((level) => sessions.some((s) => getCfLevel(s) === level))
+    .map((level) => ({
+      label: level,
+      data: sessions.map((s) => {
+        if (getCfLevel(s) !== level) return null;
+        if (isTimeBased) return s.timeSeconds ?? null;
+        return s.rounds !== null && s.rounds !== undefined ? s.rounds + (s.extraReps ?? 0) / 100 : null;
+      }),
+      borderColor: levelColors[level],
+      backgroundColor: levelColors[level],
+      spanGaps: true, // relie les points d'un même niveau même s'il y a d'autres niveaux entre
+      tension: 0.3,
+    }));
 
   const options = getBaseChartOptions();
   if (isTimeBased) {
@@ -337,21 +353,7 @@ function renderWodChart() {
   }
 
   if (wodChartInstance) wodChartInstance.destroy();
-  wodChartInstance = new Chart(canvas, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        label: isTimeBased ? "Temps" : "Rounds",
-        data,
-        borderColor: CHART_COLORS.accent,
-        backgroundColor: CHART_COLORS.accentFill,
-        fill: true,
-        tension: 0.3,
-      }],
-    },
-    options,
-  });
+  wodChartInstance = new Chart(canvas, { type: "line", data: { labels, datasets }, options });
 }
 
 document.addEventListener("change", (event) => {
