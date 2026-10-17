@@ -95,11 +95,15 @@ function isWithinLastDays(dateStr, nbDays) {
  *
  * Formule : 1RM ≈ poids × (1 + répétitions / 30)
  *
- * IMPORTANT : c'est une ESTIMATION, pas une mesure réelle. Elle devient
- * moins fiable au-delà d'une dizaine de répétitions.
+ * RÈGLE UNIQUE pour toute l'appli (Records, Statistiques, Profil) : au-delà
+ * de 10 répétitions l'estimation n'est plus fiable, la série compte alors
+ * simplement pour la charge réellement soulevée.
  */
+const MAX_REPS_FOR_1RM_ESTIMATE = 10;
+
 function estimateOneRepMax(weight, reps) {
   if (reps <= 1) return weight; // à 1 répétition, le "1RM" est simplement le poids soulevé
+  if (reps > MAX_REPS_FOR_1RM_ESTIMATE) return weight; // série trop longue : charge soulevée
   return weight * (1 + reps / 30);
 }
 
@@ -237,6 +241,9 @@ function computeCfRecords(options) {
   getAllSessions().forEach((session) => {
     if (session.type !== "crossfit" || !isRecordableWod(session.wodName)) return;
     if (before && session.date >= before) return;
+    const hasTime = session.timeSeconds !== null && session.timeSeconds !== undefined;
+    const hasRounds = session.rounds !== null && session.rounds !== undefined;
+    if (!hasTime && !hasRounds) return; // WOD sans score (EMOM, Tabata...) : rien à comparer
     const level = getCfLevel(session);
     records[session.wodName] = records[session.wodName] || {};
     const rec = (records[session.wodName][level] = records[session.wodName][level] || { bestTime: null, bestPerformance: null });
@@ -590,7 +597,7 @@ function countRecordsBeatenSince(startDate) {
 
 /** 87.5 → "87,5" ; 60 → "60" (kilos à la française). */
 function formatKgValue(value) {
-  return Number(value).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+  return formatNumberFr(value);
 }
 
 // --------------------------------------------------------------------------

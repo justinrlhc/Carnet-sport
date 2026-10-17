@@ -117,7 +117,7 @@ function renderDashboard() {
 
   if (bodyweightEntries.length > 0) {
     const latest = bodyweightEntries[bodyweightEntries.length - 1];
-    weightEl.innerHTML = `${escapeHtml(String(latest.weight).replace(".", ","))} <small>kg</small>`;
+    weightEl.innerHTML = `${formatNumberFr(latest.weight, 1)} <small>kg</small>`;
 
     // On compare à la mesure la plus ancienne dont on dispose (approx. "récemment")
     const oldest = bodyweightEntries[0];

@@ -102,9 +102,8 @@ const RANK_CATEGORIES = [
   ] },
 ];
 
-// Au-delà de 10 répétitions, l'estimation du 1RM devient peu fiable : pour
-// les rangs, une telle série compte seulement pour la charge réellement soulevée.
-const MAX_REPS_FOR_1RM_ESTIMATE = 10;
+// Au-delà de 10 répétitions (MAX_REPS_FOR_1RM_ESTIMATE, défini dans stats.js),
+// estimateOneRepMax renvoie simplement la charge réellement soulevée.
 
 // --------------------------------------------------------------------------
 // OUTILS DE CALCUL
@@ -202,7 +201,7 @@ function collectPerformances() {
     const p = get(name);
     p.reps = Math.max(p.reps, reps);
     if (weight > 0) {
-      const estimate = reps <= MAX_REPS_FOR_1RM_ESTIMATE ? estimateOneRepMax(weight, reps) : weight;
+      const estimate = estimateOneRepMax(weight, reps);
       if (estimate > p.load) {
         p.load = estimate;
         // D'où vient la charge : vraie série d'1 rep, estimation, ou simple charge soulevée (> 10 reps)

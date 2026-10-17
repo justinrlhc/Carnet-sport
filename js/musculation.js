@@ -481,7 +481,7 @@ function showMuscuFeedback(message, isError) {
 
 /** Affiche un badge mis en avant quand la séance qu'on vient d'enregistrer bat un record. */
 function showMuscuRecordBadge(newRecords) {
-  const list = newRecords.map((r) => `${escapeHtml(r.exercise)} : ${r.value} kg`).join(" · ");
+  const list = newRecords.map((r) => `${escapeHtml(r.exercise)} : ${formatNumberFr(r.value)} kg`).join(" · ");
   muscuFeedback.innerHTML = `
     <span class="record-badge">
       <svg viewBox="0 0 24 24" class="record-badge-icon"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>
@@ -547,8 +547,12 @@ muscuCancelEditBtn.addEventListener("click", cancelMuscuEdit);
 // HISTORIQUE (liste des séances de musculation, filtrable par exercice)
 // --------------------------------------------------------------------------
 
-muscuFilterSelect.addEventListener("change", () => renderMuscuHistory());
-muscuHistorySearch.addEventListener("input", () => renderMuscuHistory());
+// Nombre de séances affichées dans l'historique (augmente avec "Voir plus",
+// revient à 20 quand on change de filtre ou de recherche)
+let muscuHistoryLimit = HISTORY_PAGE_SIZE;
+
+muscuFilterSelect.addEventListener("change", () => { muscuHistoryLimit = HISTORY_PAGE_SIZE; renderMuscuHistory(); });
+muscuHistorySearch.addEventListener("input", () => { muscuHistoryLimit = HISTORY_PAGE_SIZE; renderMuscuHistory(); });
 
 /**
  * Encart "Dernière fois" affiché pendant une recherche : la séance la plus
@@ -567,7 +571,7 @@ function renderMuscuLastSeen(sessions, query) {
         return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${formatDuration(entry.timeSeconds)}</span>`;
       }
       const setsText = escapeHtml((entry.sets || [])
-        .map((s) => (s.weight > 0 ? `${s.weight} kg × ${s.reps}` : `${s.reps} reps`))
+        .map((s) => (s.weight > 0 ? `${formatNumberFr(s.weight)} kg × ${s.reps}` : `${s.reps} reps`))
         .join(" · "));
       return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${setsText}</span>`;
     })
@@ -596,7 +600,7 @@ function renderMuscuHistory() {
     return;
   }
 
-  sessions.forEach((session) => {
+  sessions.slice(0, muscuHistoryLimit).forEach((session) => {
     const card = document.createElement("div");
     card.className = "history-card";
 
@@ -610,7 +614,7 @@ function renderMuscuHistory() {
           </div>`;
         }
         const setsText = escapeHtml((entry.sets || [])
-          .map((s) => (s.weight > 0 ? `${s.weight} kg × ${s.reps}` : `${s.reps} reps`))
+          .map((s) => (s.weight > 0 ? `${formatNumberFr(s.weight)} kg × ${s.reps}` : `${s.reps} reps`))
           .join(" · "));
         return `
           <div class="history-card-exercise">
@@ -652,6 +656,11 @@ function renderMuscuHistory() {
       if (typeof renderRecords === "function") renderRecords();
     });
     muscuHistoryList.appendChild(card);
+  });
+
+  appendShowMoreButton(muscuHistoryList, sessions.length - muscuHistoryLimit, () => {
+    muscuHistoryLimit += HISTORY_PAGE_SIZE;
+    renderMuscuHistory();
   });
 }
 

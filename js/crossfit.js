@@ -30,6 +30,15 @@ function isSpeSession(name) {
   return SPE_SESSIONS.includes(name);
 }
 
+// Formats où un score est indispensable. Un EMOM, un Tabata ou un format
+// "Autre" se termine souvent sans temps ni rounds à noter : le score y est
+// facultatif (et un WOD sans score n'entre simplement pas dans les records).
+const SCORED_WOD_TYPES = ["For Time", "AMRAP", "Chipper"];
+
+function isScoreRequired(wodType) {
+  return SCORED_WOD_TYPES.includes(wodType);
+}
+
 // Détail de chaque benchmark : son format, son type de score (temps ou
 // rounds), et ses mouvements avec le schéma de répétitions/charges. Sert à
 // préremplir automatiquement le formulaire dès qu'on sélectionne son nom.
@@ -200,6 +209,7 @@ function applyWodSelection(name) {
   }
 
   cfTypeSelect.value = preset.wodType;
+  updateScoreHint();
 
   cfExercisesList.innerHTML = "";
   preset.movements.forEach((movement) => {
@@ -255,9 +265,9 @@ function createStructuredExerciseRow(prefill) {
       <button type="button" class="set-remove" title="Supprimer cet exercice">✕</button>
     </div>
     <div class="cf-structured-fields">
-      <input type="number" class="cf-structured-reps" min="0" placeholder="Répétitions">
-      <input type="number" class="cf-structured-weight" min="0" step="0.5" placeholder="Poids (kg)">
-      <input type="number" class="cf-structured-extra" min="0" placeholder="Reps suppl." style="display:none;">
+      <input type="number" class="cf-structured-reps" min="0" inputmode="numeric" placeholder="Reps" aria-label="Répétitions">
+      <input type="number" class="cf-structured-weight" min="0" step="0.5" placeholder="kg" aria-label="Charge (kg)">
+      <input type="number" class="cf-structured-extra" min="0" inputmode="numeric" placeholder="+ reps" aria-label="Répétitions en plus (tour incomplet)" style="display:none;">
     </div>
   `;
 
@@ -277,7 +287,7 @@ function createStructuredExerciseRow(prefill) {
 
   function updateWeightPlaceholder() {
     const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(getRowExerciseName());
-    weightInput.placeholder = isBW ? "Lest (kg, optionnel)" : "Poids (kg)";
+    weightInput.placeholder = isBW ? "Lest kg" : "kg";
   }
 
   select.addEventListener("change", () => {
@@ -315,13 +325,20 @@ function updateStructuredRowForWodType(row) {
   const isAmrap = cfTypeSelect.value === "AMRAP";
   const repsInput = row.querySelector(".cf-structured-reps");
   const extraInput = row.querySelector(".cf-structured-extra");
-  repsInput.placeholder = isAmrap ? "Reps par tour" : "Répétitions totales";
+  repsInput.placeholder = isAmrap ? "Reps/tour" : "Reps totales";
   extraInput.style.display = isAmrap ? "block" : "none";
 }
 
 /** Réapplique l'adaptation AMRAP à toutes les lignes structurées déjà présentes. */
 function updateAllStructuredRowsForWodType() {
   cfExercisesList.querySelectorAll(".cf-structured-row").forEach(updateStructuredRowForWodType);
+  updateScoreHint();
+}
+
+/** Petit rappel sous le type de WOD quand le score est facultatif (EMOM, Tabata, Autre). */
+function updateScoreHint() {
+  const hint = document.getElementById("cf-score-hint");
+  if (hint) hint.style.display = isScoreRequired(cfTypeSelect.value) ? "none" : "block";
 }
 
 cfTypeSelect.addEventListener("change", updateAllStructuredRowsForWodType);
@@ -345,20 +362,23 @@ cfAddStructuredExerciseBtn.addEventListener("click", () => {
 // CONVERSION DU TEMPS "mm:ss" <-> secondes
 // --------------------------------------------------------------------------
 
+/** "6:42" → 402 ; "1:02:30" → 3750 (au-delà d'une heure, ex. Murph). Null si illisible. */
 function parseTimeToSeconds(text) {
   if (!text || !text.trim()) return null;
-  const parts = text.trim().split(":");
-  if (parts.length !== 2) return null;
-  const minutes = Number(parts[0]);
-  const seconds = Number(parts[1]);
-  if (Number.isNaN(minutes) || Number.isNaN(seconds)) return null;
-  return minutes * 60 + seconds;
+  const value = text.trim().replace(/[.,]/g, ":");
+  if (!/^\d+(:[0-5]\d){1,2}$/.test(value)) return null;
+  const parts = value.split(":").map(Number);
+  const total = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+  return total > 0 ? total : null;
 }
 
+/** 402 → "6:42" ; 3750 → "1:02:30" */
 function formatSecondsToTime(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  const total = Math.round(totalSeconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = String(total % 60).padStart(2, "0");
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
 }
 
 // --------------------------------------------------------------------------
@@ -381,7 +401,11 @@ cfForm.addEventListener("submit", (event) => {
 
   const isSpe = isSpeSession(wodName);
 
-  if (!isSpe && timeSeconds === null && rounds === null) {
+  if (cfTimeInput.value.trim() && timeSeconds === null) {
+    showCfFeedback("Temps illisible : écris-le en minutes:secondes, par exemple 6:42 (ou 1:02:30 au-delà d'une heure).", true);
+    return;
+  }
+  if (!isSpe && isScoreRequired(cfTypeSelect.value) && timeSeconds === null && rounds === null) {
     showCfFeedback("Indique au moins un temps (mm:ss) ou un nombre de rounds.", true);
     return;
   }
@@ -475,6 +499,7 @@ function duplicateCfSession(session) {
   setScoreFieldsVisibility(session.wodName);
 
   cfTypeSelect.value = session.wodType || "For Time";
+  updateScoreHint();
   cfRxSelect.value = session.rxOrScaled || "RX";
   cfTimeInput.value = "";
   cfRoundsInput.value = "";
@@ -515,6 +540,7 @@ function startEditCfSession(session) {
   setScoreFieldsVisibility(session.wodName);
 
   cfTypeSelect.value = session.wodType || "For Time";
+  updateScoreHint();
   cfRxSelect.value = session.rxOrScaled || "RX";
   cfTimeInput.value = session.timeSeconds !== null && session.timeSeconds !== undefined
     ? formatSecondsToTime(session.timeSeconds) : "";
@@ -546,6 +572,7 @@ function startEditCfSession(session) {
 function cancelCfEdit() {
   cfEditingId = null;
   cfForm.reset();
+  updateScoreHint();
   resetExerciseRows();
   cfTimeRow.style.display = "";
   cfRoundsRow.style.display = "";
@@ -571,7 +598,7 @@ function showCfRecordBadge(wodName, wodRecord, liftRecords) {
     const label = wodRecord.type === "time" ? "meilleur temps" : "meilleure performance";
     parts.push(`${escapeHtml(wodName)} ${wodRecord.level} — ${label} : ${wodRecord.value}`);
   }
-  (liftRecords || []).forEach((r) => parts.push(`${escapeHtml(r.exercise)} : ${r.value} kg`));
+  (liftRecords || []).forEach((r) => parts.push(`${escapeHtml(r.exercise)} : ${formatNumberFr(r.value)} kg`));
 
   cfFeedback.innerHTML = `
     <span class="record-badge">
@@ -586,12 +613,16 @@ function showCfRecordBadge(wodName, wodRecord, liftRecords) {
 // HISTORIQUE (liste des WOD, filtrable par nom)
 // --------------------------------------------------------------------------
 
-cfFilterSelect.addEventListener("change", () => renderCfHistory());
-cfFilterLevelSelect.addEventListener("change", () => renderCfHistory());
+// Nombre de WOD affichés (augmente avec "Voir plus", revient à 20 au changement de filtre)
+let cfHistoryLimit = HISTORY_PAGE_SIZE;
+const resetCfHistoryLimit = () => { cfHistoryLimit = HISTORY_PAGE_SIZE; };
+
+cfFilterSelect.addEventListener("change", () => { resetCfHistoryLimit(); renderCfHistory(); });
+cfFilterLevelSelect.addEventListener("change", () => { resetCfHistoryLimit(); renderCfHistory(); });
 
 const cfHistorySearch = document.getElementById("cf-history-search");
 const cfLastSeen = document.getElementById("cf-last-seen");
-cfHistorySearch.addEventListener("input", () => renderCfHistory());
+cfHistorySearch.addEventListener("input", () => { resetCfHistoryLimit(); renderCfHistory(); });
 
 /** Nom affichable d'un mouvement, qu'il soit structuré ou en texte libre. */
 function getMovementLabel(entry) {
@@ -616,7 +647,7 @@ function renderCfLastSeen(sessions, query) {
   const lines = matching
     .map((entry) => {
       if (typeof entry === "object" && entry !== null) {
-        const weightText = entry.weight > 0 ? ` à ${escapeHtml(entry.weight)} kg` : "";
+        const weightText = entry.weight > 0 ? ` à ${formatNumberFr(entry.weight)} kg` : "";
         return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${escapeHtml(entry.reps)} reps${weightText}</span>`;
       }
       return `<span>${escapeHtml(entry)}</span>`;
@@ -660,7 +691,7 @@ function renderCfHistory() {
     return;
   }
 
-  sessions.forEach((session) => {
+  sessions.slice(0, cfHistoryLimit).forEach((session) => {
     const card = document.createElement("div");
     card.className = "history-card";
 
@@ -672,7 +703,7 @@ function renderCfHistory() {
           const repsDetail = isAmrap
             ? `${entry.reps} reps × ${session.rounds} tours${entry.extraReps ? ` + ${entry.extraReps}` : ""} = ${totalReps} reps`
             : `${totalReps} reps`;
-          const weightText = entry.weight > 0 ? ` à ${escapeHtml(entry.weight)} kg` : "";
+          const weightText = entry.weight > 0 ? ` à ${formatNumberFr(entry.weight)} kg` : "";
           const volume = typeof computeCrossfitStructuredVolume === "function"
             ? computeCrossfitStructuredVolume(session, entry)
             : 0;
@@ -691,15 +722,17 @@ function renderCfHistory() {
 
     card.innerHTML = `
       <div class="history-card-header">
-        <span class="history-card-title">${escapeHtml(session.wodName)}</span>
+        <span class="history-card-title-group">
+          <span class="history-card-title">${escapeHtml(session.wodName)}</span>
+          ${session.rxOrScaled ? `<span class="badge-rpe ${getLevelBadgeClass(session.rxOrScaled)}">${escapeHtml(session.rxOrScaled)}</span>` : ""}
+        </span>
         <span class="history-card-date">${new Date(session.date).toLocaleDateString("fr-FR")}</span>
       </div>
       ${isSpeSession(session.wodName)
         ? `<p class="history-card-sets">Séance spécifique</p>`
-        : `<p class="history-card-sets">${escapeHtml(session.wodType || "")} — <strong>${escapeHtml(formatWodResult(session))}</strong></p>`}
+        : `<p class="history-card-sets">${escapeHtml(session.wodType || "")}${formatWodResult(session) !== "—" ? ` — <strong>${escapeHtml(formatWodResult(session))}</strong>` : " — sans score"}</p>`}
       ${exercisesHtml}
       ${freeTextHtml}
-      ${session.rxOrScaled ? `<span class="badge-rpe ${getLevelBadgeClass(session.rxOrScaled)}">${escapeHtml(session.rxOrScaled)}</span>` : ""}
       ${session.notes ? `<p class="history-card-notes">${escapeHtml(session.notes)}</p>` : ""}
       <div class="history-card-actions">
         <button type="button" class="btn btn-secondary btn-small hist-repeat-btn">Refaire ce WOD</button>
@@ -725,6 +758,11 @@ function renderCfHistory() {
       if (typeof renderRecords === "function") renderRecords();
     });
     cfHistoryList.appendChild(card);
+  });
+
+  appendShowMoreButton(cfHistoryList, sessions.length - cfHistoryLimit, () => {
+    cfHistoryLimit += HISTORY_PAGE_SIZE;
+    renderCfHistory();
   });
 }
 

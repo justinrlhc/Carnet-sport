@@ -52,6 +52,31 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Historiques longs : on affiche les plus récents par paquets de
+ * HISTORY_PAGE_SIZE, avec un bouton "Voir plus" à la fin de la liste.
+ * onMore est appelée quand on touche le bouton (elle augmente la limite
+ * puis redessine la liste).
+ */
+const HISTORY_PAGE_SIZE = 20;
+
+function appendShowMoreButton(listEl, remaining, onMore) {
+  if (remaining <= 0) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn btn-secondary history-more-btn";
+  button.textContent = `Voir plus (${remaining} de plus)`;
+  button.addEventListener("click", onMore);
+  listEl.appendChild(button);
+}
+
+/** Nombre à la française : 87.5 → "87,5", 1500 → "1 500" (2 décimales max). */
+function formatNumberFr(value, maxDecimals = 2) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return escapeHtml(value);
+  return number.toLocaleString("fr-FR", { maximumFractionDigits: maxDecimals });
+}
+
 /** Raccourci : la date d'aujourd'hui au format "AAAA-MM-JJ", en heure locale. */
 function todayLocalDateString() {
   return toLocalDateString(new Date());

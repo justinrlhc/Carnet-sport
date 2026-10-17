@@ -177,56 +177,107 @@ function renderBodyweightChart() {
 
 let exerciseChartInstance = null;
 
+/**
+ * Les exercices qui ont une vraie progression à montrer : ceux notés en
+ * séries réelles (Musculation, cours de spé) et les tests cardio. Un
+ * exercice vu seulement dans un WOD n'y figure pas : on ne sait pas s'il a
+ * été fait d'une traite, aucune courbe fiable n'est possible.
+ */
+function getChartableExercises() {
+  const lifts = new Set();
+  const cardio = new Set();
+  getAllSessions().forEach((session) => {
+    if (session.type === "musculation") {
+      (session.exercises || []).forEach((entry) => {
+        if (!entry) return;
+        if (entry.kind === "cardio") { if (entry.timeSeconds > 0) cardio.add(entry.exercise); }
+        else if (Array.isArray(entry.sets) && entry.sets.some((set) => set.reps > 0)) lifts.add(entry.exercise);
+      });
+    } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
+      (session.exercises || []).forEach((entry) => {
+        if (typeof entry === "object" && entry !== null && entry.reps > 0) lifts.add(entry.exercise);
+      });
+    }
+  });
+  return { lifts: [...lifts].sort(), cardio: [...cardio].sort() };
+}
+
 function populateStatsExerciseSelect() {
   const select = document.getElementById("stats-exercise-select");
   if (!select) return;
 
-  const exercises = Object.keys(computeMuscuRecords()).sort();
+  const { lifts, cardio } = getChartableExercises();
   const previousValue = select.value;
   select.innerHTML = "";
-  exercises.forEach((ex) => {
+  [...lifts, ...cardio].forEach((ex) => {
     const opt = document.createElement("option");
     opt.value = ex;
-    opt.textContent = ex;
+    opt.textContent = cardio.includes(ex) ? `${ex} (test chrono)` : ex;
     select.appendChild(opt);
   });
-  if (exercises.includes(previousValue)) select.value = previousValue;
+  if ([...lifts, ...cardio].includes(previousValue)) select.value = previousValue;
 }
 
+/**
+ * Ce que mesure la courbe, selon l'exercice :
+ *  - test cardio : le temps (plus bas = mieux) ;
+ *  - exercice au poids du corps : les répétitions max en une série ;
+ *  - exercice avec charge : le 1RM estimé (même règle que partout :
+ *    Epley jusqu'à 10 reps, au-delà la charge soulevée).
+ * Seules les vraies séries comptent (Musculation et cours de spé).
+ */
 function renderExerciseChart() {
   if (!chartsAvailable()) return;
   const canvas = document.getElementById("chart-exercise");
   const select = document.getElementById("stats-exercise-select");
-  if (!canvas || !select || !select.value) return;
+  if (!canvas || !select) return;
+  if (!select.value) {
+    if (exerciseChartInstance) { exerciseChartInstance.destroy(); exerciseChartInstance = null; }
+    return;
+  }
 
-  // Ce graphique est un 1RM ESTIMÉ, qui suppose une vraie série faite d'un
-  // seul tenant. On ne l'alimente donc qu'avec les séances de musculation —
-  // pas avec les exercices structurés d'un WOD, dont on ne peut jamais être
-  // sûr qu'ils ont été faits sans les fractionner (voir stats.js).
+  const name = select.value;
+  const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(name);
   const points = [];
+  let mode = isBW ? "reps" : "load";
 
   getAllSessions().forEach((session) => {
+    let sets = [];
     if (session.type === "musculation") {
-      const entry = (session.exercises || []).find((ex) => ex.exercise === select.value);
-      if (entry && entry.sets && entry.sets.length > 0) {
-        const best = Math.max(...entry.sets.map((set) => estimateOneRepMax(set.weight, set.reps)));
-        points.push({ date: session.date, value: best });
-      }
+      (session.exercises || []).forEach((entry) => {
+        if (!entry || entry.exercise !== name) return;
+        if (entry.kind === "cardio") {
+          mode = "time";
+          if (entry.timeSeconds > 0) points.push({ date: session.date, value: entry.timeSeconds });
+        } else if (Array.isArray(entry.sets)) {
+          sets = sets.concat(entry.sets);
+        }
+      });
     } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
-      // Les cours de spé comptent comme de la musculation (vraies séries)
-      const entries = (session.exercises || []).filter(
-        (ex) => typeof ex === "object" && ex !== null && ex.exercise === select.value && ex.reps > 0 && ex.weight > 0
-      );
-      if (entries.length > 0) {
-        points.push({ date: session.date, value: Math.max(...entries.map((ex) => estimateOneRepMax(ex.weight, ex.reps))) });
-      }
+      sets = (session.exercises || [])
+        .filter((ex) => typeof ex === "object" && ex !== null && ex.exercise === name && ex.reps > 0)
+        .map((ex) => ({ reps: ex.reps, weight: ex.weight || 0 }));
     }
+    if (sets.length === 0 || mode === "time") return;
+    const values = mode === "reps"
+      ? sets.map((set) => set.reps || 0)
+      : sets.filter((set) => set.weight > 0 && set.reps > 0).map((set) => estimateOneRepMax(set.weight, set.reps));
+    if (values.length > 0) points.push({ date: session.date, value: Math.max(...values) });
   });
 
-  points.sort((a, b) => new Date(a.date) - new Date(b.date));
+  points.sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
 
-  const labels = points.map((p) => new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }));
-  const data = points.map((p) => Math.round(p.value));
+  const labels = points.map((p) => parseLocalDate(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }));
+  const data = points.map((p) => (mode === "load" ? Math.round(p.value * 10) / 10 : p.value));
+  const labelByMode = {
+    load: `1RM estimé — ${name} (kg)`,
+    reps: `Reps max en une série — ${name}`,
+    time: `Temps — ${name} (plus bas = mieux)`,
+  };
+
+  const options = getBaseChartOptions();
+  if (mode === "time") options.scales.y.ticks.callback = (value) => formatDuration(value);
+  if (mode === "reps") options.scales.y.ticks.precision = 0;
 
   if (exerciseChartInstance) exerciseChartInstance.destroy();
   exerciseChartInstance = new Chart(canvas, {
@@ -234,15 +285,15 @@ function renderExerciseChart() {
     data: {
       labels,
       datasets: [{
-        label: `1RM estimé — ${select.value} (kg)`,
+        label: labelByMode[mode],
         data,
         borderColor: CHART_COLORS.success,
         backgroundColor: "rgba(76, 175, 125, 0.15)",
-        fill: true,
+        fill: mode !== "time",
         tension: 0.3,
       }],
     },
-    options: getBaseChartOptions(),
+    options,
   });
 }
 

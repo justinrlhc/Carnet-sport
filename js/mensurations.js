@@ -73,6 +73,8 @@ weightCancelEditBtn.addEventListener("click", cancelWeightEdit);
 // HISTORIQUE
 // --------------------------------------------------------------------------
 
+let weightHistoryLimit = HISTORY_PAGE_SIZE;
+
 function renderWeightHistory() {
   const entries = [...getAllBodyweightEntries()].sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -83,12 +85,12 @@ function renderWeightHistory() {
     return;
   }
 
-  entries.forEach((entry) => {
+  entries.slice(0, weightHistoryLimit).forEach((entry) => {
     const card = document.createElement("div");
     card.className = "history-card";
     card.innerHTML = `
       <div class="history-card-header">
-        <span class="history-card-title">${escapeHtml(String(entry.weight).replace(".", ","))} kg</span>
+        <span class="history-card-title">${formatNumberFr(entry.weight, 1)} kg</span>
         <span class="history-card-date">${new Date(entry.date).toLocaleDateString("fr-FR")}</span>
       </div>
       <div class="history-card-actions">
@@ -110,6 +112,11 @@ function renderWeightHistory() {
       if (typeof renderBmiGauge === "function") renderBmiGauge();
     });
     weightHistoryList.appendChild(card);
+  });
+
+  appendShowMoreButton(weightHistoryList, entries.length - weightHistoryLimit, () => {
+    weightHistoryLimit += HISTORY_PAGE_SIZE;
+    renderWeightHistory();
   });
 }
 
@@ -262,7 +269,7 @@ function renderBmiGauge() {
     <div class="bmi-gauge-wrapper">
       ${gaugeSvg}
       <div class="bmi-gauge-value" style="color:${category.color};">
-        ${bmi.toFixed(1)}
+        ${bmi.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
         <span class="bmi-gauge-category">${category.label}</span>
       </div>
     </div>
