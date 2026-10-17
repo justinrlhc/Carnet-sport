@@ -1829,3 +1829,17 @@ button { font-family: inherit; }
 @media (min-width: 721px) {
   .update-banner { left: auto; right: 24px; bottom: 24px; max-width: 420px; }
 }
+
+/* ----- Historiques : badge de niveau à côté du titre, bouton "Voir plus" ----- */
+.history-card-title-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.history-card-title-group .badge-rpe { margin: 0; }
+.history-more-btn {
+  width: 100%;
+  margin-top: 4px;
+}

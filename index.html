@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 
@@ -86,7 +86,7 @@
       </nav>
 
       <div class="sidebar-footer">
-        <span class="hint">Version locale — vos données restent sur cet ordinateur</span>
+        <span class="hint">Tes données restent uniquement sur cet appareil. Pense à exporter une sauvegarde de temps en temps (Réglages).</span>
       </div>
     </aside>
 
@@ -223,6 +223,7 @@
                   <option value="Tabata">Tabata</option>
                   <option value="Autre">Autre</option>
                 </select>
+                <p class="form-hint" id="cf-score-hint" style="display:none;">Score facultatif pour ce format : tu peux enregistrer sans temps ni rounds.</p>
               </div>
 
               <div class="form-row" id="cf-level-row">
@@ -236,8 +237,8 @@
 
               <div class="form-row form-row-inline" id="cf-time-row">
                 <div>
-                  <label for="cf-time">Temps <span class="label-optional">(mm:ss, si "For Time")</span></label>
-                  <input type="text" id="cf-time" placeholder="ex : 6:42">
+                  <label for="cf-time">Temps <span class="label-optional">(si "For Time")</span></label>
+                  <input type="text" id="cf-time" inputmode="decimal" placeholder="ex : 6:42 ou 6,42">
                 </div>
               </div>
 
@@ -281,7 +282,7 @@
               <div class="history-header-filters">
                 <select id="cf-filter-wod"></select>
                 <select id="cf-filter-level">
-                  <option value="all">Tous les niveaux</option>
+                  <option value="all">Tous niveaux</option>
                   <option value="RX">RX</option>
                   <option value="Inter">Inter</option>
                   <option value="Scaled">Scaled</option>
@@ -393,7 +394,7 @@
           </form>
 
           <div id="records-muscu-grid" class="records-grid"></div>
-          <p class="records-footnote">* Le 1RM (charge maximale sur une répétition) est soit saisi directement par toi, soit estimé à partir de tes séries — c'est toujours précisé sur la carte. Une estimation n'est jamais une valeur mesurée.</p>
+          <p class="records-footnote">* Le 1RM (charge maximale sur une répétition) est soit saisi directement par toi, soit estimé à partir de tes séries avec la formule d'Epley — c'est toujours précisé sur la carte. Seules les séries de 10 répétitions maximum servent à l'estimer : au-delà, c'est la charge soulevée qui compte. Une estimation n'est jamais une valeur mesurée.</p>
         </div>
 
         <div class="panel" style="margin-top: 16px;">
@@ -419,8 +420,8 @@
             </div>
             <div class="form-row form-row-inline">
               <div>
-                <label for="manual-cf-time">Temps <span class="label-optional">(mm:ss)</span></label>
-                <input type="text" id="manual-cf-time" placeholder="ex : 5:48">
+                <label for="manual-cf-time">Temps</label>
+                <input type="text" id="manual-cf-time" inputmode="decimal" placeholder="ex : 5:48 ou 5,48">
               </div>
               <div>
                 <label for="manual-cf-date">Date <span class="label-optional">(optionnel)</span></label>
@@ -470,7 +471,7 @@
 
         <div class="panel" style="margin-top: 16px;">
           <div class="stats-chart-header">
-            <h2 class="panel-title">Progression d'un exercice (1RM estimé)</h2>
+            <h2 class="panel-title">Progression d'un exercice</h2>
             <select id="stats-exercise-select"></select>
           </div>
           <div class="chart-container"><canvas id="chart-exercise" height="90"></canvas></div>
@@ -569,15 +570,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=13"></script>
-  <script src="js/musculation.js?v=13"></script>
-  <script src="js/crossfit.js?v=13"></script>
-  <script src="js/mensurations.js?v=13"></script>
-  <script src="js/stats.js?v=13"></script>
-  <script src="js/charts.js?v=13"></script>
-  <script src="js/ranks.js?v=13"></script>
-  <script src="js/settings.js?v=13"></script>
-  <script src="js/app.js?v=13"></script>
+  <script src="js/data.js?v=14"></script>
+  <script src="js/musculation.js?v=14"></script>
+  <script src="js/crossfit.js?v=14"></script>
+  <script src="js/mensurations.js?v=14"></script>
+  <script src="js/stats.js?v=14"></script>
+  <script src="js/charts.js?v=14"></script>
+  <script src="js/ranks.js?v=14"></script>
+  <script src="js/settings.js?v=14"></script>
+  <script src="js/app.js?v=14"></script>
 </body>
 </html>
 
