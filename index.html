@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
 
@@ -118,8 +118,8 @@
             <span class="stat-value" id="stat-volume">—</span>
             <span class="stat-trend" id="stat-volume-trend">Cette semaine</span>
           </div>
-          <div class="stat-card stat-card-accent">
-            <span class="stat-label">Records battus</span>
+          <div class="stat-card stat-card-accent stat-card-link" id="stat-pr-card" role="button" tabindex="0" aria-label="Voir les derniers records battus">
+            <span class="stat-label">Records battus <span class="stat-card-arrow" aria-hidden="true">›</span></span>
             <span class="stat-value" id="stat-pr">—</span>
             <span class="stat-trend" id="stat-pr-trend">ce mois-ci</span>
           </div>
@@ -360,6 +360,15 @@
       <!-- ---------- SECTION : RECORDS ---------- -->
       <section class="section" id="section-records">
 
+        <!-- Fil des derniers records battus (rempli par js/stats.js) -->
+        <div class="panel pr-feed" id="record-feed-panel" style="margin-bottom: 16px;">
+          <div class="records-header">
+            <h2 class="panel-title">Derniers records battus</h2>
+            <span class="pr-feed-count" id="record-feed-count"></span>
+          </div>
+          <div id="record-feed"></div>
+        </div>
+
         <div class="panel">
           <div class="records-header">
             <h2 class="panel-title">Musculation</h2>
@@ -570,15 +579,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=15"></script>
-  <script src="js/musculation.js?v=15"></script>
-  <script src="js/crossfit.js?v=15"></script>
-  <script src="js/mensurations.js?v=15"></script>
-  <script src="js/stats.js?v=15"></script>
-  <script src="js/charts.js?v=15"></script>
-  <script src="js/ranks.js?v=15"></script>
-  <script src="js/settings.js?v=15"></script>
-  <script src="js/app.js?v=15"></script>
+  <script src="js/data.js?v=16"></script>
+  <script src="js/musculation.js?v=16"></script>
+  <script src="js/crossfit.js?v=16"></script>
+  <script src="js/mensurations.js?v=16"></script>
+  <script src="js/stats.js?v=16"></script>
+  <script src="js/charts.js?v=16"></script>
+  <script src="js/ranks.js?v=16"></script>
+  <script src="js/settings.js?v=16"></script>
+  <script src="js/app.js?v=16"></script>
 </body>
 </html>
 
