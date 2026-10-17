@@ -41,6 +41,8 @@ function refreshEntireApp() {
   if (typeof renderProfile === "function") renderProfile();
   if (typeof renderDashboard === "function") renderDashboard();
   renderSexChoice(document.getElementById("settings-sex-choice"), getSex());
+  renderBackupStatus();
+  renderBackupReminder();
 }
 
 // --------------------------------------------------------------------------
@@ -94,7 +96,77 @@ function downloadBackup(json, fileName) {
   link.download = fileName;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  onBackupExported();
   showSettingsFeedback("Export téléchargé ! Range-le dans un endroit sûr (Fichiers, Drive, clé USB...).", false);
+}
+
+// --------------------------------------------------------------------------
+// DERNIÈRE SAUVEGARDE ET RAPPEL
+// --------------------------------------------------------------------------
+
+/** "aujourd'hui", "hier", "il y a 23 jours". */
+function describeDaysAgo(days) {
+  if (days <= 0) return "aujourd'hui";
+  if (days === 1) return "hier";
+  return `il y a ${days} jours`;
+}
+
+/** Ligne "Dernière sauvegarde : …" dans Réglages (en orange quand elle est trop ancienne). */
+function renderBackupStatus() {
+  const el = document.getElementById("backup-status");
+  if (!el) return;
+  const last = getLastExportDate();
+  if (!last) {
+    el.textContent = hasAnyUserData() ? "Dernière sauvegarde : aucune enregistrée depuis cette appli" : "";
+  } else {
+    el.textContent = `Dernière sauvegarde : ${describeDaysAgo(daysSinceDate(last))} (${parseLocalDate(last).toLocaleDateString("fr-FR")})`;
+  }
+  const overdue = hasAnyUserData() && (!last || daysSinceDate(last) >= BACKUP_REMINDER_DAYS);
+  el.classList.toggle("is-overdue", overdue);
+}
+
+/** Petit rappel sur le tableau de bord quand la dernière sauvegarde a plus de 30 jours. */
+function renderBackupReminder() {
+  const el = document.getElementById("backup-reminder");
+  if (!el) return;
+  const state = getBackupReminderState();
+  if (!state.due) {
+    el.style.display = "none";
+    el.innerHTML = "";
+    return;
+  }
+  const message = state.days === null
+    ? "Aucune sauvegarde enregistrée depuis cette appli : tes séances ne sont que sur ce téléphone."
+    : `Ta dernière sauvegarde date de ${state.days} jours. Exporte-la pour ne rien perdre.`;
+  el.innerHTML = `
+    <p class="backup-reminder-text"><strong>Pense à ta sauvegarde</strong>${escapeHtml(message)}</p>
+    <div class="backup-reminder-actions">
+      <button type="button" class="btn btn-primary btn-small" data-backup-action="export">Exporter maintenant</button>
+      <button type="button" class="btn btn-secondary btn-small" data-backup-action="later">Plus tard</button>
+    </div>`;
+  el.style.display = "";
+}
+
+/** Après un export réussi : on note la date et on retire le rappel. */
+function onBackupExported() {
+  markBackupExported();
+  renderBackupStatus();
+  renderBackupReminder();
+}
+
+const backupReminderEl = document.getElementById("backup-reminder");
+if (backupReminderEl) {
+  backupReminderEl.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-backup-action]");
+    if (!button) return;
+    if (button.dataset.backupAction === "later") {
+      snoozeBackupReminder(7);
+      renderBackupReminder();
+    } else {
+      // Même export que dans Réglages (le menu de partage s'ouvre directement)
+      btnExportData.click();
+    }
+  });
 }
 
 btnExportData.addEventListener("click", () => {
@@ -109,7 +181,10 @@ btnExportData.addEventListener("click", () => {
     const file = new File([json], fileName, { type: "application/json" });
     if (navigator.canShare({ files: [file] })) {
       navigator.share({ files: [file], title: "Sauvegarde Carnet" })
-        .then(() => showSettingsFeedback("Sauvegarde partagée ! Vérifie qu'elle est bien dans Fichiers.", false))
+        .then(() => {
+          onBackupExported();
+          showSettingsFeedback("Sauvegarde partagée ! Vérifie qu'elle est bien dans Fichiers.", false);
+        })
         .catch((error) => {
           if (error && error.name === "AbortError") return; // tu as fermé le menu : rien à faire
           downloadBackup(json, fileName);
@@ -200,7 +275,10 @@ importFileInput.addEventListener("change", () => {
   reader.onload = () => {
     const result = importAllData(reader.result);
     if (result.success) {
-      showSettingsFeedback("Sauvegarde importée avec succès !", false);
+      const skippedText = result.skipped > 0
+        ? ` ${result.skipped} élément${result.skipped > 1 ? "s" : ""} illisible${result.skipped > 1 ? "s" : ""} mis de côté.`
+        : "";
+      showSettingsFeedback("Sauvegarde importée avec succès !" + skippedText, false);
       if (fromOnboarding) {
         markOnboardingDone();
         hideOnboarding();
@@ -365,3 +443,7 @@ function setupOnboarding() {
 }
 
 setupOnboarding();
+
+// État de la sauvegarde au démarrage (Réglages + rappel du tableau de bord)
+renderBackupStatus();
+renderBackupReminder();

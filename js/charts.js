@@ -102,9 +102,9 @@ function buildWeeklyBuckets(nbWeeks) {
 function computeWeeklyVolumeSeries(nbWeeks) {
   const sessions = getAllSessions(); // musculation ET crossfit : computeSessionVolume gère les deux
   return buildWeeklyBuckets(nbWeeks).map(({ start, end }) =>
-    sessions
+    Math.round(sessions
       .filter((s) => { const d = parseLocalDate(s.date); return d >= start && d <= end; })
-      .reduce((total, s) => total + computeSessionVolume(s), 0)
+      .reduce((total, s) => total + computeSessionVolume(s), 0))
   );
 }
 
@@ -443,16 +443,27 @@ function buildAttendanceHeatmapHtml(nbWeeks) {
     const weekStart = new Date(firstWeekStart);
     weekStart.setDate(weekStart.getDate() + w * 7);
 
-    // On repère un changement de mois, mais on ne l'affiche que s'il y a
-    // assez de place depuis la dernière étiquette affichée, sinon le texte
-    // du mois précédent et celui du suivant se chevauchent.
-    const monthLabel = weekStart.toLocaleDateString("fr-FR", { month: "short" });
+    // Le nom d'un mois s'affiche au-dessus de la colonne qui contient son
+    // 1er jour (la toute première colonne porte le mois de son lundi). On ne
+    // l'affiche que s'il y a assez de place depuis la dernière étiquette,
+    // sinon le texte du mois précédent et celui du suivant se chevauchent.
+    let labelDate = w === 0 ? new Date(weekStart) : null;
+    for (let d = 0; d < 7 && !labelDate; d++) {
+      const day = new Date(weekStart);
+      day.setDate(day.getDate() + d);
+      if (day.getDate() === 1) labelDate = day;
+    }
+    const monthLabel = labelDate ? labelDate.toLocaleDateString("fr-FR", { month: "short" }) : lastMonthLabel;
     const isNewMonth = monthLabel !== lastMonthLabel;
     if (isNewMonth) lastMonthLabel = monthLabel;
 
-    // Pas d'étiquette dans les 2 dernières colonnes : elle serait coupée au bord droit
     if (isNewMonth && (w - lastPrintedColumnIndex) >= MIN_GAP_BETWEEN_LABELS && w <= nbWeeks - 3) {
       monthsHtml += `<span class="hm-month-label">${monthLabel}</span>`;
+      lastPrintedColumnIndex = w;
+    } else if (isNewMonth && w > nbWeeks - 3 && (w - lastPrintedColumnIndex) >= MIN_GAP_BETWEEN_LABELS + 1) {
+      // Mois qui commence dans les 2 dernières colonnes (le mois en cours) :
+      // l'étiquette est calée à droite pour ne pas être coupée au bord
+      monthsHtml += `<span class="hm-month-label hm-month-label-end">${monthLabel}</span>`;
       lastPrintedColumnIndex = w;
     } else {
       monthsHtml += `<span class="hm-month-label"></span>`;

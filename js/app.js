@@ -108,6 +108,9 @@ document.querySelectorAll(".modal-choice").forEach((button) => {
 // chargé avant ce fichier, pour pouvoir être réutilisées par les graphiques aussi)
 
 function renderDashboard() {
+  // Rappel de sauvegarde (settings.js), en haut du tableau de bord
+  if (typeof renderBackupReminder === "function") renderBackupReminder();
+
   const sessions = getAllSessions();
   const bodyweightEntries = getAllBodyweightEntries();
 
@@ -148,7 +151,8 @@ function renderDashboard() {
     sessionsThisWeek.length > 0 ? "Continue comme ça" : "Aucune séance encore";
 
   // ----- Volume d'entraînement (cette semaine) -----
-  const weeklyVolume = sessionsThisWeek.reduce((total, s) => total + computeSessionVolume(s), 0);
+  // Arrondi au kilo : le poids de corps (ex : 55,2 kg) donne sinon des décimales inutiles
+  const weeklyVolume = Math.round(sessionsThisWeek.reduce((total, s) => total + computeSessionVolume(s), 0));
   document.getElementById("stat-volume").innerHTML =
     `${weeklyVolume.toLocaleString("fr-FR")} <small>kg</small>`;
 
@@ -229,6 +233,9 @@ function formatRelativeDate(dateStr) {
 // --------------------------------------------------------------------------
 
 renderDashboard();
+// Lignes "Dernière fois" du formulaire de musculation : les records sont
+// calculés par stats.js, chargé après musculation.js
+if (typeof refreshExerciseLastSeen === "function") refreshExerciseLastSeen();
 
 // --------------------------------------------------------------------------
 // 4. MODE HORS LIGNE ET INSTALLATION

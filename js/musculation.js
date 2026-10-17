@@ -57,7 +57,9 @@ const MEASURED_EXERCISES = {
   "SkiErg": ["cal", "m"],
   "Assault Bike": ["cal"],
   "Echo Bike": ["cal"],
+  "BikeErg": ["cal", "m"],
   "Run": ["m"],
+  "Shuttle Run": ["m"],
   "Handstand Walk": ["m"],
 };
 const UNIT_LABELS = { reps: "reps", cal: "cal", m: "m" };
@@ -154,6 +156,7 @@ const SEARCH_KEYWORD_ALIASES = {
   "under": "corde à sauter",
   "farmer": "marche du fermier",
   "bike": "vélo",
+  "shuttle": "navette",
   "ski": "skierg",
   "kettlebell": "kettlebell",
   "hip thrust": "fessiers",
@@ -368,6 +371,110 @@ function createSetRow() {
 }
 
 // --------------------------------------------------------------------------
+// AFFICHAGE COMPACT DES SÉRIES
+// Les séries identiques qui se suivent sont regroupées :
+// [70×5, 70×5, 70×5, 75×3] → "3 × 5 à 70 kg · 1 × 3 à 75 kg"
+// (séries × reps à charge). Poids du corps : "3 × 8 reps", ou "lesté".
+// --------------------------------------------------------------------------
+
+function formatSetsCompact(sets, isBW) {
+  const groups = [];
+  (Array.isArray(sets) ? sets : []).forEach((set) => {
+    if (!set) return;
+    const reps = Number(set.reps) || 0;
+    const weight = Number(set.weight) || 0;
+    const last = groups[groups.length - 1];
+    if (last && last.reps === reps && last.weight === weight) last.count += 1;
+    else groups.push({ reps, weight, count: 1 });
+  });
+  return groups
+    .map(({ count, reps, weight }) => (weight > 0
+      ? `${count} × ${reps} ${isBW ? "lesté" : "à"} ${formatNumberFr(weight)} kg`
+      : `${count} × ${reps} rep${reps > 1 ? "s" : ""}`))
+    .join(" · ");
+}
+
+/** "12/10" (avec l'année si ce n'est pas l'année en cours : "12/10/2025"). */
+function formatShortDate(dateStr) {
+  const date = parseLocalDate(dateStr);
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString("fr-FR", sameYear ? { day: "2-digit", month: "2-digit" } : { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+// --------------------------------------------------------------------------
+// "DERNIÈRE FOIS" DANS LE FORMULAIRE
+// Sous chaque exercice choisi : ta dernière perf sur cet exercice et ton
+// record, pour savoir quoi charger sans aller fouiller l'historique.
+// --------------------------------------------------------------------------
+
+/** Séances de la plus récente à la plus ancienne (à date égale : la dernière ajoutée d'abord). */
+function getSessionsNewestFirst(excludeSessionId) {
+  return getAllSessions()
+    .map((session, index) => ({ session, index }))
+    .filter(({ session }) => session && session.id !== excludeSessionId && Array.isArray(session.exercises))
+    .sort((a, b) => (a.session.date < b.session.date ? 1 : a.session.date > b.session.date ? -1 : b.index - a.index))
+    .map(({ session }) => session);
+}
+
+/** Dernière fois qu'un exercice a été fait : séries (musculation) ou ligne de WOD. null si jamais. */
+function getLastExercisePerformance(name, excludeSessionId) {
+  if (!name) return null;
+  for (const session of getSessionsNewestFirst(excludeSessionId)) {
+    if (session.type === "musculation") {
+      const entry = session.exercises.find((e) => e && e.exercise === name && !isCardioEntry(e) && Array.isArray(e.sets) && e.sets.length > 0);
+      if (entry) return { source: "muscu", date: session.date, sets: entry.sets };
+    } else if (session.type === "crossfit") {
+      const entry = session.exercises.find((e) => e && typeof e === "object" && e.exercise === name && getEntryUnit(e) === "reps" && e.reps > 0);
+      if (entry) {
+        const perRound = session.wodType === "AMRAP" && typeof session.rounds === "number";
+        return { source: "wod", date: session.date, wodName: session.wodName, reps: entry.reps, weight: entry.weight || 0, perRound };
+      }
+    }
+  }
+  return null;
+}
+
+/** Record actuel d'un exercice, en texte ("1RM estimé : 93 kg", "Record : 10 reps"), ou "". */
+function describeExerciseRecord(name) {
+  if (!name || typeof computeMuscuRecords !== "function") return "";
+  const record = computeMuscuRecords()[name];
+  if (isBodyweightExercise(name)) {
+    const manual = typeof getManualReps === "function" ? getManualReps()[name] : null;
+    const best = Math.max(record && record.maxReps ? record.maxReps.value : 0, manual ? Number(manual.reps) || 0 : 0);
+    return best > 0 ? `Record : ${best} rep${best > 1 ? "s" : ""}` : "";
+  }
+  const estimate = record && record.oneRM ? record.oneRM.value : 0;
+  const manual = typeof getManualOneRMs === "function" && getManualOneRMs()[name] ? Number(getManualOneRMs()[name].weight) || 0 : 0;
+  if (manual > 0 && manual >= estimate) return `1RM noté : ${formatNumberFr(manual)} kg`;
+  if (estimate > 0) return `1RM estimé : ${formatNumberFr(Math.round(estimate))} kg`;
+  return "";
+}
+
+/** Dernier temps et record d'un test cardio. */
+function getCardioLastAndBest(name, excludeSessionId) {
+  let last = null;
+  let best = null;
+  for (const session of getSessionsNewestFirst(excludeSessionId)) {
+    if (session.type !== "musculation") continue;
+    session.exercises.forEach((e) => {
+      if (!e || !isCardioEntry(e) || e.exercise !== name || !(e.timeSeconds > 0)) return;
+      if (!last) last = { date: session.date, timeSeconds: e.timeSeconds };
+      if (best === null || e.timeSeconds < best) best = e.timeSeconds;
+    });
+  }
+  const manual = typeof getManualTimes === "function" ? getManualTimes()[name] : null;
+  if (manual && manual.timeSeconds > 0 && (best === null || manual.timeSeconds < best)) best = manual.timeSeconds;
+  return { last, best };
+}
+
+/** Remet à jour la ligne "Dernière fois" de tous les blocs du formulaire. */
+function refreshExerciseLastSeen() {
+  muscuExercisesList.querySelectorAll(".exercise-block").forEach((block) => {
+    if (typeof block.refreshLastSeen === "function") block.refreshLastSeen();
+  });
+}
+
+// --------------------------------------------------------------------------
 // BLOCS EXERCICE (un bloc = un exercice avec ses séries et son RPE)
 // --------------------------------------------------------------------------
 
@@ -381,6 +488,7 @@ function createExerciseBlock(prefill) {
       <input type="text" class="exercise-block-custom form-input-spaced" placeholder="Nom de l'exercice" style="display:none;">
       <button type="button" class="exercise-block-remove" title="Supprimer cet exercice">✕</button>
     </div>
+    <div class="exercise-last-seen" style="display:none;"></div>
     <p class="exercise-block-hint" style="display:none;">Poids de corps : la charge est facultative — ajoute un lest si tu es lesté.</p>
     <div class="exercise-block-sets sets-list"></div>
     <button type="button" class="exercise-block-add-set btn btn-secondary btn-small">+ Ajouter une série</button>
@@ -397,6 +505,8 @@ function createExerciseBlock(prefill) {
   const addSetBtn = block.querySelector(".exercise-block-add-set");
   const removeBtn = block.querySelector(".exercise-block-remove");
   const rpeInput = block.querySelector(".exercise-block-rpe");
+  const lastSeenEl = block.querySelector(".exercise-last-seen");
+  let lastPerformance = null;
 
   populateExerciseSelectElement(select);
 
@@ -405,14 +515,67 @@ function createExerciseBlock(prefill) {
     return select.value === "__custom__" ? customInput.value.trim() : select.value;
   }
 
-  /** Adapte l'indice et les placeholders "Poids" selon que l'exercice est au poids du corps ou non. */
+  /**
+   * Adapte le bloc à l'exercice choisi : indice "poids du corps", ligne
+   * "Dernière fois" (+ record) et charges de la dernière fois en grisé
+   * dans les cases vides (ce n'est qu'un repère : rien n'est enregistré
+   * tant que tu n'as pas tapé la valeur).
+   */
   function updateBodyweightUI() {
-    const isBW = isBodyweightExercise(getBlockExerciseName());
+    const name = getBlockExerciseName();
+    const isBW = isBodyweightExercise(name);
     hint.style.display = isBW ? "block" : "none";
-    setsList.querySelectorAll(".set-weight").forEach((input) => {
-      input.placeholder = isBW ? "Lest (kg)" : "kg";
+
+    lastPerformance = getLastExercisePerformance(name, muscuEditingId);
+    const lastSets = lastPerformance && lastPerformance.source === "muscu" ? lastPerformance.sets : [];
+    setsList.querySelectorAll(".set-row").forEach((row, index) => {
+      const reference = lastSets.length ? lastSets[Math.min(index, lastSets.length - 1)] : null;
+      const input = row.querySelector(".set-weight");
+      input.placeholder = reference && reference.weight > 0
+        ? formatNumberFr(reference.weight)
+        : (isBW ? "Lest (kg)" : "kg");
     });
+
+    const record = describeExerciseRecord(name);
+    if (!lastPerformance && !record) {
+      lastSeenEl.style.display = "none";
+      lastSeenEl.innerHTML = "";
+      return;
+    }
+    let lastText = "";
+    if (lastPerformance && lastPerformance.source === "muscu") {
+      lastText = formatSetsCompact(lastPerformance.sets, isBW);
+    } else if (lastPerformance) {
+      const amount = `${lastPerformance.reps} rep${lastPerformance.reps > 1 ? "s" : ""}${lastPerformance.perRound ? "/tour" : ""}`;
+      const load = lastPerformance.weight > 0 ? ` ${isBW ? "lesté" : "à"} ${formatNumberFr(lastPerformance.weight)} kg` : "";
+      lastText = `${amount}${load} (${lastPerformance.wodName || "WOD"})`;
+    }
+    lastSeenEl.innerHTML = `
+      ${lastPerformance ? `<span class="exercise-last-seen-text"><strong>Dernière fois</strong> · ${escapeHtml(formatShortDate(lastPerformance.date))} : ${escapeHtml(lastText)}</span>` : ""}
+      ${record ? `<span class="exercise-last-seen-record">${escapeHtml(record)}</span>` : ""}
+      ${lastSets.length ? `<button type="button" class="exercise-last-seen-reuse">Reprendre ces séries</button>` : ""}`;
+    lastSeenEl.style.display = "";
+    const reuse = lastSeenEl.querySelector(".exercise-last-seen-reuse");
+    if (reuse) reuse.addEventListener("click", () => reuseLastSets(lastSets));
   }
+
+  /** Recopie les séries de la dernière fois dans les lignes vides (en ajoute si besoin). */
+  function reuseLastSets(lastSets) {
+    lastSets.forEach((set, index) => {
+      let row = setsList.querySelectorAll(".set-row")[index];
+      if (!row) {
+        row = createSetRow();
+        setsList.appendChild(row);
+      }
+      const repsInput = row.querySelector(".set-reps");
+      const weightInput = row.querySelector(".set-weight");
+      if (repsInput.value.trim() || weightInput.value.trim()) return; // ligne déjà remplie : on n'y touche pas
+      repsInput.value = set.reps;
+      weightInput.value = set.weight > 0 ? set.weight : "";
+    });
+    updateBodyweightUI();
+  }
+  block.refreshLastSeen = updateBodyweightUI;
 
   select.addEventListener("change", () => {
     const isCustom = select.value === "__custom__";
@@ -474,6 +637,7 @@ function createCardioBlock(prefill) {
       <select class="exercise-block-select cardio-block-select" aria-label="Test cardio"></select>
       <button type="button" class="exercise-block-remove" title="Supprimer ce test">✕</button>
     </div>
+    <div class="exercise-last-seen" style="display:none;"></div>
     <div class="form-row" style="margin-bottom: 0;">
       <label>Temps réalisé</label>
       <!-- Deux champs séparés : le pavé numérique de l'iPhone n'a pas de touche ":" -->
@@ -487,6 +651,23 @@ function createCardioBlock(prefill) {
   `;
   const select = block.querySelector(".cardio-block-select");
   CARDIO_TESTS.forEach((name) => select.appendChild(createExerciseOption(name)));
+  const lastSeenEl = block.querySelector(".exercise-last-seen");
+
+  /** "Dernière fois · 12/10 : 8:02" et le record du test choisi. */
+  function updateCardioLastSeen() {
+    const { last, best } = getCardioLastAndBest(select.value, muscuEditingId);
+    if (!last && best === null) {
+      lastSeenEl.style.display = "none";
+      lastSeenEl.innerHTML = "";
+      return;
+    }
+    lastSeenEl.innerHTML = `
+      ${last ? `<span class="exercise-last-seen-text"><strong>Dernière fois</strong> · ${escapeHtml(formatShortDate(last.date))} : ${formatDuration(last.timeSeconds)}</span>` : ""}
+      ${best !== null ? `<span class="exercise-last-seen-record">Record : ${formatDuration(best)}</span>` : ""}`;
+    lastSeenEl.style.display = "";
+  }
+  select.addEventListener("change", updateCardioLastSeen);
+  block.refreshLastSeen = updateCardioLastSeen;
   block.querySelector(".exercise-block-remove").addEventListener("click", () => {
     if (muscuExercisesList.children.length <= 1) {
       showMuscuFeedback("Une séance doit contenir au moins un exercice.", true);
@@ -511,6 +692,7 @@ function createCardioBlock(prefill) {
       block.querySelector(".cardio-block-sec").value = String(seconds).replace(".", ",");
     }
   }
+  updateCardioLastSeen();
   return block;
 }
 
@@ -562,15 +744,38 @@ muscuForm.addEventListener("submit", (event) => {
     }
 
     const isBW = isBodyweightExercise(exerciseName);
-    const sets = [...block.querySelectorAll(".set-row")]
-      .map((row) => ({
-        reps: Number(row.querySelector(".set-reps").value) || 0,
-        weight: Number(row.querySelector(".set-weight").value) || 0,
-      }))
-      // Pour un exercice au poids du corps, une série est valide dès qu'il y a
-      // des répétitions — la charge (un éventuel lest) reste optionnelle.
-      // Pour un exercice avec barre/haltères, on garde l'exigence habituelle.
-      .filter((set) => (isBW ? set.reps > 0 : set.reps > 0 && set.weight > 0));
+    // Une ligne entièrement vide est ignorée (on n'est pas obligé de remplir
+    // les 3 lignes proposées). Une ligne à moitié remplie, en revanche, n'est
+    // jamais jetée en silence : on dit exactement ce qui manque.
+    // Pour un exercice au poids du corps, la charge (un éventuel lest) reste
+    // facultative ; avec barre/haltères, elle est obligatoire.
+    const sets = [];
+    const rows = [...block.querySelectorAll(".set-row")];
+    for (let i = 0; i < rows.length; i++) {
+      const repsText = rows[i].querySelector(".set-reps").value.trim();
+      const weightText = rows[i].querySelector(".set-weight").value.trim().replace(",", ".");
+      if (!repsText && !weightText) continue;
+      const label = `Série ${i + 1} de ${exerciseName}`;
+      const reps = Number(repsText);
+      const weight = weightText ? Number(weightText) : 0;
+      if (!repsText) {
+        showMuscuFeedback(`${label} : il manque le nombre de reps.`, true);
+        return;
+      }
+      if (!Number.isInteger(reps) || reps <= 0) {
+        showMuscuFeedback(`${label} : le nombre de reps doit être un nombre entier.`, true);
+        return;
+      }
+      if (!isBW && !weightText) {
+        showMuscuFeedback(`${label} : il manque la charge (kg).`, true);
+        return;
+      }
+      if (!Number.isFinite(weight) || weight < 0 || (!isBW && weight === 0)) {
+        showMuscuFeedback(`${label} : la charge n'est pas valide.`, true);
+        return;
+      }
+      sets.push({ reps, weight });
+    }
 
     if (sets.length === 0) {
       showMuscuFeedback(`Merci de renseigner au moins une série pour ${exerciseName}.`, true);
@@ -598,10 +803,11 @@ muscuForm.addEventListener("submit", (event) => {
     showMuscuFeedback("Séance mise à jour !", false);
   } else {
     const recordsBefore = typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {};
+    const cardioBestsBefore = typeof computeCardioTestBests === "function" ? computeCardioTestBests() : {};
     addSession(sessionData);
 
     const newRecords = typeof detectMuscuNewRecords === "function"
-      ? detectMuscuNewRecords(recordsBefore, exercises, sessionData.date)
+      ? detectMuscuNewRecords(recordsBefore, exercises, sessionData.date, cardioBestsBefore)
       : [];
 
     // Si la séance contient un exercice au poids du corps mais qu'aucun poids
@@ -637,7 +843,7 @@ function showMuscuFeedback(message, isError) {
 
 /** Affiche un badge mis en avant quand la séance qu'on vient d'enregistrer bat un record. */
 function showMuscuRecordBadge(newRecords) {
-  const list = newRecords.map((r) => `${escapeHtml(r.exercise)} : ${formatNumberFr(r.value)} kg`).join(" · ");
+  const list = newRecords.map((r) => `${escapeHtml(r.exercise)} : ${escapeHtml(r.text || `${formatNumberFr(r.value)} kg`)}`).join(" · ");
   muscuFeedback.innerHTML = `
     <span class="record-badge">
       <svg viewBox="0 0 24 24" class="record-badge-icon"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>
@@ -726,14 +932,12 @@ function renderMuscuLastSeen(sessions, query) {
       if (isCardioEntry(entry)) {
         return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${formatDuration(entry.timeSeconds)}</span>`;
       }
-      const setsText = escapeHtml((entry.sets || [])
-        .map((s) => (s.weight > 0 ? `${formatNumberFr(s.weight)} kg × ${s.reps}` : `${s.reps} reps`))
-        .join(" · "));
+      const setsText = escapeHtml(formatSetsCompact(entry.sets, isBodyweightExercise(entry.exercise)));
       return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${setsText}</span>`;
     })
     .join("");
   muscuLastSeen.innerHTML = `
-    <span class="history-last-seen-title">Dernière fois : ${new Date(latest.date).toLocaleDateString("fr-FR")}</span>
+    <span class="history-last-seen-title">Dernière fois : ${parseLocalDate(latest.date).toLocaleDateString("fr-FR")}</span>
     ${lines}`;
   muscuLastSeen.style.display = "flex";
 }
@@ -769,9 +973,7 @@ function renderMuscuHistory() {
             <span class="history-card-sets">Test chrono : ${formatDuration(entry.timeSeconds)}</span>
           </div>`;
         }
-        const setsText = escapeHtml((entry.sets || [])
-          .map((s) => (s.weight > 0 ? `${formatNumberFr(s.weight)} kg × ${s.reps}` : `${s.reps} reps`))
-          .join(" · "));
+        const setsText = escapeHtml(formatSetsCompact(entry.sets, isBodyweightExercise(entry.exercise)));
         return `
           <div class="history-card-exercise">
             <span class="history-card-exercise-name">${escapeHtml(entry.exercise)}</span>
@@ -807,6 +1009,7 @@ function renderMuscuHistory() {
       if (!confirmed) return;
       deleteSession(session.id);
       renderMuscuHistory();
+      refreshExerciseLastSeen(); // la "dernière fois" a peut-être changé
       if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
       if (typeof renderDashboard === "function") renderDashboard();
       if (typeof renderRecords === "function") renderRecords();

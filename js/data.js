@@ -132,7 +132,8 @@ function getAllSessions() {
   const raw = localStorage.getItem(STORAGE_KEY_SESSIONS);
   if (!raw) return [];
   try {
-    return JSON.parse(raw);
+    const sessions = JSON.parse(raw);
+    return Array.isArray(sessions) ? sessions : [];
   } catch (error) {
     console.error("Impossible de lire les séances enregistrées :", error);
     return [];
@@ -193,7 +194,8 @@ function getAllBodyweightEntries() {
   const raw = localStorage.getItem(STORAGE_KEY_BODYWEIGHT);
   if (!raw) return [];
   try {
-    return JSON.parse(raw);
+    const entries = JSON.parse(raw);
+    return Array.isArray(entries) ? entries : [];
   } catch (error) {
     console.error("Impossible de lire le poids de corps :", error);
     return [];
@@ -254,6 +256,37 @@ function getCurrentBodyweight() {
   if (entries.length === 0) return null;
   const sorted = [...entries].sort((a, b) => new Date(a.date) - new Date(b.date));
   return sorted[sorted.length - 1].weight;
+}
+
+// Pesées triées par date, gardées en mémoire tant qu'elles ne changent pas
+// (le volume de chaque séance en a besoin : on évite de relire à chaque fois).
+let bodyweightCacheRaw = null;
+let bodyweightCacheSorted = [];
+
+/**
+ * Poids de corps À UNE DATE donnée : la dernière pesée faite ce jour-là ou
+ * avant. Si la date est antérieure à ta toute première pesée, on prend
+ * celle-ci (la plus proche). null si aucune pesée n'existe.
+ * Sert au volume des exercices au poids du corps : une séance d'il y a
+ * 3 mois garde le volume calculé avec ton poids d'il y a 3 mois.
+ */
+function getBodyweightAt(dateStr) {
+  const raw = localStorage.getItem(STORAGE_KEY_BODYWEIGHT);
+  if (raw !== bodyweightCacheRaw) {
+    bodyweightCacheRaw = raw;
+    bodyweightCacheSorted = getAllBodyweightEntries()
+      .filter((e) => e && typeof e.date === "string" && Number(e.weight) > 0)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  }
+  const sorted = bodyweightCacheSorted;
+  if (sorted.length === 0) return null;
+  if (!dateStr) return Number(sorted[sorted.length - 1].weight);
+  let found = sorted[0];
+  for (const entry of sorted) {
+    if (entry.date <= dateStr) found = entry;
+    else break;
+  }
+  return Number(found.weight);
 }
 
 // --------------------------------------------------------------------------
@@ -508,9 +541,67 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_KEY_SEX);
   // L'appli redevient neuve : l'accueil reviendra à la prochaine ouverture
   localStorage.removeItem(STORAGE_KEY_ONBOARDED);
+  localStorage.removeItem(STORAGE_KEY_LAST_EXPORT);
+  localStorage.removeItem(STORAGE_KEY_BACKUP_SNOOZE);
   // Rangs et succès : on repart de zéro aussi
   localStorage.removeItem("carnet_achievements");
   localStorage.removeItem("carnet_rank_snapshot");
+}
+
+// --------------------------------------------------------------------------
+// DATE DE LA DERNIÈRE SAUVEGARDE (pour le rappel d'export)
+// --------------------------------------------------------------------------
+
+const STORAGE_KEY_LAST_EXPORT = "carnet_last_export";
+const STORAGE_KEY_BACKUP_SNOOZE = "carnet_backup_snooze";
+const BACKUP_REMINDER_DAYS = 30;
+
+function getLastExportDate() {
+  const value = localStorage.getItem(STORAGE_KEY_LAST_EXPORT);
+  return isValidDateString(value) ? value : null;
+}
+
+function markBackupExported(dateStr) {
+  localStorage.setItem(STORAGE_KEY_LAST_EXPORT, dateStr || todayLocalDateString());
+  localStorage.removeItem(STORAGE_KEY_BACKUP_SNOOZE);
+}
+
+/** Nombre de jours entiers entre une date "AAAA-MM-JJ" et aujourd'hui. */
+function daysSinceDate(dateStr) {
+  const today = parseLocalDate(todayLocalDateString());
+  return Math.round((today - parseLocalDate(dateStr)) / 86400000);
+}
+
+/** Date de la toute première donnée enregistrée (séance ou pesée), ou null. */
+function getOldestDataDate() {
+  const dates = [
+    ...getAllSessions().map((s) => s && s.date),
+    ...getAllBodyweightEntries().map((e) => e && e.date),
+  ].filter(isValidDateString).sort();
+  return dates.length ? dates[0] : null;
+}
+
+/**
+ * Faut-il rappeler d'exporter ? Oui si la dernière sauvegarde date de plus
+ * de 30 jours, ou si tu n'as jamais exporté alors que tes premières données
+ * ont plus de 30 jours. "Plus tard" repousse le rappel de 7 jours.
+ * Renvoie { due, days (null = jamais) }.
+ */
+function getBackupReminderState() {
+  const last = getLastExportDate();
+  const days = last ? daysSinceDate(last) : null;
+  if (!hasAnyUserData()) return { due: false, days };
+  const snooze = localStorage.getItem(STORAGE_KEY_BACKUP_SNOOZE);
+  if (isValidDateString(snooze) && daysSinceDate(snooze) < 0) return { due: false, days };
+  if (last) return { due: days >= BACKUP_REMINDER_DAYS, days };
+  const oldest = getOldestDataDate();
+  return { due: Boolean(oldest) && daysSinceDate(oldest) >= BACKUP_REMINDER_DAYS, days };
+}
+
+function snoozeBackupReminder(nbDays) {
+  const until = parseLocalDate(todayLocalDateString());
+  until.setDate(until.getDate() + nbDays);
+  localStorage.setItem(STORAGE_KEY_BACKUP_SNOOZE, toLocalDateString(until));
 }
 
 // --------------------------------------------------------------------------
@@ -557,11 +648,12 @@ function importAllData(jsonString) {
     return { success: false, error: "Ce fichier ne ressemble pas à une sauvegarde de Carnet." };
   }
 
-  saveAllSessions(payload.sessions || []);
-  saveAllBodyweightEntries(payload.bodyweight || []);
-  localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(payload.manualOneRMs || {}));
-  localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(payload.manualCfBests || {}));
+  // Écrits tels quels : ensureDataSanitized() les répare juste après
+  localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(payload.sessions));
+  localStorage.setItem(STORAGE_KEY_BODYWEIGHT, JSON.stringify(Array.isArray(payload.bodyweight) ? payload.bodyweight : []));
   const asObject = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
+  localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(asObject(payload.manualOneRMs)));
+  localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(asObject(payload.manualCfBests)));
   localStorage.setItem(STORAGE_KEY_MANUAL_REPS, JSON.stringify(asObject(payload.manualReps)));
   localStorage.setItem(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(asObject(payload.manualTimes)));
   if (payload.heightCm) setHeight(payload.heightCm);
@@ -573,10 +665,24 @@ function importAllData(jsonString) {
   localStorage.setItem("carnet_achievements", JSON.stringify(achievements));
   // La "photo" des rangs est recalculée sans annonce au prochain calcul
   localStorage.removeItem("carnet_rank_snapshot");
+  // Le fichier importé EST une sauvegarde : ses données sont à l'abri depuis
+  // la date où il a été créé (sinon le rappel d'export viendrait aussitôt)
+  const exportedAt = typeof payload.exportedAt === "string" ? new Date(payload.exportedAt) : null;
+  if (exportedAt && !isNaN(exportedAt.getTime())) {
+    const exportedDay = toLocalDateString(exportedAt);
+    const last = getLastExportDate();
+    if (!last || exportedDay > last) localStorage.setItem(STORAGE_KEY_LAST_EXPORT, exportedDay);
+  }
+
+  // Réparation des données importées (une sauvegarde peut être abîmée),
+  // puis mêmes mises à niveau qu'au démarrage
+  const skipped = ensureDataSanitized();
+  ensureBodyweightIds();
+  ensureMuscuSessionsMigrated();
   // Une sauvegarde d'avant la version 18 a encore des noms en français
   ensureExerciseRenames();
 
-  return { success: true };
+  return { success: true, skipped };
 }
 
 // --------------------------------------------------------------------------
@@ -651,7 +757,200 @@ function ensureExerciseRenames() {
   });
 }
 
+// --------------------------------------------------------------------------
+// NETTOYAGE DES DONNÉES (au démarrage et à chaque import)
+// Une sauvegarde abîmée ou modifiée à la main (séance sans date, série
+// vide, nombre écrit en texte...) ne doit jamais bloquer l'appli. On répare
+// ce qui peut l'être (nombres en texte, identifiant manquant...) et on met
+// de côté ce qui est illisible, sans le détruire : une copie est gardée
+// dans "carnet_rejected_items" pour pouvoir le récupérer si besoin.
+// --------------------------------------------------------------------------
+
+const STORAGE_KEY_REJECTED = "carnet_rejected_items";
+const SANITIZE_DAILY_WOD_LABEL = "WOD du jour";
+
+function isValidDateString(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = parseLocalDate(value);
+  return !isNaN(date.getTime()) && toLocalDateString(date) === value;
+}
+
+/** Nombre lu dans un champ (accepte "80" ou "42,5") ; fallback si vide ou illisible. */
+function readStoredNumber(value, fallback) {
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") return fallback;
+  const number = typeof value === "string" ? Number(value.trim().replace(",", ".")) : Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+const isPlainObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const cleanName = (value) => (typeof value === "string" ? value.trim() : "");
+
+function sanitizeMuscuEntry(entry) {
+  if (!isPlainObject(entry)) return null;
+  const exercise = cleanName(entry.exercise);
+  if (!exercise) return null;
+  if (entry.kind === "cardio") {
+    const timeSeconds = readStoredNumber(entry.timeSeconds, 0);
+    return timeSeconds > 0 ? { ...entry, exercise, timeSeconds } : null;
+  }
+  const sets = (Array.isArray(entry.sets) ? entry.sets : [])
+    .filter(isPlainObject)
+    .map((set) => ({ ...set, reps: readStoredNumber(set.reps, 0), weight: Math.max(0, readStoredNumber(set.weight, 0)) }))
+    .filter((set) => set.reps > 0);
+  if (sets.length === 0) return null;
+  const rpe = readStoredNumber(entry.rpe, null);
+  return { ...entry, exercise, sets, rpe: rpe !== null && rpe > 0 ? rpe : null };
+}
+
+function sanitizeCfEntry(entry) {
+  if (typeof entry === "string") return entry.trim() ? entry : null;
+  if (!isPlainObject(entry)) return null;
+  const exercise = cleanName(entry.exercise);
+  const reps = readStoredNumber(entry.reps, 0);
+  if (!exercise || !(reps > 0)) return null;
+  const clean = { ...entry, exercise, reps, weight: Math.max(0, readStoredNumber(entry.weight, 0)), extraReps: Math.max(0, readStoredNumber(entry.extraReps, 0)) };
+  if (clean.unit !== "cal" && clean.unit !== "m") delete clean.unit;
+  return clean;
+}
+
+/** Renvoie la séance réparée, ou null si elle est illisible (pas de type ou pas de date valable). */
+function sanitizeSession(raw) {
+  if (!isPlainObject(raw)) return null;
+  if (raw.type !== "musculation" && raw.type !== "crossfit") return null;
+  if (!isValidDateString(raw.date)) return null;
+  const session = { ...raw };
+  if (typeof session.id === "number") session.id = String(session.id);
+  if (typeof session.id !== "string" || !session.id) session.id = "s_" + Date.now() + "_" + Math.floor(Math.random() * 1000000);
+  session.notes = typeof raw.notes === "string" ? raw.notes : "";
+
+  if (raw.type === "musculation") {
+    // Très ancien format : un seul exercice directement sur la séance
+    let entries = raw.exercises;
+    if (!Array.isArray(entries) && raw.exercise) {
+      entries = [{ exercise: raw.exercise, sets: raw.sets, rpe: raw.rpe }];
+      delete session.exercise; delete session.sets; delete session.rpe;
+    }
+    session.exercises = (Array.isArray(entries) ? entries : []).map(sanitizeMuscuEntry).filter(Boolean);
+    return session.exercises.length > 0 ? session : null;
+  }
+
+  session.wodName = cleanName(raw.wodName) || SANITIZE_DAILY_WOD_LABEL;
+  const time = readStoredNumber(raw.timeSeconds, null);
+  session.timeSeconds = time !== null && time > 0 ? time : null;
+  const rounds = readStoredNumber(raw.rounds, null);
+  session.rounds = rounds !== null && rounds >= 0 ? rounds : null;
+  const extra = readStoredNumber(raw.extraReps, null);
+  session.extraReps = extra !== null && extra >= 0 ? extra : null;
+  if (session.wodType !== null && typeof session.wodType !== "string") session.wodType = null;
+  if (session.rxOrScaled !== null && session.rxOrScaled !== undefined && typeof session.rxOrScaled !== "string") session.rxOrScaled = null;
+  session.exercises = (Array.isArray(raw.exercises) ? raw.exercises : []).map(sanitizeCfEntry).filter(Boolean);
+  return session;
+}
+
+function sanitizeBodyweightEntry(raw) {
+  if (!isPlainObject(raw) || !isValidDateString(raw.date)) return null;
+  const weight = readStoredNumber(raw.weight, 0);
+  return weight > 0 ? { ...raw, weight } : null;
+}
+
+/** Garde une copie de ce qui a été écarté (jamais détruit sans trace). */
+function keepRejectedItems(kind, items) {
+  if (items.length === 0) return;
+  let store = [];
+  try { store = JSON.parse(localStorage.getItem(STORAGE_KEY_REJECTED)) || []; } catch { store = []; }
+  if (!Array.isArray(store)) store = [];
+  items.forEach((item) => store.push({ kind, at: new Date().toISOString(), item }));
+  localStorage.setItem(STORAGE_KEY_REJECTED, JSON.stringify(store.slice(-200)));
+}
+
+/** Filtre un carnet de records notés à la main : { "Nom": { ...valeur } }. */
+function sanitizeManualStore(key, isValidEntry) {
+  const raw = localStorage.getItem(key);
+  if (!raw) return 0;
+  let store;
+  try { store = JSON.parse(raw); } catch { store = null; }
+  if (!isPlainObject(store)) {
+    keepRejectedItems(key, [raw]);
+    localStorage.removeItem(key);
+    return 1;
+  }
+  const rejected = [];
+  Object.keys(store).forEach((name) => {
+    if (!name.trim() || !isPlainObject(store[name]) || !isValidEntry(store[name])) {
+      rejected.push({ [name]: store[name] });
+      delete store[name];
+    }
+  });
+  if (rejected.length > 0) {
+    keepRejectedItems(key, rejected);
+    localStorage.setItem(key, JSON.stringify(store));
+  }
+  return rejected.length;
+}
+
+/**
+ * Répare et filtre toutes les données enregistrées.
+ * Renvoie le nombre d'éléments illisibles mis de côté.
+ */
+function ensureDataSanitized() {
+  let rejectedCount = 0;
+
+  const rawSessions = localStorage.getItem(STORAGE_KEY_SESSIONS);
+  if (rawSessions) {
+    let parsed = null;
+    try { parsed = JSON.parse(rawSessions); } catch { parsed = null; }
+    if (Array.isArray(parsed)) {
+      const kept = [];
+      const rejected = [];
+      parsed.forEach((raw) => {
+        const clean = sanitizeSession(raw);
+        if (clean) kept.push(clean); else rejected.push(raw);
+      });
+      keepRejectedItems("session", rejected);
+      rejectedCount += rejected.length;
+      const serialized = JSON.stringify(kept);
+      if (serialized !== rawSessions) localStorage.setItem(STORAGE_KEY_SESSIONS, serialized);
+    } else {
+      // Fichier illisible : on le garde de côté plutôt que de l'écraser plus tard
+      keepRejectedItems("sessions-file", [rawSessions]);
+      localStorage.setItem(STORAGE_KEY_SESSIONS, "[]");
+      rejectedCount += 1;
+    }
+  }
+
+  const rawWeights = localStorage.getItem(STORAGE_KEY_BODYWEIGHT);
+  if (rawWeights) {
+    let parsed = null;
+    try { parsed = JSON.parse(rawWeights); } catch { parsed = null; }
+    if (Array.isArray(parsed)) {
+      const kept = [];
+      const rejected = [];
+      parsed.forEach((raw) => {
+        const clean = sanitizeBodyweightEntry(raw);
+        if (clean) kept.push(clean); else rejected.push(raw);
+      });
+      keepRejectedItems("bodyweight", rejected);
+      rejectedCount += rejected.length;
+      // Toujours rangées par date (la dernière pesée = le poids actuel)
+      kept.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+      const serialized = JSON.stringify(kept);
+      if (serialized !== rawWeights) localStorage.setItem(STORAGE_KEY_BODYWEIGHT, serialized);
+    } else {
+      keepRejectedItems("bodyweight-file", [rawWeights]);
+      localStorage.setItem(STORAGE_KEY_BODYWEIGHT, "[]");
+      rejectedCount += 1;
+    }
+  }
+
+  rejectedCount += sanitizeManualStore(STORAGE_KEY_MANUAL_1RM, (e) => readStoredNumber(e.weight, 0) > 0);
+  rejectedCount += sanitizeManualStore(STORAGE_KEY_MANUAL_REPS, (e) => readStoredNumber(e.reps, 0) > 0);
+  rejectedCount += sanitizeManualStore(STORAGE_KEY_MANUAL_TIMES, (e) => readStoredNumber(e.timeSeconds, 0) > 0);
+  rejectedCount += sanitizeManualStore(STORAGE_KEY_MANUAL_CF_BEST, (e) => readStoredNumber(e.timeSeconds, 0) > 0 || readStoredNumber(e.rounds, -1) >= 0);
+  return rejectedCount;
+}
+
 ensureInitialized();
+ensureDataSanitized();
 ensureBodyweightIds();
 ensureMuscuSessionsMigrated();
 ensureExerciseRenames();

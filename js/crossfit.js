@@ -171,26 +171,41 @@ function populateWodSelects() {
   });
 }
 
-/** Affiche uniquement les champs de score pertinents pour un WOD donné (temps OU rounds). */
+// Formats chronométrés : le score est un temps. AMRAP : des rounds (+ reps).
+// Les autres (EMOM, Tabata, Autre) ont un score facultatif : les deux champs restent proposés.
+const TIME_SCORED_WOD_TYPES = ["For Time", "Chipper"];
+
+/**
+ * N'affiche que les champs de score utiles au type de WOD choisi.
+ * Un champ déjà rempli reste toujours visible (rien ne disparaît en
+ * silence si tu changes le type après avoir noté ton score).
+ */
+function updateScoreFields(wodName) {
+  if (isSpeSession(wodName === undefined ? cfWodSelect.value : wodName)) {
+    cfTimeRow.style.display = "none";
+    cfRoundsRow.style.display = "none";
+    return;
+  }
+  const type = cfTypeSelect.value;
+  const optional = !isScoreRequired(type);
+  const hasTime = cfTimeInput.value.trim() !== "";
+  const hasRounds = cfRoundsInput.value !== "" || cfExtraRepsInput.value !== "";
+  const showTime = optional || TIME_SCORED_WOD_TYPES.includes(type) || hasTime;
+  const showRounds = optional || type === "AMRAP" || hasRounds;
+  cfTimeRow.style.display = showTime ? "" : "none";
+  cfRoundsRow.style.display = showRounds ? "" : "none";
+  const timeOptional = document.getElementById("cf-time-optional");
+  const roundsOptional = document.getElementById("cf-rounds-optional");
+  if (timeOptional) timeOptional.textContent = optional ? "(facultatif)" : "";
+  if (roundsOptional) roundsOptional.textContent = optional ? "(facultatif)" : "";
+}
+
+/** Champs propres au WOD choisi : type et niveau masqués pour un cours de spé, puis les champs de score. */
 function setScoreFieldsVisibility(name) {
-  const preset = BENCHMARK_WODS[name];
   const isSpe = isSpeSession(name);
   cfTypeRow.style.display = isSpe ? "none" : "";
   cfLevelRow.style.display = isSpe ? "none" : "";
-
-  if (isSpe) {
-    cfTimeRow.style.display = "none";
-    cfRoundsRow.style.display = "none";
-  } else if (preset && preset.scoreType === "time") {
-    cfTimeRow.style.display = "";
-    cfRoundsRow.style.display = "none";
-  } else if (preset && preset.scoreType === "rounds") {
-    cfTimeRow.style.display = "none";
-    cfRoundsRow.style.display = "";
-  } else {
-    cfTimeRow.style.display = "";
-    cfRoundsRow.style.display = "";
-  }
+  updateScoreFields(name);
 }
 
 /**
@@ -367,6 +382,7 @@ function updateAllStructuredRowsForWodType() {
 function updateScoreHint() {
   const hint = document.getElementById("cf-score-hint");
   if (hint) hint.style.display = isScoreRequired(cfTypeSelect.value) ? "none" : "block";
+  updateScoreFields();
 }
 
 cfTypeSelect.addEventListener("change", updateAllStructuredRowsForWodType);
@@ -434,8 +450,27 @@ cfForm.addEventListener("submit", (event) => {
     return;
   }
   if (!isSpe && isScoreRequired(cfTypeSelect.value) && timeSeconds === null && rounds === null) {
-    showCfFeedback("Indique au moins un temps (mm:ss) ou un nombre de rounds.", true);
+    const message = cfTypeSelect.value === "AMRAP"
+      ? "Indique ton nombre de rounds complets (et les reps en plus s'il y en a)."
+      : "Indique ton temps (mm:ss), par exemple 6:42.";
+    showCfFeedback(message, true);
     return;
+  }
+
+  // Ligne structurée à moitié remplie (charge ou "en plus" sans quantité) :
+  // on le signale au lieu de l'ignorer en silence.
+  for (const rowEl of cfExercisesList.querySelectorAll(".cf-structured-row")) {
+    const visibleValue = (selector) => {
+      const input = rowEl.querySelector(selector);
+      return input && input.style.display !== "none" ? input.value.trim() : "";
+    };
+    const repsText = rowEl.querySelector(".cf-structured-reps").value.trim();
+    if (!repsText && (visibleValue(".cf-structured-weight") || visibleValue(".cf-structured-extra"))) {
+      const select = rowEl.querySelector(".cf-structured-select");
+      const name = select.value === "__custom__" ? rowEl.querySelector(".cf-structured-custom").value.trim() : select.value;
+      showCfFeedback(`${name || "Exercice structuré"} : il manque la quantité (reps, calories ou mètres).`, true);
+      return;
+    }
   }
 
   // On parcourt les lignes dans l'ordre où elles apparaissent dans le
@@ -555,6 +590,7 @@ function duplicateCfSession(session) {
   }
 
   cfNotesInput.value = "";
+  updateScoreFields();
 
   cfSubmitBtn.textContent = "Enregistrer le WOD";
   cfCancelEditBtn.style.display = "none";
@@ -597,6 +633,8 @@ function startEditCfSession(session) {
   }
 
   cfNotesInput.value = session.notes || "";
+  // Après le remplissage : un score déjà noté reste toujours visible
+  updateScoreFields();
 
   cfSubmitBtn.textContent = "Mettre à jour le WOD";
   cfCancelEditBtn.style.display = "inline-block";
@@ -606,13 +644,12 @@ function startEditCfSession(session) {
 function cancelCfEdit() {
   cfEditingId = null;
   cfForm.reset();
-  updateScoreHint();
   resetExerciseRows();
-  cfTimeRow.style.display = "";
-  cfRoundsRow.style.display = "";
   cfTypeRow.style.display = "";
   cfLevelRow.style.display = "";
   cfDateInput.value = todayLocalDateString();
+  setScoreFieldsVisibility(cfWodSelect.value);
+  updateScoreHint();
   cfSubmitBtn.textContent = "Enregistrer le WOD";
   cfCancelEditBtn.style.display = "none";
 }
@@ -808,4 +845,7 @@ function renderCfHistory() {
 cfDateInput.value = todayLocalDateString();
 populateWodSelects();
 resetExerciseRows();
+// Au départ ("For Time") : seul le champ Temps est affiché
+setScoreFieldsVisibility(cfWodSelect.value);
+updateScoreHint();
 renderCfHistory();

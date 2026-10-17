@@ -19,8 +19,15 @@
  * Si l'exercice est au poids du corps mais qu'aucun poids de corps n'est
  * encore connu (onglet Mensurations vide), ses séries sont simplement
  * ignorées dans le calcul — sans jamais empêcher d'enregistrer la séance.
+ * Le poids de corps utilisé est celui du jour de la séance (dernière pesée
+ * à cette date) : ton ancien volume ne change pas quand tu prends du poids.
  */
-function computeExerciseVolume(exerciseEntry) {
+function bodyweightForVolume(dateStr) {
+  if (typeof getBodyweightAt === "function") return getBodyweightAt(dateStr);
+  return typeof getCurrentBodyweight === "function" ? getCurrentBodyweight() : null;
+}
+
+function computeExerciseVolume(exerciseEntry, dateStr) {
   if (!exerciseEntry || !Array.isArray(exerciseEntry.sets)) return 0; // donnée malformée : on l'ignore sans planter
   if (typeof isNoVolumeExercise === "function" && isNoVolumeExercise(exerciseEntry.exercise)) return 0;
 
@@ -30,7 +37,7 @@ function computeExerciseVolume(exerciseEntry) {
     return exerciseEntry.sets.reduce((total, set) => total + set.reps * set.weight, 0);
   }
 
-  const bodyweight = typeof getCurrentBodyweight === "function" ? getCurrentBodyweight() : null;
+  const bodyweight = bodyweightForVolume(dateStr);
   if (bodyweight === null) return 0; // poids de corps inconnu : pas de calcul possible pour l'instant
 
   return exerciseEntry.sets.reduce((total, set) => total + set.reps * (bodyweight + (set.weight || 0)), 0);
@@ -38,7 +45,7 @@ function computeExerciseVolume(exerciseEntry) {
 
 function computeSessionVolume(session) {
   if (session.type === "musculation" && session.exercises) {
-    return session.exercises.reduce((total, ex) => total + computeExerciseVolume(ex), 0);
+    return session.exercises.reduce((total, ex) => total + computeExerciseVolume(ex, session.date), 0);
   }
   if (session.type === "crossfit" && session.exercises) {
     return session.exercises.reduce((total, entry) => {
@@ -66,7 +73,7 @@ function computeCrossfitStructuredVolume(session, entry) {
   let perRepWeight;
 
   if (isBW) {
-    const bodyweight = typeof getCurrentBodyweight === "function" ? getCurrentBodyweight() : null;
+    const bodyweight = bodyweightForVolume(session.date);
     if (bodyweight === null) return 0; // poids de corps inconnu : pas de calcul possible pour l'instant
     perRepWeight = bodyweight + (entry.weight || 0);
   } else {
@@ -266,22 +273,62 @@ function computeCfRecords(options) {
 
 /**
  * Compare les records d'AVANT et d'APRÈS l'ajout d'une séance de musculation
- * pour détecter si l'un des exercices de cette séance vient de battre un
- * record de 1RM estimé. Utilisée juste après addSession() pour afficher
- * un petit badge "Nouveau record !" à l'utilisateur.
+ * pour détecter les records battus par cette séance. Utilisée juste après
+ * addSession() pour afficher le badge "Nouveau record !". Mêmes règles que
+ * la page Records :
+ *  - exercice avec charge : 1RM estimé (Epley jusqu'à 10 reps) ;
+ *  - exercice au poids du corps : reps max en une série ;
+ *  - test cardio : meilleur temps (cardioBestsBefore = computeCardioTestBests()
+ *    calculé AVANT l'enregistrement).
+ * Les perfs notées à la main (Records) comptent aussi comme "à battre".
+ * Comme avant, un tout premier résultat compte comme un record.
+ * Renvoie [{ exercise, value, text }] — text est la valeur prête à afficher.
  */
-function detectMuscuNewRecords(recordsBeforeSave, newExercises, sessionDate) {
+function detectMuscuNewRecords(recordsBeforeSave, newExercises, sessionDate, cardioBestsBefore) {
   const recordsAfterSave = computeMuscuRecords();
+  const manualLoads = typeof getManualOneRMs === "function" ? getManualOneRMs() : {};
+  const manualReps = typeof getManualReps === "function" ? getManualReps() : {};
+  const manualTimes = typeof getManualTimes === "function" ? getManualTimes() : {};
   const hits = [];
+  const seen = new Set();
 
   newExercises.forEach((entry) => {
+    if (!entry || !entry.exercise || seen.has(entry.exercise)) return;
+    seen.add(entry.exercise);
+
+    // Test cardio : plus le temps est court, mieux c'est
+    if (entry.kind === "cardio") {
+      if (!(entry.timeSeconds > 0)) return;
+      const candidates = [];
+      if (cardioBestsBefore && cardioBestsBefore[entry.exercise]) candidates.push(cardioBestsBefore[entry.exercise].value);
+      if (manualTimes[entry.exercise] && manualTimes[entry.exercise].timeSeconds > 0) candidates.push(manualTimes[entry.exercise].timeSeconds);
+      if (candidates.length === 0 || entry.timeSeconds < Math.min(...candidates)) {
+        const text = typeof formatDuration === "function" ? formatDuration(entry.timeSeconds) : String(entry.timeSeconds);
+        hits.push({ exercise: entry.exercise, value: entry.timeSeconds, text });
+      }
+      return;
+    }
+
     const before = recordsBeforeSave[entry.exercise];
     const after = recordsAfterSave[entry.exercise];
-    if (!after || !after.oneRM || after.oneRM.date !== sessionDate) return;
+    if (!after) return;
 
-    const isNewRecord = !before || !before.oneRM || after.oneRM.value > before.oneRM.value;
-    if (isNewRecord) {
-      hits.push({ exercise: entry.exercise, value: Math.round(after.oneRM.value) });
+    // Poids du corps (pull-ups, dips...) : le record, ce sont les reps d'affilée
+    const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(entry.exercise);
+    if (isBW) {
+      if (!after.maxReps || after.maxReps.date !== sessionDate) return;
+      const previousReps = Math.max(before && before.maxReps ? before.maxReps.value : 0, manualReps[entry.exercise] ? Number(manualReps[entry.exercise].reps) || 0 : 0);
+      if (after.maxReps.value > previousReps) {
+        hits.push({ exercise: entry.exercise, value: after.maxReps.value, text: `${after.maxReps.value} rep${after.maxReps.value > 1 ? "s" : ""}` });
+      }
+      return;
+    }
+
+    if (!after.oneRM || after.oneRM.value <= 0 || after.oneRM.date !== sessionDate) return;
+    const previousLoad = Math.max(before && before.oneRM ? before.oneRM.value : 0, manualLoads[entry.exercise] ? Number(manualLoads[entry.exercise].weight) || 0 : 0);
+    if (after.oneRM.value > previousLoad) {
+      const value = Math.round(after.oneRM.value);
+      hits.push({ exercise: entry.exercise, value, text: `${formatNumberFr(value)} kg` });
     }
   });
 
@@ -474,7 +521,10 @@ function renderRecords() {
     } else if (showRepsHeadline && manualReps) {
       subLineParts.push(`<span>Reps notées : ${manualReps.reps}</span>`);
     }
-    if (sessionRec && sessionRec.maxWeight && sessionRec.maxWeight.value > 0) {
+    if (showWeightOnlyHeadline) {
+      // La charge est déjà le chiffre principal de la carte : on ne la répète pas
+      subLineParts.push(`<span>Vue en WOD${notedOn(sessionRec.maxWeight.date)}</span>`);
+    } else if (sessionRec && sessionRec.maxWeight && sessionRec.maxWeight.value > 0) {
       const repsText = sessionRec.maxWeight.reps ? ` × ${sessionRec.maxWeight.reps}` : "";
       const fromWod = sessionRec.maxWeight.source === "crossfit" ? " (vu en WOD)" : "";
       subLineParts.push(`<span>${isBW ? "Lest max" : "Charge max"} : ${formatKgValue(sessionRec.maxWeight.value)} kg${repsText}${fromWod}</span>`);
