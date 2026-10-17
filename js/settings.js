@@ -40,6 +40,45 @@ function refreshEntireApp() {
   if (typeof syncRanksAndAchievements === "function") syncRanksAndAchievements({ silent: true });
   if (typeof renderProfile === "function") renderProfile();
   if (typeof renderDashboard === "function") renderDashboard();
+  renderSexChoice(document.getElementById("settings-sex-choice"), getSex());
+}
+
+// --------------------------------------------------------------------------
+// TON PROFIL : barèmes hommes / femmes
+// --------------------------------------------------------------------------
+
+/** Allume le bon bouton d'un groupe Homme / Femme. */
+function renderSexChoice(group, sex) {
+  if (!group) return;
+  group.querySelectorAll("button[data-sex]").forEach((button) => {
+    const selected = button.dataset.sex === sex;
+    button.classList.toggle("on", selected);
+    button.setAttribute("aria-checked", selected ? "true" : "false");
+  });
+}
+
+const settingsSexChoice = document.getElementById("settings-sex-choice");
+if (settingsSexChoice) {
+  renderSexChoice(settingsSexChoice, getSex());
+  settingsSexChoice.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-sex]");
+    if (!button) return;
+    const sex = button.dataset.sex === "female" ? "female" : "male";
+    const feedback = document.getElementById("sex-feedback");
+    if (sex === getSex()) return;
+    setSex(sex);
+    renderSexChoice(settingsSexChoice, sex);
+    // Recalcul sans fenêtre "Rang supérieur" : rien n'a été soulevé de plus
+    if (typeof syncRanksAndAchievements === "function") syncRanksAndAchievements({ silent: true });
+    if (typeof renderProfile === "function") renderProfile();
+    if (typeof renderDashboard === "function") renderDashboard();
+    if (feedback) {
+      feedback.textContent = sex === "female"
+        ? "Barèmes femmes appliqués : rangs et succès recalculés."
+        : "Barèmes hommes appliqués : rangs et succès recalculés.";
+      feedback.className = "form-feedback form-feedback-success";
+    }
+  });
 }
 
 // --------------------------------------------------------------------------
@@ -146,7 +185,9 @@ importFileInput.addEventListener("change", () => {
   const file = importFileInput.files[0];
   if (!file) return;
 
-  const confirmed = confirm(
+  // Depuis l'accueil, l'appli est vide : rien à écraser, pas besoin de prévenir
+  const fromOnboarding = isOnboardingVisible();
+  const confirmed = fromOnboarding || confirm(
     "Importer cette sauvegarde va REMPLACER toutes les données actuellement dans l'application " +
     "(séances, poids, records). Cette action est irréversible. Continuer ?"
   );
@@ -160,14 +201,21 @@ importFileInput.addEventListener("change", () => {
     const result = importAllData(reader.result);
     if (result.success) {
       showSettingsFeedback("Sauvegarde importée avec succès !", false);
+      if (fromOnboarding) {
+        markOnboardingDone();
+        hideOnboarding();
+      }
       refreshEntireApp();
+    } else if (fromOnboarding) {
+      showOnboardingImportError("Échec de l'import : " + result.error);
     } else {
       showSettingsFeedback("Échec de l'import : " + result.error, true);
     }
     importFileInput.value = "";
   };
   reader.onerror = () => {
-    showSettingsFeedback("Impossible de lire ce fichier.", true);
+    if (fromOnboarding) showOnboardingImportError("Impossible de lire ce fichier.");
+    else showSettingsFeedback("Impossible de lire ce fichier.", true);
     importFileInput.value = "";
   };
   reader.readAsText(file);
@@ -188,3 +236,132 @@ btnResetData.addEventListener("click", () => {
   refreshEntireApp();
   showSettingsFeedback("Toutes les données ont été supprimées.", false);
 });
+
+// --------------------------------------------------------------------------
+// ACCUEIL DU PREMIER LANCEMENT (3 écrans : bienvenue, profil, prêt)
+// Ne s'affiche que sur une appli vide qui ne l'a jamais montré (data.js
+// pose le drapeau d'office chez les personnes qui ont déjà des données).
+// --------------------------------------------------------------------------
+
+const ONBOARDING_SCREEN_IDS = ["onboarding-1", "onboarding-2", "onboarding-3"];
+let onboardingSex = getSex();
+
+function isOnboardingVisible() {
+  return ONBOARDING_SCREEN_IDS.some((id) => {
+    const el = document.getElementById(id);
+    return el && el.classList.contains("is-visible");
+  });
+}
+
+function showOnboardingScreen(index) {
+  ONBOARDING_SCREEN_IDS.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle("is-visible", i === index);
+    if (i === index) el.scrollTop = 0;
+  });
+  document.body.classList.add("ob-open");
+}
+
+function hideOnboarding() {
+  ONBOARDING_SCREEN_IDS.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove("is-visible");
+  });
+  document.body.classList.remove("ob-open");
+}
+
+function showOnboardingImportError(message) {
+  const el = document.getElementById("ob-import-feedback");
+  if (!el) return;
+  el.textContent = message;
+  el.className = "form-feedback form-feedback-error";
+}
+
+function finishOnboarding() {
+  markOnboardingDone();
+  hideOnboarding();
+  refreshEntireApp();
+  window.scrollTo(0, 0);
+}
+
+/** Lit un nombre écrit à la française ("70,5") ; null si vide, NaN si illisible. */
+function readOnboardingNumber(id) {
+  const el = document.getElementById(id);
+  const raw = el ? el.value.trim().replace(",", ".") : "";
+  if (!raw) return null;
+  return Number(raw);
+}
+
+/** Vérifie puis enregistre les infos de l'écran 2. Renvoie false si une valeur est fausse. */
+function saveOnboardingProfile() {
+  const feedback = document.getElementById("ob-profile-feedback");
+  const currentYear = new Date().getFullYear();
+  const birthYear = readOnboardingNumber("ob-birth-year");
+  const weight = readOnboardingNumber("ob-weight");
+  const height = readOnboardingNumber("ob-height");
+
+  let error = "";
+  if (birthYear !== null && (!Number.isInteger(birthYear) || birthYear < 1930 || birthYear > currentYear - 10)) {
+    error = `Année de naissance entre 1930 et ${currentYear - 10}, s'il te plaît.`;
+  } else if (weight !== null && (!Number.isFinite(weight) || weight < 25 || weight > 300)) {
+    error = "Indique un poids entre 25 et 300 kg.";
+  } else if (height !== null && (!Number.isFinite(height) || height < 100 || height > 250)) {
+    error = "Indique une taille entre 100 et 250 cm.";
+  }
+  if (feedback) feedback.textContent = error;
+  if (error) return false;
+
+  setSex(onboardingSex);
+  if (birthYear !== null) setBirthYear(birthYear);
+  if (weight !== null) addBodyweightEntry(todayLocalDateString(), Math.round(weight * 10) / 10);
+  if (height !== null) setHeight(Math.round(height));
+  return true;
+}
+
+function renderOnboardingInstallTip() {
+  const tip = document.getElementById("ob-install-tip");
+  if (tip && isInstalledApp()) {
+    tip.innerHTML = "<b>L'appli est installée</b> : elle s'ouvre en plein écran depuis ton écran d'accueil, même sans réseau à la salle.";
+  }
+}
+
+function setupOnboarding() {
+  const first = document.getElementById("onboarding-1");
+  if (!first) return;
+
+  const on = (id, handler) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("click", handler);
+  };
+  on("ob-start", () => showOnboardingScreen(1));
+  on("ob-import", () => {
+    showOnboardingImportError("");
+    importFileInput.click();
+  });
+  on("ob-profile-next", () => {
+    if (saveOnboardingProfile()) showOnboardingScreen(2);
+  });
+  on("ob-profile-skip", () => {
+    const feedback = document.getElementById("ob-profile-feedback");
+    if (feedback) feedback.textContent = "";
+    showOnboardingScreen(2);
+  });
+  on("ob-finish", finishOnboarding);
+
+  const sexGroup = document.getElementById("ob-sex-choice");
+  renderSexChoice(sexGroup, onboardingSex);
+  if (sexGroup) {
+    sexGroup.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-sex]");
+      if (!button) return;
+      onboardingSex = button.dataset.sex === "female" ? "female" : "male";
+      renderSexChoice(sexGroup, onboardingSex);
+    });
+  }
+
+  renderOnboardingInstallTip();
+  if (!isOnboardingDone() && !hasAnyUserData()) showOnboardingScreen(0);
+}
+
+setupOnboarding();

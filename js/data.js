@@ -299,6 +299,18 @@ function computeBmi() {
 
 const STORAGE_KEY_BIRTH_YEAR = "carnet_birth_year";
 
+// Barèmes des rangs : "male" (par défaut) ou "female". Les standards de
+// force, de gym et d'endurance ne sont pas les mêmes selon le sexe.
+const STORAGE_KEY_SEX = "carnet_sex";
+
+function getSex() {
+  return localStorage.getItem(STORAGE_KEY_SEX) === "female" ? "female" : "male";
+}
+
+function setSex(sex) {
+  localStorage.setItem(STORAGE_KEY_SEX, sex === "female" ? "female" : "male");
+}
+
 /** Année de naissance enregistrée, ou null. */
 function getBirthYear() {
   const value = Number(localStorage.getItem(STORAGE_KEY_BIRTH_YEAR));
@@ -382,6 +394,35 @@ function ensureInitialized() {
   localStorage.setItem(STORAGE_KEY_INITIALIZED, "1");
 }
 
+// --------------------------------------------------------------------------
+// ACCUEIL DU PREMIER LANCEMENT
+// "carnet_onboarded" est posé quand l'accueil a été vu (ou passé). Les
+// personnes qui utilisaient déjà l'appli avant son arrivée ont des données :
+// on pose le drapeau d'office pour qu'elles ne le voient jamais.
+// --------------------------------------------------------------------------
+
+const STORAGE_KEY_ONBOARDED = "carnet_onboarded";
+
+function hasAnyUserData() {
+  return getAllSessions().length > 0 ||
+    getAllBodyweightEntries().length > 0 ||
+    Object.keys(getManualOneRMs()).length > 0 ||
+    Object.keys(getManualCfBests()).length > 0 ||
+    getBirthYear() !== null || getHeight() !== null;
+}
+
+function isOnboardingDone() {
+  return localStorage.getItem(STORAGE_KEY_ONBOARDED) === "1";
+}
+
+function markOnboardingDone() {
+  localStorage.setItem(STORAGE_KEY_ONBOARDED, "1");
+}
+
+function ensureOnboardingFlag() {
+  if (!isOnboardingDone() && hasAnyUserData()) markOnboardingDone();
+}
+
 /**
  * Les séances de musculation créées avant cette mise à jour n'avaient
  * qu'un seul exercice chacune (champs "exercise", "sets", "rpe" directement
@@ -418,6 +459,9 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_KEY_MANUAL_CF_BEST);
   localStorage.removeItem(STORAGE_KEY_HEIGHT);
   localStorage.removeItem(STORAGE_KEY_BIRTH_YEAR);
+  localStorage.removeItem(STORAGE_KEY_SEX);
+  // L'appli redevient neuve : l'accueil reviendra à la prochaine ouverture
+  localStorage.removeItem(STORAGE_KEY_ONBOARDED);
   // Rangs et succès : on repart de zéro aussi
   localStorage.removeItem("carnet_achievements");
   localStorage.removeItem("carnet_rank_snapshot");
@@ -442,6 +486,7 @@ function exportAllData() {
     manualCfBests: getManualCfBests(),
     heightCm: getHeight(),
     birthYear: getBirthYear(),
+    sex: getSex(),
     // Succès débloqués (avec leur date) : ils restent acquis même après un import
     achievements: JSON.parse(localStorage.getItem("carnet_achievements") || "{}"),
   };
@@ -470,6 +515,7 @@ function importAllData(jsonString) {
   localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(payload.manualCfBests || {}));
   if (payload.heightCm) setHeight(payload.heightCm);
   if (Number.isInteger(payload.birthYear) && payload.birthYear > 1900) setBirthYear(payload.birthYear);
+  if (payload.sex === "female" || payload.sex === "male") setSex(payload.sex);
 
   // Succès : on restaure ceux de la sauvegarde (une ancienne sauvegarde n'en a pas)
   const achievements = payload.achievements && typeof payload.achievements === "object" ? payload.achievements : {};
@@ -527,3 +573,4 @@ ensureInitialized();
 ensureBodyweightIds();
 ensureMuscuSessionsMigrated();
 ensureExerciseRenames();
+ensureOnboardingFlag();

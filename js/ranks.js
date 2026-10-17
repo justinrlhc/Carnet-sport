@@ -62,6 +62,32 @@ const STANDARD_TABLES = {
   muscleUp: [[50,1,1,5,10,17],[55,1,1,6,11,17],[60,1,1,6,11,17],[65,1,1,7,11,17],[70,1,2,7,11,17],[75,1,2,7,11,17],[80,1,2,7,11,16],[85,1,2,7,11,16],[90,1,2,7,11,16],[95,1,2,7,10,15],[100,1,2,7,10,15]],
 };
 
+// Barèmes FEMMES, mêmes sources (StrengthLog, Strength Level, Rowing Level,
+// Running Level). Poids de corps de 40 à 120 kg. Même format que ci-dessus.
+const STANDARD_TABLES_FEMALE = {
+  backSquat: [[40,20,40,58,73,91],[45,21,43,61,77,98],[50,22,44,63,80,105],[55,23,46,65,83,111],[60,24,48,67,85,117],[65,25,49,68,87,122],[70,26,51,70,90,127],[75,27,52,71,92,131],[80,28,53,73,93,135],[85,29,54,74,95,139],[90,29,55,75,97,143],[95,30,56,76,98,147],[100,31,57,77,100,150],[105,31,58,78,101,153],[110,32,59,79,103,156],[115,33,60,80,104,159],[120,33,60,81,105,162]],
+  benchPress: [[40,17,27,35,39,53],[45,19,29,37,43,59],[50,20,30,39,46,65],[55,21,32,40,49,65],[60,22,33,42,51,75],[65,23,34,43,54,79],[70,24,35,45,56,83],[75,25,36,46,58,87],[80,26,37,47,60,91],[85,27,38,48,62,94],[90,27,39,49,63,97],[95,28,40,50,65,100],[100,29,41,51,67,103],[105,29,42,52,68,106],[110,30,42,53,69,108],[115,30,43,54,71,111],[120,31,44,54,72,113]],
+  deadlift: [[40,34,51,66,84,107],[45,35,55,70,90,115],[50,36,58,74,95,122],[55,37,61,78,99,128],[60,38,64,81,103,135],[65,39,67,84,107,140],[70,39,69,86,111,145],[75,40,71,89,114,150],[80,41,73,91,117,154],[85,41,75,94,120,159],[90,42,77,96,122,163],[95,42,79,98,125,166],[100,43,80,99,127,170],[105,43,82,101,130,173],[110,44,83,103,132,176],[115,44,85,105,134,179],[120,45,86,106,136,182]],
+  strictPress: [[40,12,20,24,28,33],[45,12,21,25,29,36],[50,13,22,27,31,39],[55,14,22,27,32,41],[60,14,23,28,34,43],[65,15,24,29,35,45],[70,15,24,30,36,47],[75,15,25,31,37,49],[80,16,25,31,38,50],[85,16,25,32,39,52],[90,16,26,32,40,53],[95,17,26,33,41,55],[100,17,27,33,41,56],[105,17,27,34,42,57],[110,18,27,34,43,58],[115,18,28,35,43,59],[120,18,28,35,44,60]],
+  frontSquat: [[40,22,33,47,64,82],[45,24,36,51,68,87],[50,26,39,54,72,91],[55,29,41,57,75,95],[60,31,44,60,79,99],[65,33,46,63,82,102],[70,35,48,65,85,106],[75,36,50,68,88,109],[80,38,53,70,90,112],[85,40,54,72,93,115],[90,41,56,75,95,118],[95,43,58,77,98,120],[100,44,60,79,100,123],[105,46,62,81,102,125],[110,47,63,82,104,127],[115,49,65,84,106,130],[120,50,66,86,108,132]],
+  snatch: [[40,15,24,34,46,60],[45,17,25,36,49,63],[50,18,27,38,51,65],[55,19,28,40,53,68],[60,21,30,42,55,70],[65,22,31,43,57,72],[70,23,33,45,59,74],[75,24,34,46,60,76],[80,25,35,47,62,77],[85,26,36,49,63,79],[90,27,37,50,65,81],[95,27,38,51,66,82],[100,28,39,52,67,83],[105,29,40,53,68,85],[110,30,41,54,70,86],[115,31,42,55,71,87],[120,31,43,56,72,89]],
+  cleanAndJerk: [[40,21,31,44,59,75],[45,23,33,47,62,79],[50,25,35,49,65,82],[55,26,37,51,67,84],[60,28,39,53,69,87],[65,29,41,55,72,89],[70,30,42,57,74,92],[75,32,44,59,76,94],[80,33,45,60,77,96],[85,34,46,62,79,98],[90,35,48,63,81,100],[95,36,49,65,82,102],[100,37,50,66,84,103],[105,38,51,67,85,105],[110,39,52,69,87,106],[115,40,53,70,88,108],[120,41,54,71,90,109]],
+  clean: [[40,23,33,44,57,71],[45,26,35,47,61,75],[50,28,38,50,64,79],[55,30,40,52,67,82],[60,31,42,55,69,85],[65,33,44,57,72,88],[70,35,46,59,74,90],[75,36,48,61,76,93],[80,38,49,63,79,95],[85,39,51,65,81,97],[90,40,52,67,82,99],[95,42,54,68,84,101],[100,43,55,70,86,103],[105,44,57,71,88,105],[110,45,58,73,89,107],[115,46,59,74,91,109],[120,47,60,76,92,110]],
+  pullUp: [[40,1,1,6,14,23],[45,1,1,6,13,22],[50,1,1,6,13,22],[55,1,1,6,13,21],[60,1,1,6,12,20],[65,1,1,6,11,19],[70,1,1,5,11,18],[75,1,1,5,10,17],[80,1,1,5,10,16],[85,1,1,4,9,15],[90,1,1,4,9,14],[95,1,1,4,9,13],[100,1,1,3,8,13],[105,1,1,3,8,12],[110,1,1,2,7,11],[115,1,1,2,7,10],[120,1,1,1,6,10]],
+  dips: [[40,1,1,9,20,33],[45,1,1,9,20,32],[50,1,1,9,20,31],[55,1,1,10,19,30],[60,1,1,9,19,29],[65,1,2,9,18,28],[70,1,2,9,18,27],[75,1,2,9,17,26],[80,1,1,9,16,25],[85,1,1,8,16,24],[90,1,1,8,15,23],[95,1,1,8,14,22],[100,1,1,7,14,21],[105,1,1,7,13,20],[110,1,1,7,12,20],[115,1,1,6,12,19],[120,1,1,6,11,18]],
+  pushUp: [[40,1,5,19,36,55],[45,1,6,19,35,53],[50,1,7,19,34,51],[55,1,7,19,33,49],[60,1,7,18,32,47],[65,1,7,18,31,45],[70,1,7,17,30,43],[75,1,7,17,29,42],[80,1,7,16,28,40],[85,1,7,15,27,39],[90,1,6,15,26,37],[95,1,6,14,25,36],[100,1,6,14,24,34],[105,1,5,13,23,33],[110,1,5,12,22,32],[115,1,5,12,21,31],[120,1,4,11,20,30]],
+  toesToBar: [[40,1,1,9,18,28],[45,1,3,10,19,28],[50,1,4,10,19,28],[55,1,4,11,19,27],[60,1,5,11,19,27],[65,1,5,11,18,26],[70,1,5,11,18,25],[75,1,5,10,17,25],[80,1,5,10,17,24],[85,1,5,10,16,23],[90,1,5,10,16,22],[95,1,5,10,15,22],[100,1,5,9,15,21],[105,1,4,9,14,20],[110,1,4,9,14,19],[115,1,4,9,13,19],[120,1,4,8,13,18]],
+  handstandPushUp: [[40,1,1,9,20,32],[45,1,1,9,19,31],[50,1,1,9,19,30],[55,1,1,9,18,29],[60,1,1,9,18,27],[65,1,1,9,17,26],[70,1,1,8,16,25],[75,1,1,8,15,24],[80,1,1,8,15,23],[85,1,1,7,14,22],[90,1,1,7,13,21],[95,1,1,7,13,20],[100,1,1,6,12,19],[105,1,1,6,11,18],[110,1,1,5,11,17],[115,1,1,5,10,16],[120,1,1,5,10,16]],
+  muscleUp: [[40,1,1,1,7,12],[45,1,1,2,8,13],[50,1,1,4,9,14],[55,1,1,4,9,14],[60,1,1,5,9,14],[65,1,1,5,9,14],[70,1,1,5,9,13],[75,1,1,5,9,13],[80,1,1,5,9,13],[85,1,1,5,9,12],[90,1,1,5,9,12],[95,1,1,5,8,12],[100,1,1,5,8,11],[105,1,1,4,8,11],[110,1,1,4,8,10],[115,1,1,4,7,10],[120,1,1,4,7,10]],
+  rowing2000: [[15,691.9,601.6,542.5,501.2,471.2],[20,639.8,556.3,501.6,463.4,435.7],[25,639.8,556.3,501.6,463.4,435.7],[30,642,558.1,503.3,465,437.2],[35,648.5,563.8,508.4,469.7,441.6],[40,659.6,573.4,517.1,477.7,449.2],[45,675.9,587.6,529.9,489.5,460.3],[50,697.2,606.2,546.6,505,474.8],[55,720.5,626.4,564.9,521.9,490.7],[60,745.5,648.1,584.5,539.9,507.7],[65,772.2,671.3,605.4,559.3,525.9],[70,800.9,696.3,627.9,580.1,545.4]],
+  run5k: [[15,2195,1923,1689,1494,1337],[20,2044,1791,1572,1391,1245],[25,2045,1792,1573,1392,1246],[30,2092,1833,1610,1424,1274],[35,2158,1891,1660,1468,1314],[40,2228,1953,1714,1516,1357],[45,2303,2018,1772,1567,1403],[50,2383,2088,1833,1622,1451],[55,2469,2164,1900,1680,1504],[60,2563,2246,1972,1744,1561],[65,2694,2361,2073,1834,1641],[70,2884,2527,2219,1962,1756]],
+};
+
+/** Les tableaux à utiliser selon le sexe choisi (hommes par défaut). */
+function getStandardTables(sex) {
+  return sex === "female" ? STANDARD_TABLES_FEMALE : STANDARD_TABLES;
+}
+
 // --------------------------------------------------------------------------
 // LES CATÉGORIES ET CE QUI LES ALIMENTE
 // kind : "lift" (1RM en kg), "reps" (répétitions max en une série),
@@ -132,11 +158,12 @@ const DEFAULT_AGE = 25;
  * qu'il est inconnu. Les barèmes d'endurance suivent l'âge (même principe
  * d'interpolation que pour le poids de corps : à 28 ans, entre 25 et 30 ans).
  */
-function getThresholdsForItem(item, bodyweight, age) {
+function getThresholdsForItem(item, bodyweight, age, sex) {
   if (item.fixed) return item.fixed;
-  if (item.ageTable) return interpolateThresholds(STANDARD_TABLES[item.ageTable], age || DEFAULT_AGE);
+  const tables = getStandardTables(sex);
+  if (item.ageTable) return interpolateThresholds(tables[item.ageTable], age || DEFAULT_AGE);
   if (bodyweight === null || bodyweight === undefined) return null;
-  return interpolateThresholds(STANDARD_TABLES[item.table], bodyweight);
+  return interpolateThresholds(tables[item.table], bodyweight);
 }
 
 /**
@@ -300,6 +327,8 @@ function computeRankProfile() {
   const bodyweight = Number.isFinite(rawBodyweight) && rawBodyweight > 0 ? rawBodyweight : null;
   // Âge (depuis l'année de naissance, onglet Mensurations) : pour l'endurance
   const age = typeof getAge === "function" ? getAge() : null;
+  // Sexe : choisit les barèmes hommes ou femmes (Réglages)
+  const sex = typeof getSex === "function" ? getSex() : "male";
   const perf = collectPerformances();
 
   const categories = RANK_CATEGORIES.map((category) => {
@@ -308,7 +337,7 @@ function computeRankProfile() {
       const base = { id: item.id, name: item.name, kind: item.kind, categoryId: category.id };
       if (!found) return { ...base, status: "untested" };
 
-      const thresholds = getThresholdsForItem(item, bodyweight, age);
+      const thresholds = getThresholdsForItem(item, bodyweight, age, sex);
       if (!thresholds) return { ...base, status: "needsBodyweight", value: found.value, source: found.source };
 
       const result = scoreAgainstThresholds(found.value, thresholds, item.kind === "time");
@@ -323,7 +352,7 @@ function computeRankProfile() {
   const rankedCategories = categories.filter((c) => c.hasRank);
   const global = rankedCategories.length > 0 ? rankFromScore(average(rankedCategories.map((c) => c.score))) : null;
 
-  return { bodyweight, age, categories, global };
+  return { bodyweight, age, sex, categories, global };
 }
 
 /** Texte "ce qu'il te manque" pour passer au rang suivant d'une ligne classée. */
@@ -415,31 +444,53 @@ function bestRankedExercise(profile) {
     .sort((a, b) => b.score - a.score)[0] || null;
 }
 
-function bodyweightLoadAchievement(id, title, itemId, exerciseLabel, multiplier) {
+/** Sexe utilisé pour les succès : celui du profil calculé, sinon le réglage actuel. */
+const achievementSex = (p) => (p && p.sex) || (typeof getSex === "function" ? getSex() : "male");
+
+/** "1" → "ton poids de corps", "1.25" → "1,25 × ton poids de corps". */
+function bodyweightMultiplierText(multiplier, article) {
+  return multiplier === 1 ? `${article === "le" ? "au" : "à ton"} poids de corps` : `à ${String(multiplier).replace(".", ",")} × ${article === "le" ? "le" : "ton"} poids de corps`;
+}
+
+/**
+ * Succès "charge = X × poids de corps". Les objectifs dépendent du sexe pour
+ * rester d'une difficulté comparable (même niveau dans les barèmes) :
+ * multipliers = { male: 1.5, female: 1.25 }.
+ */
+function bodyweightLoadAchievement(id, itemId, exerciseLabel, titleLabel, multipliers) {
+  const multiplierFor = (p) => multipliers[achievementSex(p)];
   return {
-    id, title,
-    check: (p) => p.bodyweight !== null && itemValueOrZero(p, itemId) >= p.bodyweight * multiplier - 1e-9,
+    id,
+    get title() { return `${titleLabel} ${bodyweightMultiplierText(multipliers[achievementSex(null)], "le")}`; },
+    check: (p) => p.bodyweight !== null && itemValueOrZero(p, itemId) >= p.bodyweight * multiplierFor(p) - 1e-9,
     progress: (p) => {
       if (p.bodyweight === null) return { text: "Renseigne ton poids dans Mensurations", pct: 0 };
-      const target = roundUpHalfKg(p.bodyweight * multiplier);
+      const target = roundUpHalfKg(p.bodyweight * multiplierFor(p));
       const current = itemValueOrZero(p, itemId);
       return { text: `${exerciseLabel} : ${formatKg(Math.round(current * 10) / 10)} / ${formatKg(target)}`, pct: Math.min(99, Math.round((current / target) * 100)) };
     },
-    describe: (p) => `${exerciseLabel} à ${multiplier === 1 ? "ton poids de corps" : `${String(multiplier).replace(".", ",")} × ton poids de corps`}`,
+    describe: (p) => `${exerciseLabel} ${bodyweightMultiplierText(multiplierFor(p), "ton")}`,
   };
 }
 
+// Objectif de pull-ups d'affilée : 10 pour un homme, 5 pour une femme
+const PULL_UP_GOAL = { male: 10, female: 5 };
+
 const ACHIEVEMENTS = [
-  bodyweightLoadAchievement("squatBw", "Squat au poids de corps", "backSquat", "Back Squat", 1),
-  bodyweightLoadAchievement("squat15Bw", "Squat à 1,5 × le poids de corps", "backSquat", "Back Squat", 1.5),
-  bodyweightLoadAchievement("deadlift2Bw", "Deadlift à 2 × le poids de corps", "deadlift", "Deadlift", 2),
-  bodyweightLoadAchievement("benchBw", "Bench au poids de corps", "benchPress", "Bench Press", 1),
-  bodyweightLoadAchievement("cleanAndJerkBw", "Clean & Jerk au poids de corps", "cleanAndJerk", "Clean & Jerk", 1),
+  bodyweightLoadAchievement("squatBw", "backSquat", "Back Squat", "Squat", { male: 1, female: 1 }),
+  bodyweightLoadAchievement("squat15Bw", "backSquat", "Back Squat", "Squat", { male: 1.5, female: 1.25 }),
+  bodyweightLoadAchievement("deadlift2Bw", "deadlift", "Deadlift", "Deadlift", { male: 2, female: 1.5 }),
+  bodyweightLoadAchievement("benchBw", "benchPress", "Bench Press", "Bench", { male: 1, female: 0.75 }),
+  bodyweightLoadAchievement("cleanAndJerkBw", "cleanAndJerk", "Clean & Jerk", "Clean & Jerk", { male: 1, female: 0.75 }),
   {
-    id: "pullUps10", title: "10 pull-ups d’affilée",
-    check: (p) => itemValueOrZero(p, "pullUp") >= 10,
-    progress: (p) => ({ text: `${itemValueOrZero(p, "pullUp")} / 10 reps`, pct: Math.min(99, itemValueOrZero(p, "pullUp") * 10) }),
-    describe: () => "10 pull-ups en une seule série",
+    id: "pullUps10",
+    get title() { return `${PULL_UP_GOAL[achievementSex(null)]} pull-ups d’affilée`; },
+    check: (p) => itemValueOrZero(p, "pullUp") >= PULL_UP_GOAL[achievementSex(p)],
+    progress: (p) => {
+      const goal = PULL_UP_GOAL[achievementSex(p)];
+      return { text: `${itemValueOrZero(p, "pullUp")} / ${goal} reps`, pct: Math.min(99, Math.round((itemValueOrZero(p, "pullUp") / goal) * 100)) };
+    },
+    describe: (p) => `${PULL_UP_GOAL[achievementSex(p)]} pull-ups en une seule série`,
   },
   {
     id: "firstMuscleUp", title: "Premier muscle-up",
@@ -654,7 +705,7 @@ function renderProfile() {
       </div>
       <div class="profile-hero-radar">${radarSvg(profile)}</div>`;
   } else {
-    heroHtml = `<p class="empty-text">Ton rang global apparaîtra dès ta première performance classée : une série de squat, bench ou pull-ups, un 1RM noté, ou un test cardio. Pense aussi à renseigner ton poids dans Mensurations.</p>`;
+    heroHtml = `<p class="empty-text">Ton rang global apparaîtra dès ta première performance classée : une série de squat, bench ou pull-ups, un 1RM noté, ou un test cardio.${profile.bodyweight === null ? " Pense aussi à renseigner ton poids dans Mensurations." : ""}</p>`;
   }
 
   // ----- Barème -----
@@ -702,8 +753,9 @@ function renderProfile() {
       </article>`;
   }).join("");
 
+  const sexText = profile.sex === "female" ? "barèmes femmes" : "barèmes hommes";
   const bodyweightLine = (bw !== null
-    ? `Rangs calculés pour ton poids de corps actuel : ${formatKg(bw)}`
+    ? `Rangs calculés pour ton poids de corps actuel : ${formatKg(bw)} · ${sexText}`
     : `Renseigne ton poids dans Mensurations : la force, l’haltéro et la gym en dépendent.`)
     + (profile.age !== null
       ? ` · endurance : barème ${profile.age} ans`
@@ -718,7 +770,7 @@ function renderProfile() {
       <div class="profile-category-header"><h3>Succès</h3><span class="profile-category-basis profile-accent-text">${unlockedCount} débloqués sur ${ACHIEVEMENTS.length}</span></div>
       <div class="achievement-grid">${achievementsHtml}</div>
     </section>
-    <p class="records-footnote">Barèmes : standards masculins StrengthLog (squat, bench, deadlift, strict press) et Strength Level (front squat, haltéro, gym), ajustés à ton poids de corps. Rameur 2000 m et course 5 km : standards Rowing Level et Running Level, ajustés à ton âge. 1RM estimés avec la formule d’Epley sur les séries de 10 répétitions maximum.</p>
+    <p class="records-footnote">Barèmes : standards ${profile.sex === "female" ? "féminins" : "masculins"} StrengthLog (squat, bench, deadlift, strict press) et Strength Level (front squat, haltéro, gym), ajustés à ton poids de corps. Rameur 2000 m et course 5 km : standards Rowing Level et Running Level, ajustés à ton âge. 1RM estimés avec la formule d’Epley sur les séries de 10 répétitions maximum.</p>
   `;
 }
 
