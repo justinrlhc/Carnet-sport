@@ -306,17 +306,19 @@ button { font-family: inherit; }
     flex-direction: row;
     align-items: center;
     /* padding-top tient compte de l'encoche/Dynamic Island sur iPhone */
-    padding: max(12px, env(safe-area-inset-top)) 16px 12px 16px;
+    padding: max(12px, env(safe-area-inset-top)) 8px 12px 8px;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
-  .brand-name { display: none; } /* trop peu de place à côté des onglets sur mobile */
-  .brand { padding: 0 10px 0 0; }
+  /* Sur mobile, les 8 onglets tiennent sur une seule ligne : le logo laisse
+     sa place (il reste sur ordinateur et sur l'icône de l'appli) */
+  .brand { display: none; }
   .nav {
     flex: 1;
     flex-direction: row;
-    overflow-x: auto;
-    gap: 6px;
+    overflow-x: auto; /* filet de sécurité : défile seulement sur un écran très étroit */
+    gap: 0;
+    justify-content: space-between;
     /* Défilement fluide au doigt, sans barre de scroll visible */
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
@@ -326,8 +328,9 @@ button { font-family: inherit; }
     white-space: nowrap;
     flex-direction: column;
     gap: 4px;
-    padding: 9px 12px;
-    min-width: 56px;
+    padding: 9px 0;
+    flex: 1 1 0;
+    min-width: 40px;
     /* Zone tactile confortable (recommandation Apple : 44pt minimum) */
     min-height: 44px;
     justify-content: center;
