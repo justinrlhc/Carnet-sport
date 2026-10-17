@@ -60,6 +60,7 @@ function computeSessionVolume(session) {
  */
 function computeCrossfitStructuredVolume(session, entry) {
   if (typeof isNoVolumeExercise === "function" && isNoVolumeExercise(entry.exercise)) return 0;
+  if (typeof getEntryUnit === "function" && getEntryUnit(entry) !== "reps") return 0; // calories / mètres : pas de volume en kg
 
   const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(entry.exercise);
   let perRepWeight;
@@ -174,6 +175,7 @@ function computeMuscuRecords(options) {
       const isSpe = typeof isSpeSession === "function" && isSpeSession(session.wodName);
       (session.exercises || []).forEach((entry) => {
         if (typeof entry === "object" && entry !== null && entry.reps > 0) {
+          if (typeof getEntryUnit === "function" && getEntryUnit(entry) !== "reps") return; // calories / mètres
           if (isSpe) {
             registerSet(entry.exercise, { reps: entry.reps, weight: entry.weight || 0 }, session.date);
           } else {

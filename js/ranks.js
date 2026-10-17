@@ -227,6 +227,7 @@ function collectPerformances() {
       const isSpe = typeof isSpeSession === "function" && isSpeSession(session.wodName);
       (session.exercises || []).forEach((entry) => {
         if (typeof entry !== "object" || entry === null) return; // mouvement libre : rien à mesurer
+        if (typeof getEntryUnit === "function" && getEntryUnit(entry) !== "reps") return; // calories / mètres
         if (isSpe) {
           registerRealSet(entry.exercise, entry.reps, entry.weight || 0);
         } else if (entry.reps > 0 && entry.weight > 0) {

@@ -28,6 +28,8 @@ const DEFAULT_EXERCISES = [
   "Burpee", "Burpee over the bar", "Burpee Box Jump-Over", "Box Jump", "Box Step-Up",
   "V-Up", "Sit-Up", "Single Under", "Double Under",
   "Farmer Carry", "Hip Thrust",
+  // Ajouts CrossFit
+  "Ring Dips", "Pistol Squat", "Wall Walk", "Sumo Deadlift High Pull", "Overhead Walking Lunge", "Sandbag Clean",
 ];
 
 // Exercices "au poids du corps" : la charge y est facultative (on peut juste
@@ -38,7 +40,41 @@ const BODYWEIGHT_EXERCISES = [
   "Box Jump", "Box Step-Up", "Burpee Box Jump-Over", "Sit-Up", "Air Squat",
   "Burpee", "Push-Up", "Handstand Push-Up", "Ring Muscle-Up", "Bar Muscle-Up",
   "Chest-to-Bar Pull-Up", "Single Under", "Double Under",
+  "Ring Dips", "Pistol Squat", "Wall Walk", "Handstand Walk",
 ];
+
+// --------------------------------------------------------------------------
+// EXERCICES MESURÉS EN CALORIES OU EN MÈTRES (dans les WOD)
+// Machines de cardio, course et handstand walk ne se comptent pas en
+// "répétitions × kg" : on note une quantité avec son unité. Ils ne sont
+// proposés que dans les exercices structurés des WOD (CrossFit) et n'entrent
+// ni dans le volume, ni dans les records de charge, ni dans les rangs.
+// Stockage : { exercise: "Rameur", reps: 500, unit: "m", weight: 0, extraReps: 0 }
+// ("reps" contient alors la quantité ; une entrée sans "unit" = des reps)
+// --------------------------------------------------------------------------
+const MEASURED_EXERCISES = {
+  "Rameur": ["cal", "m"],
+  "SkiErg": ["cal", "m"],
+  "Assault Bike": ["cal"],
+  "Echo Bike": ["cal"],
+  "Course": ["m"],
+  "Handstand Walk": ["m"],
+};
+const UNIT_LABELS = { reps: "reps", cal: "cal", m: "m" };
+
+function isMeasuredExercise(name) {
+  return Object.prototype.hasOwnProperty.call(MEASURED_EXERCISES, name);
+}
+
+/** Unité d'une entrée structurée de WOD : "reps" (par défaut), "cal" ou "m". */
+function getEntryUnit(entry) {
+  return entry && (entry.unit === "cal" || entry.unit === "m") ? entry.unit : "reps";
+}
+
+/** "500 m", "15 cal", "10 reps" (nombres à la française). */
+function formatAmount(amount, unit) {
+  return `${formatNumberFr(amount)} ${UNIT_LABELS[unit] || "reps"}`;
+}
 
 /** Un exercice au poids du corps n'exige pas de charge pour valider une série. */
 function isBodyweightExercise(exerciseName) {
@@ -138,11 +174,15 @@ function getAllKnownExercises() {
   const used = getAllSessions()
     .filter((s) => s.type === "musculation")
     .flatMap((s) => (s.exercises || []).filter((ex) => ex && !isCardioEntry(ex)).map((ex) => ex.exercise));
-  return Array.from(new Set([...DEFAULT_EXERCISES, ...used])).sort();
+  return Array.from(new Set([...DEFAULT_EXERCISES, ...used])).filter((name) => !isMeasuredExercise(name)).sort();
 }
 
-/** Remplit un <select> donné avec la liste des exercices connus + option "Autre". */
-function populateExerciseSelectElement(selectEl) {
+/**
+ * Remplit un <select> avec la liste des exercices connus + option "Autre".
+ * options.includeMeasured : ajoute aussi le groupe "Cardio et distance"
+ * (rameur, bike, course...), proposé uniquement dans les WOD.
+ */
+function populateExerciseSelectElement(selectEl, options) {
   selectEl.innerHTML = "";
   getAllKnownExercises().forEach((ex) => {
     const opt = document.createElement("option");
@@ -150,6 +190,17 @@ function populateExerciseSelectElement(selectEl) {
     opt.textContent = ex;
     selectEl.appendChild(opt);
   });
+  if (options && options.includeMeasured) {
+    const group = document.createElement("optgroup");
+    group.label = "Cardio et distance";
+    Object.keys(MEASURED_EXERCISES).sort().forEach((ex) => {
+      const opt = document.createElement("option");
+      opt.value = ex;
+      opt.textContent = `${ex} (${MEASURED_EXERCISES[ex].map((u) => UNIT_LABELS[u]).join(" ou ")})`;
+      group.appendChild(opt);
+    });
+    selectEl.appendChild(group);
+  }
   const customOpt = document.createElement("option");
   customOpt.value = "__custom__";
   customOpt.textContent = "+ Autre exercice…";

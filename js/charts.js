@@ -195,7 +195,7 @@ function getChartableExercises() {
       });
     } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
       (session.exercises || []).forEach((entry) => {
-        if (typeof entry === "object" && entry !== null && entry.reps > 0) lifts.add(entry.exercise);
+        if (typeof entry === "object" && entry !== null && entry.reps > 0 && getEntryUnit(entry) === "reps") lifts.add(entry.exercise);
       });
     }
   });
@@ -255,7 +255,7 @@ function renderExerciseChart() {
       });
     } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
       sets = (session.exercises || [])
-        .filter((ex) => typeof ex === "object" && ex !== null && ex.exercise === name && ex.reps > 0)
+        .filter((ex) => typeof ex === "object" && ex !== null && ex.exercise === name && ex.reps > 0 && getEntryUnit(ex) === "reps")
         .map((ex) => ({ reps: ex.reps, weight: ex.weight || 0 }));
     }
     if (sets.length === 0 || mode === "time") return;

@@ -267,6 +267,7 @@ function createStructuredExerciseRow(prefill) {
     <div class="cf-structured-fields">
       <input type="number" class="cf-structured-reps" min="0" inputmode="numeric" placeholder="Reps" aria-label="Répétitions">
       <input type="number" class="cf-structured-weight" min="0" step="0.5" placeholder="kg" aria-label="Charge (kg)">
+      <select class="cf-structured-unit" aria-label="Unité" style="display:none;"></select>
       <input type="number" class="cf-structured-extra" min="0" inputmode="numeric" placeholder="+ reps" aria-label="Répétitions en plus (tour incomplet)" style="display:none;">
     </div>
   `;
@@ -277,18 +278,38 @@ function createStructuredExerciseRow(prefill) {
   const weightInput = row.querySelector(".cf-structured-weight");
   const extraInput = row.querySelector(".cf-structured-extra");
 
+  const unitSelect = row.querySelector(".cf-structured-unit");
+
   // On réutilise directement la fonction de musculation.js : même base
-  // d'exercices, même option "+ Autre exercice…" pour rester cohérent.
-  populateExerciseSelectElement(select);
+  // d'exercices, même option "+ Autre exercice…", plus le groupe
+  // "Cardio et distance" (calories ou mètres) propre aux WOD.
+  populateExerciseSelectElement(select, { includeMeasured: true });
 
   function getRowExerciseName() {
     return select.value === "__custom__" ? customInput.value.trim() : select.value;
   }
 
+  /** Charge (kg) pour un exercice classique ; unité (cal / m) pour le cardio et la distance. */
   function updateWeightPlaceholder() {
-    const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(getRowExerciseName());
-    weightInput.placeholder = isBW ? "Lest kg" : "kg";
+    const name = getRowExerciseName();
+    const units = isMeasuredExercise(name) ? MEASURED_EXERCISES[name] : null;
+    if (units) {
+      const previous = unitSelect.value;
+      unitSelect.innerHTML = units.map((u) => `<option value="${u}">${u === "cal" ? "Calories" : "Mètres"}</option>`).join("");
+      if (units.includes(previous)) unitSelect.value = previous;
+      unitSelect.style.display = "";
+      weightInput.style.display = "none";
+      weightInput.value = "";
+    } else {
+      unitSelect.innerHTML = "";
+      unitSelect.style.display = "none";
+      weightInput.style.display = "";
+      const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(name);
+      weightInput.placeholder = isBW ? "Lest kg" : "kg";
+    }
+    updateStructuredRowForWodType(row);
   }
+  unitSelect.addEventListener("change", () => updateStructuredRowForWodType(row));
 
   select.addEventListener("change", () => {
     const isCustom = select.value === "__custom__";
@@ -301,7 +322,7 @@ function createStructuredExerciseRow(prefill) {
   row.querySelector(".set-remove").addEventListener("click", () => row.remove());
 
   if (prefill) {
-    const exists = getAllKnownExercises().includes(prefill.exercise);
+    const exists = getAllKnownExercises().includes(prefill.exercise) || isMeasuredExercise(prefill.exercise);
     if (exists) {
       select.value = prefill.exercise;
     } else {
@@ -315,17 +336,24 @@ function createStructuredExerciseRow(prefill) {
   }
 
   updateWeightPlaceholder();
-  updateStructuredRowForWodType(row);
+  if (prefill && getEntryUnit(prefill) !== "reps") {
+    unitSelect.value = getEntryUnit(prefill);
+    updateStructuredRowForWodType(row);
+  }
 
   return row;
 }
 
-/** Adapte le libellé des reps et la visibilité du champ "reps supplémentaires" selon le type de WOD. */
+/** Adapte les libellés (reps, calories ou mètres) et le champ "en plus" selon le type de WOD. */
 function updateStructuredRowForWodType(row) {
   const isAmrap = cfTypeSelect.value === "AMRAP";
   const repsInput = row.querySelector(".cf-structured-reps");
   const extraInput = row.querySelector(".cf-structured-extra");
-  repsInput.placeholder = isAmrap ? "Reps/tour" : "Reps totales";
+  const unitSelect = row.querySelector(".cf-structured-unit");
+  const unit = unitSelect && unitSelect.style.display !== "none" && unitSelect.value ? unitSelect.value : "reps";
+  const word = { reps: "Reps", cal: "Cal", m: "Mètres" }[unit];
+  repsInput.placeholder = isAmrap ? `${word}/tour` : unit === "reps" ? "Reps totales" : `${word} au total`;
+  extraInput.placeholder = `+ ${UNIT_LABELS[unit]}`;
   extraInput.style.display = isAmrap ? "block" : "none";
 }
 
@@ -426,6 +454,12 @@ cfForm.addEventListener("submit", (event) => {
         const weight = Number(rowEl.querySelector(".cf-structured-weight").value) || 0;
         const extraReps = Number(rowEl.querySelector(".cf-structured-extra").value) || 0;
         if (!exerciseName || reps <= 0) return null;
+        if (isMeasuredExercise(exerciseName)) {
+          // Cardio / distance : une quantité et son unité, jamais de charge
+          const unitSelect = rowEl.querySelector(".cf-structured-unit");
+          const unit = unitSelect && unitSelect.value ? unitSelect.value : MEASURED_EXERCISES[exerciseName][0];
+          return { exercise: exerciseName, reps, weight: 0, extraReps, unit };
+        }
         return { exercise: exerciseName, reps, weight, extraReps };
       }
       const input = rowEl.querySelector(".cf-exercise-input");
@@ -648,7 +682,7 @@ function renderCfLastSeen(sessions, query) {
     .map((entry) => {
       if (typeof entry === "object" && entry !== null) {
         const weightText = entry.weight > 0 ? ` à ${formatNumberFr(entry.weight)} kg` : "";
-        return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${escapeHtml(entry.reps)} reps${weightText}</span>`;
+        return `<span><strong>${escapeHtml(entry.exercise)}</strong> — ${formatAmount(entry.reps, getEntryUnit(entry))}${weightText}</span>`;
       }
       return `<span>${escapeHtml(entry)}</span>`;
     })
@@ -699,10 +733,11 @@ function renderCfHistory() {
       .map((entry) => {
         if (typeof entry === "object" && entry !== null) {
           const isAmrap = session.wodType === "AMRAP" && typeof session.rounds === "number";
+          const unit = getEntryUnit(entry);
           const totalReps = isAmrap ? entry.reps * session.rounds + (entry.extraReps || 0) : entry.reps;
           const repsDetail = isAmrap
-            ? `${entry.reps} reps × ${session.rounds} tours${entry.extraReps ? ` + ${entry.extraReps}` : ""} = ${totalReps} reps`
-            : `${totalReps} reps`;
+            ? `${formatAmount(entry.reps, unit)} × ${session.rounds} tours${entry.extraReps ? ` + ${formatNumberFr(entry.extraReps)}` : ""} = ${formatAmount(totalReps, unit)}`
+            : formatAmount(totalReps, unit);
           const weightText = entry.weight > 0 ? ` à ${formatNumberFr(entry.weight)} kg` : "";
           const volume = typeof computeCrossfitStructuredVolume === "function"
             ? computeCrossfitStructuredVolume(session, entry)
