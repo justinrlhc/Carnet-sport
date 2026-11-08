@@ -1018,7 +1018,7 @@ function saveMuscuSession(result) {
     }
     const recordsBefore = typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {};
     const cardioBestsBefore = typeof computeCardioTestBests === "function" ? computeCardioTestBests() : {};
-    addSession(sessionData);
+    const saved = addSession(sessionData);
 
     const newRecords = typeof detectMuscuNewRecords === "function"
       ? detectMuscuNewRecords(recordsBefore, sessionData.exercises, sessionData.date, cardioBestsBefore)
@@ -1030,13 +1030,10 @@ function saveMuscuSession(result) {
     const bodyweightUnknown = hasBodyweightExercise &&
       typeof getCurrentBodyweight === "function" && getCurrentBodyweight() === null;
 
-    if (newRecords.length > 0) {
-      showMuscuRecordBadge(newRecords);
-    } else if (bodyweightUnknown) {
-      showMuscuFeedback("Séance enregistrée ! Astuce : renseigne ton poids dans Mensurations pour calculer le volume des exercices au poids du corps.", false);
-    } else {
-      showMuscuFeedback("Séance enregistrée !", false);
-    }
+    // Bilan de la séance (remplace le petit message : records compris)
+    clearTimeout(muscuFeedbackTimer);
+    muscuFeedback.textContent = "";
+    openMuscuSummary(saved, newRecords, bodyweightUnknown);
   }
 
   muscuDraft = null;
@@ -1049,6 +1046,116 @@ function saveMuscuSession(result) {
   if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
   if (typeof renderDashboard === "function") renderDashboard();
   if (typeof renderRecords === "function") renderRecords();
+}
+
+// --------------------------------------------------------------------------
+// BILAN APRÈS « ENREGISTRER »
+// Durée, volume, séries et records, comparés à la dernière séance du même
+// nom ; puis chaque exercice comparé à la dernière fois qu'il a été fait.
+// --------------------------------------------------------------------------
+
+/** "4 nov." */
+function formatDayMonth(dateStr) {
+  return parseLocalDate(dateStr).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+
+const workingSetsOf = (entry) => (Array.isArray(entry.sets) ? entry.sets.filter((set) => set && set.warmup !== true) : []);
+
+function countWorkingSets(session) {
+  return (session.exercises || []).reduce((total, entry) => total + (isCardioEntry(entry) ? 0 : workingSetsOf(entry).length), 0);
+}
+
+/** Séance de comparaison : la précédente du même nom, sinon la précédente avec exactement les mêmes exercices. */
+function findComparableSession(session) {
+  const name = (session.name || "").trim().toLowerCase();
+  const signature = (s) => (s.exercises || []).map((e) => e && e.exercise).join("|");
+  return getSessionsNewestFirst(session.id).find((s) => s.type === "musculation" && s.date <= session.date &&
+    (name ? (s.name || "").trim().toLowerCase() === name : signature(s) === signature(session))) || null;
+}
+
+/** Un exercice comparé à la dernière fois : { summary, chip: { cls, text } }. */
+function compareExerciseToLastTime(entry, sessionId) {
+  if (isCardioEntry(entry)) {
+    const { last } = getCardioLastAndBest(entry.exercise, sessionId);
+    const summary = `Test chrono : ${formatDuration(entry.timeSeconds)}`;
+    if (!last) return { summary, chip: { cls: "new", text: "Nouveau" } };
+    const diff = Math.round((entry.timeSeconds - last.timeSeconds) * 10) / 10;
+    if (diff < 0) return { summary, chip: { cls: "up", text: `−${formatDuration(-diff)}` } };
+    if (diff > 0) return { summary, chip: { cls: "down", text: `+${formatDuration(diff)}` } };
+    return { summary, chip: { cls: "eq", text: "=" } };
+  }
+  const isBW = isBodyweightExercise(entry.exercise);
+  const now = workingSetsOf(entry);
+  const summary = formatSetsCompact(now, isBW);
+  const last = getLastExercisePerformance(entry.exercise, sessionId);
+  const before = last && Array.isArray(last.sets) ? last.sets.filter((set) => set.warmup !== true) : [];
+  if (before.length === 0 || now.length === 0) return { summary, chip: { cls: "new", text: "Nouveau" } };
+  const maxWeight = (sets) => Math.max(...sets.map((set) => Number(set.weight) || 0));
+  const weightDiff = Math.round((maxWeight(now) - maxWeight(before)) * 100) / 100;
+  if (weightDiff !== 0) {
+    return { summary, chip: { cls: weightDiff > 0 ? "up" : "down", text: `${weightDiff > 0 ? "+" : "−"}${formatNumberFr(Math.abs(weightDiff))} kg` } };
+  }
+  const totalReps = (sets) => sets.reduce((total, set) => total + (Number(set.reps) || 0), 0);
+  const repsDiff = totalReps(now) - totalReps(before);
+  if (repsDiff === 0) return { summary, chip: { cls: "eq", text: "=" } };
+  const n = Math.abs(repsDiff);
+  return { summary, chip: { cls: repsDiff > 0 ? "up" : "down", text: `${repsDiff > 0 ? "+" : "−"}${n} rep${n > 1 ? "s" : ""}` } };
+}
+
+function openMuscuSummary(session, newRecords, bodyweightUnknown) {
+  const reference = findComparableSession(session);
+  const refLabel = reference ? formatDayMonth(reference.date) : "";
+  const volume = typeof computeSessionVolume === "function" ? computeSessionVolume(session) : 0;
+  const sets = countWorkingSets(session);
+  const records = newRecords || [];
+
+  let durationDelta = "";
+  if (reference && session.durationSeconds > 0 && reference.durationSeconds > 0) {
+    const minutes = Math.round((session.durationSeconds - reference.durationSeconds) / 60);
+    durationDelta = minutes === 0 ? "= même durée" : `${minutes > 0 ? "+" : "−"}${Math.abs(minutes)} min`;
+  }
+  let volumeDelta = "";
+  let volumeClass = "eq";
+  const refVolume = reference && typeof computeSessionVolume === "function" ? computeSessionVolume(reference) : 0;
+  if (reference && volume > 0 && refVolume > 0) {
+    const percent = Math.round(((volume - refVolume) / refVolume) * 100);
+    volumeClass = percent > 0 ? "up" : "eq";
+    volumeDelta = percent === 0 ? `= vs ${refLabel}` : `${percent > 0 ? "↑ +" : "↓ −"}${Math.abs(percent)} % vs ${refLabel}`;
+  }
+  let setsDelta = "";
+  if (reference) {
+    const diff = sets - countWorkingSets(reference);
+    setsDelta = diff === 0 ? `= comme le ${refLabel}` : `${diff > 0 ? "+" : "−"}${Math.abs(diff)} vs ${refLabel}`;
+  }
+  const recordNames = records.map((r) => r.exercise);
+  const recordsSub = recordNames.length ? `🏆 ${recordNames.slice(0, 2).join(", ")}${recordNames.length > 2 ? "…" : ""}` : "";
+
+  const comparisons = (session.exercises || []).map((entry) => ({ name: entry.exercise, ...compareExerciseToLastTime(entry, session.id) }));
+  const trophy = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>';
+
+  openSheet((sheet, close) => {
+    sheet.classList.add("rf-summary");
+    sheet.insertAdjacentHTML("beforeend", `
+      <div class="rf-sum-head">
+        <div class="rf-sum-ic">${records.length ? trophy : RF_ICONS.check}</div>
+        <h2>Séance terminée !</h2>
+        <p>${escapeHtml(session.name || "Séance")} · ${escapeHtml(formatDayDate(session.date))}</p>
+      </div>
+      <div class="rf-stats">
+        <div class="rf-stat"><b>${session.durationSeconds > 0 ? formatSessionDuration(session.durationSeconds) : "—"}</b><span>Durée</span>${durationDelta ? `<span class="rf-delta eq">${escapeHtml(durationDelta)}</span>` : ""}</div>
+        <div class="rf-stat"><b>${volume > 0 ? `${Math.round(volume).toLocaleString("fr-FR")} kg` : "—"}</b><span>Volume</span>${volumeDelta ? `<span class="rf-delta ${volumeClass}">${escapeHtml(volumeDelta)}</span>` : ""}</div>
+        <div class="rf-stat"><b>${sets}</b><span>Série${sets > 1 ? "s" : ""}${session.exercises.some((e) => workingSetsOf(e).length !== (e.sets || []).length) ? " (sans échauff.)" : ""}</span>${setsDelta ? `<span class="rf-delta eq">${escapeHtml(setsDelta)}</span>` : ""}</div>
+        <div class="rf-stat"><b>${records.length}</b><span>Record${records.length > 1 ? "s" : ""} battu${records.length > 1 ? "s" : ""}</span>${recordsSub ? `<span class="rf-delta up">${escapeHtml(recordsSub)}</span>` : ""}</div>
+      </div>
+      <div class="rf-cmp">
+        <div class="rf-cmp-h">Par rapport à la dernière fois</div>
+        ${comparisons.map((c) => `<div class="rf-cmp-row"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(c.summary)}</small><em class="${c.chip.cls}">${escapeHtml(c.chip.text)}</em></div>`).join("")}
+      </div>
+      ${records.length ? `<div class="rf-prs">${records.map((r) => `<div><span>${escapeHtml(r.exercise)}</span><b>${escapeHtml(r.text || `${formatNumberFr(r.value)} kg`)}</b></div>`).join("")}</div>` : ""}
+      ${bodyweightUnknown ? `<div class="rf-warn">Astuce : renseigne ton poids dans Mensurations pour calculer le volume des exercices au poids du corps.</div>` : ""}
+      <button type="button" class="rf-btn rf-btn-gold rf-btn-wide" data-act="close">Super !</button>`);
+    sheet.querySelector('[data-act="close"]').addEventListener("click", close);
+  });
 }
 
 /** Bouton "Terminer" (séance en cours) ou "Enregistrer" (modification). */
@@ -1143,23 +1250,38 @@ function renderMuscuHistory() {
     return;
   }
 
+  // Records battus par séance : mêmes règles que l'historique de la page
+  // Records (un tout premier résultat ne compte pas, il n'y avait rien à battre)
+  const recordsBySession = {};
+  if (typeof computeRecordHistory === "function") {
+    computeRecordHistory().forEach((event) => {
+      if (!event.sessionId) return;
+      (recordsBySession[event.sessionId] = recordsBySession[event.sessionId] || new Set()).add(event.title);
+    });
+  }
+
   sessions.slice(0, muscuHistoryLimit).forEach((session) => {
     const card = document.createElement("div");
-    card.className = "history-card";
+    const records = recordsBySession[session.id] || new Set();
+    card.className = "history-card" + (records.size > 0 ? " has-record" : "");
+    const volume = typeof computeSessionVolume === "function" ? Math.round(computeSessionVolume(session)) : 0;
+    const chips = [];
+    if (records.size > 0) chips.push(`<span class="hist-chip gold">🏆 ${records.size} record${records.size > 1 ? "s" : ""}</span>`);
+    if (volume > 0) chips.push(`<span class="hist-chip">${volume.toLocaleString("fr-FR")} kg</span>`);
 
     const exercisesHtml = (session.exercises || [])
       .map((entry) => {
         if (isCardioEntry(entry)) {
           return `
           <div class="history-card-exercise">
-            <span class="history-card-exercise-name">${escapeHtml(entry.exercise)}</span>
+            <span class="history-card-exercise-name">${escapeHtml(entry.exercise)}${records.has(entry.exercise) ? ` <span class="hist-pr">PR</span>` : ""}</span>
             <span class="history-card-sets">Test chrono : ${formatDuration(entry.timeSeconds)}</span>
           </div>`;
         }
         const setsText = escapeHtml(formatSetsCompact(entry.sets, isBodyweightExercise(entry.exercise)));
         return `
           <div class="history-card-exercise">
-            <span class="history-card-exercise-name">${escapeHtml(entry.exercise)}</span>
+            <span class="history-card-exercise-name">${escapeHtml(entry.exercise)}${records.has(entry.exercise) ? ` <span class="hist-pr">PR</span>` : ""}</span>
             <span class="history-card-sets">${setsText}</span>
             ${entry.rpe ? `<span class="badge-rpe ${getRpeBadgeClass(entry.rpe)}">RPE ${escapeHtml(entry.rpe)}</span>` : ""}
           </div>`;
@@ -1171,6 +1293,7 @@ function renderMuscuHistory() {
         <span class="history-card-title">${escapeHtml(session.name || "Séance")}</span>
         <span class="history-card-date">${parseLocalDate(session.date).toLocaleDateString("fr-FR")}${session.durationSeconds > 0 ? ` · ${formatSessionDuration(session.durationSeconds)}` : ""}</span>
       </div>
+      ${chips.length ? `<div class="hist-chips">${chips.join("")}</div>` : ""}
       ${exercisesHtml}
       ${session.notes ? `<p class="history-card-notes">${escapeHtml(session.notes)}</p>` : ""}
       <div class="history-card-actions">

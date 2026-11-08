@@ -793,7 +793,7 @@ function computeRecordHistory() {
           gain = `+${kg(t.value - previous)}`;
           detail = `${formatNumberFr(t.set.weight)} kg × ${t.set.reps}`;
         }
-        events.push({ date: session.date, title: t.name, value, gain, detail, target: { section: "exercise", name: t.name } });
+        events.push({ date: session.date, sessionId: session.id, title: t.name, value, gain, detail, target: { section: "exercise", name: t.name } });
       }
       if (previous === undefined || better) best[key] = t.value;
     });
