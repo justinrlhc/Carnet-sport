@@ -2319,3 +2319,79 @@ body.rf-sheet-open { overflow: hidden; }
 .hist-chip { font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: var(--surface-raised); color: var(--text-secondary); }
 .hist-chip.gold { background: var(--accent-soft); color: var(--accent-strong); }
 .hist-pr { display: inline-block; margin-left: 4px; font-size: 10px; font-weight: 900; line-height: 1.4; color: #17130a; background: var(--accent); border-radius: 5px; padding: 0 5px; vertical-align: 2px; }
+
+/* ==========================================================================
+   ONGLET RECORDS (v25) — liste compacte, fiche détaillée, filtres
+   ========================================================================== */
+.rc-head { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; }
+.rc-title { margin: 0; flex: 1; font-family: var(--font-display); font-size: 20px; }
+.rc-info { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font: italic 800 15px/1 Georgia, serif; cursor: pointer; flex-shrink: 0; }
+.rc-add { font: inherit; font-weight: 800; font-size: 14px; color: var(--accent-strong); background: var(--accent-soft); border: 0; border-radius: 10px; padding: 10px 13px; min-height: 40px; cursor: pointer; flex-shrink: 0; }
+#section-records .rc-form { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin: 0 0 16px; }
+.rc-form-title { margin: 0 0 12px; font-family: var(--font-display); font-size: 17px; }
+.rc-feed-head { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+.rc-feed-head > span:first-child { flex: 1; font-size: 12px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--text-muted); }
+.rc-count { font-size: 12px; font-weight: 800; color: var(--accent-strong); background: var(--accent-soft); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.rc-feed { display: flex; gap: 10px; overflow-x: auto; margin: 0 -16px 18px; padding: 0 16px 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.rc-feed::-webkit-scrollbar { display: none; }
+.rc-fc { flex: 0 0 138px; font: inherit; text-align: left; color: inherit; cursor: pointer; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; -webkit-tap-highlight-color: transparent; }
+.rc-fc:active { border-color: var(--accent); }
+.rc-fc .n { width: 100%; font-size: 12px; font-weight: 700; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-fc .v { font-family: var(--font-display); font-size: 21px; font-weight: 800; color: var(--accent-strong); white-space: nowrap; }
+.rc-fc .g { font-size: 11px; font-weight: 800; color: var(--success); background: rgba(76,175,125,.14); padding: 2px 7px; border-radius: 7px; }
+.rc-fc .d { font-size: 11px; color: var(--text-muted); }
+.rc-feed-empty { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
+.app input.rc-search { width: 100%; font-size: 16px; border-radius: 12px; padding: 11px 14px; margin: 0 0 10px; background: var(--surface); }
+.rc-chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px 6px; padding: 0 16px 2px; scrollbar-width: none; }
+.rc-chips::-webkit-scrollbar { display: none; }
+.rc-chip { flex-shrink: 0; font: inherit; font-size: 13px; font-weight: 800; padding: 8px 13px; min-height: 38px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.rc-chip small { font-weight: 700; opacity: .7; margin-left: 5px; }
+.rc-chip.on { background: var(--accent); border-color: var(--accent); color: #17130a; }
+.rc-group { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin: 16px 4px 8px; }
+#records-list > .rc-list:first-child { margin-top: 10px; }
+.rc-list { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+.rc-row { width: 100%; font: inherit; color: inherit; text-align: left; background: transparent; border: 0; cursor: pointer; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto 12px; gap: 12px; align-items: center; padding: 11px 12px 11px 14px; -webkit-tap-highlight-color: transparent; }
+.rc-row + .rc-row { border-top: 1px solid var(--border); }
+.rc-row:active { background: var(--surface-raised); }
+.rc-main { display: flex; flex-direction: column; min-width: 0; }
+.rc-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-sub { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-val { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.rc-val b { font-family: var(--font-display); font-size: 20px; font-weight: 800; color: var(--accent-strong); white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+.rc-val small { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.rc-chev { color: var(--text-muted); font-size: 20px; line-height: 1; }
+.rc-lvl { display: inline-block; font-family: var(--font-body); font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 5px; line-height: 1.3; }
+.rc-empty { margin: 14px 0 0; padding: 18px; text-align: center; color: var(--text-muted); font-size: 14px; line-height: 1.45; border: 1px dashed var(--border); border-radius: 14px; }
+/* Fiche détaillée */
+.rc-sheet-head { display: flex; align-items: center; gap: 12px; }
+.rc-sheet-head h2 { margin: 0; }
+.rc-big { display: flex; align-items: baseline; justify-content: center; gap: 8px; flex-wrap: wrap; text-align: center; }
+.rc-big b { font-family: var(--font-display); font-size: 46px; font-weight: 800; line-height: 1; color: var(--accent-strong); }
+.rc-big span { font-size: 14px; color: var(--text-secondary); }
+.rc-origin { text-align: center; color: var(--text-secondary); font-size: 13px; margin-top: -6px; }
+.rc-note { margin: 0; font-size: 13px; color: var(--text-secondary); text-align: center; }
+.rc-chart { background: var(--surface-raised); border-radius: 14px; padding: 12px; }
+.rc-chart-h { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; }
+.rc-chart-h .good { color: var(--success); }
+.rc-timeline { display: flex; flex-direction: column; }
+.rc-timeline > div { display: grid; grid-template-columns: 62px 1fr auto; gap: 8px; align-items: center; padding: 9px 2px; border-top: 1px solid var(--border); font-size: 14px; }
+.rc-timeline > div:first-child { border-top: 0; }
+.rc-timeline > div > span { color: var(--text-muted); font-size: 12px; }
+.rc-timeline b { display: flex; align-items: center; gap: 6px; }
+.rc-timeline em { font-style: normal; font-size: 11px; font-weight: 800; color: var(--success); background: rgba(76,175,125,.14); padding: 2px 7px; border-radius: 7px; white-space: nowrap; }
+.rc-timeline em.noted { color: var(--accent-strong); background: var(--accent-soft); }
+.rc-levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.rc-levels > div { background: var(--surface-raised); border-radius: 12px; padding: 10px 6px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rc-levels b { font-family: var(--font-display); font-size: 22px; color: var(--accent-strong); }
+.rc-levels .empty b { color: var(--text-muted); }
+.rc-levels small { font-size: 11px; color: var(--text-muted); }
+.rc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rc-actions.single { grid-template-columns: 1fr; }
+.rc-actions .rf-btn { min-height: 48px; font-size: 14px; padding: 10px; }
+.rc-actions .rf-btn:nth-child(3):last-child { grid-column: 1 / -1; }
+.rc-info-p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+.rc-info-p b { color: var(--text-primary); }
+@media (min-width: 721px) {
+  .rc-feed, .rc-chips { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+  #section-records { max-width: 760px; }
+}

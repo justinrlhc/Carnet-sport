@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=24">
+  <link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 
@@ -356,123 +356,114 @@
 
       <!-- ---------- SECTION : RECORDS ---------- -->
       <section class="section" id="section-records">
+        <!-- En-tête : un seul bouton pour noter une perf, et l'explication derrière le « i » -->
+        <div class="rc-head">
+          <h2 class="rc-title">Mes records</h2>
+          <button type="button" class="rc-info" id="records-info-btn" aria-label="Comment sont calculés tes records">i</button>
+          <button type="button" class="rc-add" id="btn-note-perf">+ Noter une perf</button>
+        </div>
+
+        <!-- Formulaires « noter une perf » (ouverts par le bouton, une fiche ou le Profil) -->
+        <form id="manual-1rm-form" class="manual-record-form rc-form" style="display:none;">
+          <h2 class="rc-form-title">Noter une perf</h2>
+          <div class="form-row">
+            <label for="manual-1rm-exercise-select">Exercice</label>
+            <select id="manual-1rm-exercise-select"></select>
+            <input type="text" id="manual-1rm-exercise-custom" class="form-input-spaced"
+                   placeholder="Nom de l'exercice" style="display:none;">
+          </div>
+          <!-- Exercice au poids du corps : reps max d'affilée ou lest max (stats.js) -->
+          <div class="form-row" id="manual-perf-mode-row" style="display:none;">
+            <label id="manual-perf-mode-label">Ce que tu notes</label>
+            <div class="ob-seg" role="radiogroup" aria-labelledby="manual-perf-mode-label" id="manual-perf-mode">
+              <button type="button" data-mode="reps" role="radio">Reps max d'affilée</button>
+              <button type="button" data-mode="load" role="radio">Lest max (1 rep)</button>
+            </div>
+          </div>
+          <div class="form-row form-row-inline" id="manual-value-row">
+            <div id="manual-value-box">
+              <label for="manual-1rm-weight" id="manual-value-label">Charge max (1 rep, kg)</label>
+              <input type="number" id="manual-1rm-weight" min="0" step="0.5" inputmode="decimal">
+              <div class="cardio-time-row" id="manual-time-fields" style="display:none;">
+                <input type="text" id="manual-time-min" inputmode="numeric" pattern="[0-9]*" placeholder="7" aria-label="Minutes">
+                <span class="cardio-time-unit">min</span>
+                <input type="text" id="manual-time-sec" inputmode="decimal" placeholder="45" aria-label="Secondes">
+                <span class="cardio-time-unit">s</span>
+              </div>
+              <span class="manual-value-hint" id="manual-value-hint"></span>
+            </div>
+            <div>
+              <label for="manual-1rm-date">Date <span class="label-optional">(optionnel)</span></label>
+              <input type="date" id="manual-1rm-date">
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="manual-1rm-notes">Notes <span class="label-optional">(optionnel)</span></label>
+            <input type="text" id="manual-1rm-notes" placeholder="ex : compétition, testé en salle...">
+          </div>
+          <div class="form-row-buttons">
+            <button type="submit" class="btn btn-primary btn-small" id="manual-1rm-submit">Enregistrer ce 1RM</button>
+            <button type="button" class="btn btn-secondary btn-small" id="btn-cancel-1rm-form">Annuler</button>
+          </div>
+          <p class="form-feedback form-feedback-error" id="manual-1rm-feedback"></p>
+        </form>
+        <form id="manual-cf-record-form" class="manual-record-form rc-form" style="display:none;">
+          <h2 class="rc-form-title">Noter un résultat de WOD</h2>
+          <div class="form-row">
+            <label for="manual-cf-wod-select">Nom du WOD</label>
+            <select id="manual-cf-wod-select"></select>
+            <input type="text" id="manual-cf-wod-custom" class="form-input-spaced"
+                   placeholder="Nom du WOD" style="display:none;">
+          </div>
+          <div class="form-row">
+            <label for="manual-cf-level">Niveau</label>
+            <select id="manual-cf-level">
+              <option value="RX">RX</option>
+              <option value="Inter">Inter</option>
+              <option value="Scaled">Scaled</option>
+            </select>
+          </div>
+          <div class="form-row form-row-inline">
+            <div>
+              <label for="manual-cf-time">Temps</label>
+              <input type="text" id="manual-cf-time" inputmode="decimal" placeholder="ex : 5:48 ou 5,48">
+            </div>
+            <div>
+              <label for="manual-cf-date">Date <span class="label-optional">(optionnel)</span></label>
+              <input type="date" id="manual-cf-date">
+            </div>
+          </div>
+          <div class="form-row form-row-inline">
+            <div>
+              <label for="manual-cf-rounds">Rounds <span class="label-optional">(si pas de temps)</span></label>
+              <input type="number" id="manual-cf-rounds" min="0">
+            </div>
+            <div>
+              <label for="manual-cf-extra-reps">Reps en plus</label>
+              <input type="number" id="manual-cf-extra-reps" min="0">
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="manual-cf-notes">Notes <span class="label-optional">(optionnel)</span></label>
+            <input type="text" id="manual-cf-notes" placeholder="ex : compétition, avant l'application...">
+          </div>
+          <div class="form-row-buttons">
+            <button type="submit" class="btn btn-primary btn-small">Enregistrer ce résultat</button>
+            <button type="button" class="btn btn-secondary btn-small" id="btn-cancel-cf-record-form">Annuler</button>
+          </div>
+        </form>
 
         <!-- Fil des derniers records battus (rempli par js/stats.js) -->
-        <div class="panel pr-feed" id="record-feed-panel" style="margin-bottom: 16px;">
-          <div class="records-header">
-            <h2 class="panel-title">Derniers records battus</h2>
-            <span class="pr-feed-count" id="record-feed-count"></span>
-          </div>
-          <div id="record-feed"></div>
+        <div class="rc-feed-head" id="record-feed-panel">
+          <span>Derniers records battus</span>
+          <span class="rc-count" id="record-feed-count"></span>
         </div>
+        <div class="rc-feed" id="record-feed"></div>
 
-        <div class="panel">
-          <div class="records-header">
-            <h2 class="panel-title">Musculation</h2>
-            <button type="button" class="btn btn-secondary btn-small" id="btn-toggle-1rm-form">+ Noter une perf</button>
-          </div>
-
-          <form id="manual-1rm-form" class="manual-record-form" style="display:none;">
-            <div class="form-row">
-              <label for="manual-1rm-exercise-select">Exercice</label>
-              <select id="manual-1rm-exercise-select"></select>
-              <input type="text" id="manual-1rm-exercise-custom" class="form-input-spaced"
-                     placeholder="Nom de l'exercice" style="display:none;">
-            </div>
-            <!-- Exercice au poids du corps : reps max d'affilée ou lest max (stats.js) -->
-            <div class="form-row" id="manual-perf-mode-row" style="display:none;">
-              <label id="manual-perf-mode-label">Ce que tu notes</label>
-              <div class="ob-seg" role="radiogroup" aria-labelledby="manual-perf-mode-label" id="manual-perf-mode">
-                <button type="button" data-mode="reps" role="radio">Reps max d'affilée</button>
-                <button type="button" data-mode="load" role="radio">Lest max (1 rep)</button>
-              </div>
-            </div>
-            <div class="form-row form-row-inline" id="manual-value-row">
-              <div id="manual-value-box">
-                <label for="manual-1rm-weight" id="manual-value-label">Charge max (1 rep, kg)</label>
-                <input type="number" id="manual-1rm-weight" min="0" step="0.5" inputmode="decimal">
-                <div class="cardio-time-row" id="manual-time-fields" style="display:none;">
-                  <input type="text" id="manual-time-min" inputmode="numeric" pattern="[0-9]*" placeholder="7" aria-label="Minutes">
-                  <span class="cardio-time-unit">min</span>
-                  <input type="text" id="manual-time-sec" inputmode="decimal" placeholder="45" aria-label="Secondes">
-                  <span class="cardio-time-unit">s</span>
-                </div>
-                <span class="manual-value-hint" id="manual-value-hint"></span>
-              </div>
-              <div>
-                <label for="manual-1rm-date">Date <span class="label-optional">(optionnel)</span></label>
-                <input type="date" id="manual-1rm-date">
-              </div>
-            </div>
-            <div class="form-row">
-              <label for="manual-1rm-notes">Notes <span class="label-optional">(optionnel)</span></label>
-              <input type="text" id="manual-1rm-notes" placeholder="ex : compétition, testé en salle...">
-            </div>
-            <div class="form-row-buttons">
-              <button type="submit" class="btn btn-primary btn-small" id="manual-1rm-submit">Enregistrer ce 1RM</button>
-              <button type="button" class="btn btn-secondary btn-small" id="btn-cancel-1rm-form">Annuler</button>
-            </div>
-            <p class="form-feedback form-feedback-error" id="manual-1rm-feedback"></p>
-          </form>
-
-          <div id="records-muscu-grid" class="records-grid"></div>
-          <p class="records-footnote">* Le 1RM (charge maximale sur une répétition) est soit saisi directement par toi, soit estimé à partir de tes séries avec la formule d'Epley — c'est toujours précisé sur la carte. Seules les séries de 10 répétitions maximum servent à l'estimer : au-delà, c'est la charge soulevée qui compte. Une estimation n'est jamais une valeur mesurée.</p>
-        </div>
-
-        <div class="panel" style="margin-top: 16px;">
-          <div class="records-header">
-            <h2 class="panel-title">CrossFit</h2>
-            <button type="button" class="btn btn-secondary btn-small" id="btn-toggle-cf-record-form">+ Noter un résultat connu</button>
-          </div>
-
-          <form id="manual-cf-record-form" class="manual-record-form" style="display:none;">
-            <div class="form-row">
-              <label for="manual-cf-wod-select">Nom du WOD</label>
-              <select id="manual-cf-wod-select"></select>
-              <input type="text" id="manual-cf-wod-custom" class="form-input-spaced"
-                     placeholder="Nom du WOD" style="display:none;">
-            </div>
-            <div class="form-row">
-              <label for="manual-cf-level">Niveau</label>
-              <select id="manual-cf-level">
-                <option value="RX">RX</option>
-                <option value="Inter">Inter</option>
-                <option value="Scaled">Scaled</option>
-              </select>
-            </div>
-            <div class="form-row form-row-inline">
-              <div>
-                <label for="manual-cf-time">Temps</label>
-                <input type="text" id="manual-cf-time" inputmode="decimal" placeholder="ex : 5:48 ou 5,48">
-              </div>
-              <div>
-                <label for="manual-cf-date">Date <span class="label-optional">(optionnel)</span></label>
-                <input type="date" id="manual-cf-date">
-              </div>
-            </div>
-            <div class="form-row form-row-inline">
-              <div>
-                <label for="manual-cf-rounds">Rounds <span class="label-optional">(si pas de temps)</span></label>
-                <input type="number" id="manual-cf-rounds" min="0">
-              </div>
-              <div>
-                <label for="manual-cf-extra-reps">Reps en plus</label>
-                <input type="number" id="manual-cf-extra-reps" min="0">
-              </div>
-            </div>
-            <div class="form-row">
-              <label for="manual-cf-notes">Notes <span class="label-optional">(optionnel)</span></label>
-              <input type="text" id="manual-cf-notes" placeholder="ex : compétition, avant l'application...">
-            </div>
-            <div class="form-row-buttons">
-              <button type="submit" class="btn btn-primary btn-small">Enregistrer ce résultat</button>
-              <button type="button" class="btn btn-secondary btn-small" id="btn-cancel-cf-record-form">Annuler</button>
-            </div>
-          </form>
-
-          <div id="records-cf-grid" class="records-grid"></div>
-        </div>
-
+        <!-- Recherche, filtres et liste compacte (une fiche s'ouvre en touchant une ligne) -->
+        <input type="search" id="records-search" class="rc-search" placeholder="Rechercher (ex : squat, rameur, Fran)" aria-label="Rechercher un record" autocomplete="off">
+        <div class="rc-chips" id="records-filters"></div>
+        <div id="records-list"></div>
       </section>
 
       <!-- ---------- SECTION : STATISTIQUES ---------- -->
@@ -683,16 +674,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=24"></script>
-  <script src="js/seance.js?v=24"></script>
-  <script src="js/musculation.js?v=24"></script>
-  <script src="js/crossfit.js?v=24"></script>
-  <script src="js/mensurations.js?v=24"></script>
-  <script src="js/stats.js?v=24"></script>
-  <script src="js/charts.js?v=24"></script>
-  <script src="js/ranks.js?v=24"></script>
-  <script src="js/settings.js?v=24"></script>
-  <script src="js/app.js?v=24"></script>
+  <script src="js/data.js?v=25"></script>
+  <script src="js/seance.js?v=25"></script>
+  <script src="js/musculation.js?v=25"></script>
+  <script src="js/crossfit.js?v=25"></script>
+  <script src="js/mensurations.js?v=25"></script>
+  <script src="js/stats.js?v=25"></script>
+  <script src="js/charts.js?v=25"></script>
+  <script src="js/ranks.js?v=25"></script>
+  <script src="js/settings.js?v=25"></script>
+  <script src="js/app.js?v=25"></script>
 </body>
 </html>
 
