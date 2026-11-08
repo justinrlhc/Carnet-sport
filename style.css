@@ -2292,3 +2292,30 @@ body.rf-sheet-open { overflow: hidden; }
   .rf-meta .rf-date > span { display: none; }
   .rf-thead { font-size: 10px; letter-spacing: 0; }
 }
+
+/* Bilan après « Enregistrer » (v24) */
+.rf-sum-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.rf-sum-ic { width: 64px; height: 64px; border-radius: 20px; background: var(--accent-soft); color: var(--accent-strong); display: grid; place-items: center; }
+.rf-sum-ic svg { width: 34px; height: 34px; }
+.rf-sum-head h2 { margin-top: 4px; }
+.rf-sum-head p { margin: 0; color: var(--text-secondary); font-size: 14px; }
+.rf-delta { display: block; font-size: 12px; font-weight: 800; margin-top: 2px; }
+.rf-delta.up { color: var(--success); }
+.rf-delta.eq { color: var(--text-muted); }
+.rf-stat span:not(.rf-delta) { display: block; }
+.rf-cmp { display: flex; flex-direction: column; gap: 6px; }
+.rf-cmp-h { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin: 2px 2px 0; }
+.rf-cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 10px 12px; background: var(--surface-raised); border-radius: 12px; }
+.rf-cmp-row b { font-size: 14px; overflow-wrap: anywhere; }
+.rf-cmp-row small { grid-column: 1; font-size: 12px; color: var(--text-secondary); }
+.rf-cmp-row em { grid-row: 1 / 3; grid-column: 2; align-self: center; font-style: normal; font-weight: 800; font-size: 13px; padding: 4px 8px; border-radius: 8px; white-space: nowrap; }
+.rf-cmp-row em.up { color: var(--success); background: rgba(76,175,125,.14); }
+.rf-cmp-row em.down, .rf-cmp-row em.eq { color: var(--text-secondary); background: var(--surface); }
+.rf-cmp-row em.new { color: var(--accent-strong); background: var(--accent-soft); }
+
+/* Historique : records et volume (v24) */
+.history-card.has-record { border-color: rgba(211,162,78,.55); }
+.hist-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.hist-chip { font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: var(--surface-raised); color: var(--text-secondary); }
+.hist-chip.gold { background: var(--accent-soft); color: var(--accent-strong); }
+.hist-pr { display: inline-block; margin-left: 4px; font-size: 10px; font-weight: 900; line-height: 1.4; color: #17130a; background: var(--accent); border-radius: 5px; padding: 0 5px; vertical-align: 2px; }
