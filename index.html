@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 
@@ -461,47 +461,57 @@
 
       <!-- ---------- SECTION : STATISTIQUES ---------- -->
       <section class="section" id="section-statistiques">
+        <!-- Refait en v27 : dessiné par js/charts.js -->
+        <div class="st">
 
-        <div class="panel">
-          <div class="regularity-header">
-            <h2 class="panel-title">Régularité</h2>
-            <span class="streak-badge" id="streak-badge" style="display:none;"></span>
+          <!-- Période (glissante) : règle les chiffres clés et le graphique -->
+          <div class="st-per" id="stats-period" role="group" aria-label="Période">
+            <button type="button" data-period="week">Semaine</button>
+            <button type="button" data-period="month" class="on">Mois</button>
+            <button type="button" data-period="quarter">3 mois</button>
+            <button type="button" data-period="year">Année</button>
           </div>
-          <div id="attendance-heatmap"></div>
-        </div>
+          <p class="st-sub" id="stats-period-sub"></p>
 
-        <div class="panel" style="margin-top: 16px;">
-          <h2 class="panel-title">Poids de corps</h2>
-          <div class="chart-container"><canvas id="chart-bodyweight" height="90"></canvas></div>
-        </div>
+          <!-- 4 chiffres clés -->
+          <div class="st-tiles" id="stats-tiles"></div>
 
-        <div class="panel" style="margin-top: 16px;">
-          <div class="stats-chart-header">
-            <h2 class="panel-title">Progression d'un exercice</h2>
-            <select id="stats-exercise-select"></select>
+          <!-- Activité : séances, volume (kg) ou séries -->
+          <div class="st-card">
+            <div class="st-h">
+              <h3>Activité</h3>
+              <div class="st-seg" id="stats-metric" role="group" aria-label="Ce que montre le graphique">
+                <button type="button" data-metric="sessions" class="on">Séances</button>
+                <button type="button" data-metric="volume">Volume</button>
+                <button type="button" data-metric="sets">Séries</button>
+              </div>
+            </div>
+            <div class="chart-container"><canvas id="chart-activity" height="130"></canvas></div>
+            <p class="st-offline" id="stats-activity-offline" hidden>Le graphique s'affichera dès que l'appli aura pu se connecter une fois.</p>
+            <div class="st-avg" id="stats-activity-avg"></div>
           </div>
-          <div class="chart-container"><canvas id="chart-exercise" height="90"></canvas></div>
-        </div>
 
-        <div class="panel-grid" style="margin-top: 16px;">
-          <div class="panel">
-            <h2 class="panel-title">Volume par semaine</h2>
-            <div class="chart-container"><canvas id="chart-volume" height="110"></canvas></div>
-          </div>
-          <div class="panel">
-            <h2 class="panel-title">Séances par semaine</h2>
-            <div class="chart-container"><canvas id="chart-sessions" height="110"></canvas></div>
-          </div>
-        </div>
+          <!-- Calendrier de régularité -->
+          <div class="st-card" id="stats-calendar"></div>
 
-        <div class="panel" style="margin-top: 16px;">
-          <div class="stats-chart-header">
-            <h2 class="panel-title">Progression sur un WOD</h2>
-            <select id="stats-wod-select"></select>
+          <!-- Les courbes déjà présentes ailleurs -->
+          <div class="st-card">
+            <div class="st-lbl">Ailleurs dans l'appli</div>
+            <div class="st-links">
+              <button type="button" class="st-link" data-go="records">
+                <span class="st-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/></svg></span>
+                <span class="st-link-t"><b>Progression d'un exercice ou d'un WOD</b><small>courbes et historique dans Records</small></span>
+                <em aria-hidden="true">›</em>
+              </button>
+              <button type="button" class="st-link" data-go="mensurations">
+                <span class="st-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></span>
+                <span class="st-link-t"><b>Courbe du poids</b><small>avec la moyenne sur 7 jours, dans Mensurations</small></span>
+                <em aria-hidden="true">›</em>
+              </button>
+            </div>
           </div>
-          <div class="chart-container"><canvas id="chart-wod" height="90"></canvas></div>
-        </div>
 
+        </div>
       </section>
 
       <!-- ---------- SECTION : RÉGLAGES ---------- -->
@@ -679,16 +689,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=26"></script>
-  <script src="js/seance.js?v=26"></script>
-  <script src="js/musculation.js?v=26"></script>
-  <script src="js/crossfit.js?v=26"></script>
-  <script src="js/mensurations.js?v=26"></script>
-  <script src="js/stats.js?v=26"></script>
-  <script src="js/charts.js?v=26"></script>
-  <script src="js/ranks.js?v=26"></script>
-  <script src="js/settings.js?v=26"></script>
-  <script src="js/app.js?v=26"></script>
+  <script src="js/data.js?v=27"></script>
+  <script src="js/seance.js?v=27"></script>
+  <script src="js/musculation.js?v=27"></script>
+  <script src="js/crossfit.js?v=27"></script>
+  <script src="js/mensurations.js?v=27"></script>
+  <script src="js/stats.js?v=27"></script>
+  <script src="js/charts.js?v=27"></script>
+  <script src="js/ranks.js?v=27"></script>
+  <script src="js/settings.js?v=27"></script>
+  <script src="js/app.js?v=27"></script>
 </body>
 </html>
 
