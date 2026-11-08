@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=25">
+  <link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 
@@ -296,62 +296,55 @@
 
       <!-- ---------- SECTION : MENSURATIONS ---------- -->
       <section class="section" id="section-mensurations">
+        <!-- Refait en v26 : tout le contenu est dessiné par js/mensurations.js -->
+        <div class="mz">
 
-        <div class="muscu-layout">
+          <!-- Poids actuel, tendance sur 30 jours, IMC en petit -->
+          <div class="mz-card mz-hero" id="mz-hero"></div>
 
-          <div class="panel form-panel">
-            <h2 class="panel-title">Ajouter une mesure</h2>
-            <form id="weight-form">
-
-              <div class="form-row">
-                <label for="weight-date">Date</label>
-                <input type="date" id="weight-date" required>
+          <!-- Nouvelle pesée en un geste -->
+          <div class="mz-card" id="weight-form">
+            <div class="mz-entry-h">
+              <div class="mz-lbl" id="weight-form-title">Nouvelle pesée</div>
+              <div>
+                <button type="button" class="mz-link danger" id="weight-delete-btn" hidden>Supprimer</button>
+                <button type="button" class="mz-link" id="weight-cancel-edit" hidden>Annuler</button>
               </div>
-
-              <div class="form-row">
-                <label for="weight-value">Poids (kg)</label>
-                <input type="number" id="weight-value" min="0" step="0.1" required>
-              </div>
-
-              <div class="form-row-buttons">
-                <button type="submit" class="btn btn-primary" id="weight-submit-btn">Enregistrer</button>
-                <button type="button" class="btn btn-secondary" id="weight-cancel-edit" style="display:none;">Annuler la modification</button>
-              </div>
-              <p class="form-feedback" id="weight-feedback"></p>
-            </form>
+            </div>
+            <div class="mz-step">
+              <button type="button" class="s" data-step="-1" aria-label="Moins 1 kg">−1</button>
+              <button type="button" data-step="-0.1" aria-label="Moins 0,1 kg">−0,1</button>
+              <label class="mz-step-val"><input type="text" inputmode="decimal" id="weight-value" aria-label="Poids (kg)" autocomplete="off" placeholder="—"><small>kg</small></label>
+              <button type="button" data-step="0.1" aria-label="Plus 0,1 kg">+0,1</button>
+              <button type="button" class="s" data-step="1" aria-label="Plus 1 kg">+1</button>
+            </div>
+            <div class="mz-entry-foot">
+              <label class="mz-date">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+                <span id="weight-date-label">Aujourd'hui</span>
+                <input type="date" id="weight-date" aria-label="Date de la pesée">
+              </label>
+              <button type="button" class="rf-btn rf-btn-gold" id="weight-submit-btn">Enregistrer</button>
+            </div>
+            <p class="form-feedback" id="weight-feedback" aria-live="polite"></p>
           </div>
 
-          <div class="panel history-panel">
-            <h2 class="panel-title">Historique du poids</h2>
-            <div id="weight-history-list" class="history-list"></div>
+          <!-- Courbe : pesées + moyenne sur 7 jours, rythme par semaine -->
+          <div class="mz-card" id="mz-chart"></div>
+
+          <!-- Objectif de poids -->
+          <div class="mz-card" id="mz-goal"></div>
+
+          <!-- Mensurations : 6 tours en cm -->
+          <div class="mz-card" id="mz-measures"></div>
+
+          <!-- Historique compact par mois -->
+          <div class="mz-card">
+            <div class="mz-h"><h3>Historique</h3><span class="mz-hint">glisse une ligne vers la gauche pour la supprimer</span></div>
+            <div id="weight-history-list"></div>
           </div>
 
         </div>
-
-        <div class="panel" style="margin-top: 16px;">
-          <h2 class="panel-title">Ta taille</h2>
-          <div class="height-row">
-            <input type="number" id="height-input" min="0" step="0.5" placeholder="Taille (cm)">
-            <button type="button" id="height-save-btn" class="btn btn-secondary btn-small">Enregistrer</button>
-          </div>
-          <p class="form-hint">Utilisée uniquement pour calculer ton IMC ci-dessous — la taille change rarement, pas besoin de la ressaisir à chaque fois.</p>
-        </div>
-
-        <div class="panel" style="margin-top: 16px;">
-          <h2 class="panel-title">Ton année de naissance</h2>
-          <div class="height-row">
-            <input type="number" id="birth-year-input" min="1930" step="1" inputmode="numeric" placeholder="Année (ex : 1998)">
-            <button type="button" id="birth-year-save-btn" class="btn btn-secondary btn-small">Enregistrer</button>
-          </div>
-          <p class="form-feedback" id="birth-year-feedback"></p>
-          <p class="form-hint">Sert aux barèmes d'endurance de la page Profil (Row 2000 m, Run 5 km), qui dépendent de l'âge. À saisir une seule fois : ton âge se met à jour tout seul chaque année.</p>
-        </div>
-
-        <div class="panel" style="margin-top: 16px;">
-          <h2 class="panel-title">IMC (indice de masse corporelle)</h2>
-          <div id="bmi-gauge-container"></div>
-        </div>
-
       </section>
 
       <!-- ---------- SECTION : RECORDS ---------- -->
@@ -525,7 +518,19 @@
             </div>
           </div>
           <p class="form-feedback" id="sex-feedback"></p>
-          <p class="form-hint">Change les seuils et les objectifs de la page Profil (force, haltéro, gym, endurance, succès). Ton poids et ton année de naissance se règlent dans Mensurations.</p>
+          <p class="form-hint">Change les seuils et les objectifs de la page Profil (force, haltéro, gym, endurance, succès). Ton poids se note dans Mensurations.</p>
+          <div class="mz-profile">
+            <div class="ob-field">
+              <label for="height-input">Taille (cm)</label>
+              <input type="text" inputmode="decimal" id="height-input" placeholder="ex : 172" autocomplete="off">
+            </div>
+            <div class="ob-field">
+              <label for="birth-year-input">Année de naissance</label>
+              <input type="text" inputmode="numeric" id="birth-year-input" placeholder="ex : 1998" autocomplete="off">
+            </div>
+          </div>
+          <p class="form-feedback" id="birth-year-feedback" aria-live="polite"></p>
+          <p class="form-hint">La taille sert à l'IMC, l'année aux barèmes d'endurance (Row 2000 m, Run 5 km). Ton âge se met à jour tout seul chaque année.</p>
         </div>
 
         <!-- Séances de musculation : minuteur de repos (seance.js) -->
@@ -674,16 +679,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=25"></script>
-  <script src="js/seance.js?v=25"></script>
-  <script src="js/musculation.js?v=25"></script>
-  <script src="js/crossfit.js?v=25"></script>
-  <script src="js/mensurations.js?v=25"></script>
-  <script src="js/stats.js?v=25"></script>
-  <script src="js/charts.js?v=25"></script>
-  <script src="js/ranks.js?v=25"></script>
-  <script src="js/settings.js?v=25"></script>
-  <script src="js/app.js?v=25"></script>
+  <script src="js/data.js?v=26"></script>
+  <script src="js/seance.js?v=26"></script>
+  <script src="js/musculation.js?v=26"></script>
+  <script src="js/crossfit.js?v=26"></script>
+  <script src="js/mensurations.js?v=26"></script>
+  <script src="js/stats.js?v=26"></script>
+  <script src="js/charts.js?v=26"></script>
+  <script src="js/ranks.js?v=26"></script>
+  <script src="js/settings.js?v=26"></script>
+  <script src="js/app.js?v=26"></script>
 </body>
 </html>
 
