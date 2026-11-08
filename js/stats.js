@@ -403,318 +403,549 @@ function computeCardioTestBests() {
   return bests;
 }
 
+// ----- État de la page Records : filtre et recherche -----
+let recordsFilter = "all";
+let recordsQuery = "";
+
+const RECORD_GROUPS = [
+  { id: "load", chip: "Charges", title: "Charges · 1RM" },
+  { id: "bw", chip: "Poids du corps", title: "Poids du corps · reps max" },
+  { id: "cardio", chip: "Cardio", title: "Cardio · tests chrono" },
+  { id: "wod", chip: "WOD", title: "WOD · benchmarks" },
+];
+
+const RECORD_WOD_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
+
+/** "aujourd'hui", "hier", "il y a 4 j", "il y a 2 mois" */
+function recordAgo(date) {
+  if (!date) return "";
+  const days = Math.round((parseLocalDate(todayLocalDateString()) - parseLocalDate(date)) / 86400000);
+  if (days <= 0) return "aujourd'hui";
+  if (days === 1) return "hier";
+  if (days < 31) return `il y a ${days} j`;
+  if (days < 365) return `il y a ${Math.round(days / 30)} mois`;
+  const years = Math.round(days / 365);
+  return `il y a ${years} an${years > 1 ? "s" : ""}`;
+}
+
+/** "4 nov." (avec l'année si ce n'est pas l'année en cours) */
+function recordDay(date) {
+  const d = parseLocalDate(date);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString("fr-FR", sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Tout ce qu'il faut pour construire la page (calculé une seule fois). */
+function collectRecordData() {
+  return {
+    sessionRecords: computeMuscuRecords(),
+    manualOneRMs: getManualOneRMs(),
+    manualReps: getManualReps(),
+    manualTimes: getManualTimes(),
+    cardioBests: computeCardioTestBests(),
+    cfRecords: computeCfRecords(),
+    manualCf: getManualCfBests(),
+    chartable: typeof getChartableExercises === "function" ? getChartableExercises() : { lifts: [], cardio: [] },
+  };
+}
+
+const afterManualRecordChange = () => {
+  renderRecords();
+  if (typeof notifyRankProgress === "function") notifyRankProgress();
+  if (typeof renderDashboard === "function") renderDashboard();
+};
+
+/**
+ * Le record d'un exercice (charge, poids du corps ou test cardio), pour la
+ * ligne de la liste ET sa fiche détaillée. Mêmes règles qu'avant : la valeur
+ * la plus haute entre séances et perf notée à la main, avec sa source.
+ */
+function buildExerciseRecord(exercise, data) {
+  const kg = (v) => `${formatKgValue(v)} kg`;
+  const hasChart = data.chartable.lifts.includes(exercise) || data.chartable.cardio.includes(exercise);
+  const progressAction = hasChart ? [{ label: "Voir dans Stats", cls: "record-progress-link", style: "ghost", run: () => openProgressChart("exercise", exercise) }] : [];
+
+  // ----- Test cardio (Row 2000 m, Run 5 km…) : meilleur temps -----
+  if (data.cardioBests[exercise] || data.manualTimes[exercise]) {
+    const sessionBest = data.cardioBests[exercise] || null;
+    const manualTime = data.manualTimes[exercise] || null;
+    const manualIsBest = Boolean(manualTime && (!sessionBest || manualTime.timeSeconds < sessionBest.value));
+    const value = manualIsBest ? manualTime.timeSeconds : sessionBest.value;
+    const date = manualIsBest ? manualTime.date : sessionBest.date;
+    const tiles = [];
+    if (sessionBest) tiles.push({ v: formatDuration(sessionBest.value), l: "Meilleur en séance" });
+    if (manualTime) tiles.push({ v: formatDuration(manualTime.timeSeconds), l: "Temps noté" });
+    return {
+      group: "cardio",
+      name: exercise,
+      icon: RF_ICONS.run,
+      value: formatDuration(value),
+      label: manualIsBest ? "temps noté" : "meilleur temps",
+      sub: manualIsBest ? `noté ${recordAgo(date)}` : recordAgo(date),
+      big: formatDuration(value),
+      bigUnit: "",
+      bigLabel: manualIsBest ? "meilleur temps (noté)" : "meilleur temps",
+      origin: date ? `${manualIsBest ? "noté le" : "le"} ${recordDay(date)}` : "",
+      tiles: tiles.length > 1 ? tiles : [],
+      notes: [],
+      series: "time",
+      actions: [
+        ...progressAction,
+        ...(manualTime
+          ? [{ label: "Modifier mon temps", cls: "edit-time-link", style: "gold", run: () => open1rmForm(exercise, manualTime, { mode: "time" }) },
+            { label: "Supprimer mon temps noté", cls: "delete-time-link", style: "danger", run: () => {
+              if (!confirm(`Supprimer le temps que tu as noté pour ${exercise} ?`)) return false;
+              deleteManualTime(exercise);
+              afterManualRecordChange();
+            } }]
+          : [{ label: "+ Noter mon meilleur temps", cls: "add-time-link", style: "gold", run: () => open1rmForm(exercise, null, { mode: "time" }) }]),
+      ],
+    };
+  }
+
+  const sessionRec = data.sessionRecords[exercise] || null;
+  const manual = data.manualOneRMs[exercise] || null;
+  const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exercise);
+
+  // Poids du corps : ce qui compte, ce sont les reps max en une série
+  const sessionReps = sessionRec && sessionRec.maxReps && sessionRec.maxReps.value > 0 ? sessionRec.maxReps : null;
+  const manualReps = isBW ? data.manualReps[exercise] || null : null;
+  const showReps = isBW && Boolean(sessionReps || manualReps);
+  const manualRepsIsBest = Boolean(manualReps && (!sessionReps || manualReps.reps > sessionReps.value));
+
+  // Sinon : la plus haute entre l'estimation (séances) et la valeur notée
+  const estimate = sessionRec && sessionRec.oneRM && sessionRec.oneRM.value > 0 ? sessionRec.oneRM : null;
+  let headline = null;
+  if (!showReps) {
+    if (manual && (!estimate || manual.weight >= estimate.value)) headline = { value: manual.weight, source: "manual", date: manual.date };
+    else if (estimate) headline = { value: estimate.value, source: "estimated", date: estimate.date, weight: estimate.weight, reps: estimate.reps };
+  }
+  // Exercice vu seulement dans un WOD : une charge max utilisée, jamais de 1RM
+  const weightOnly = !headline && !showReps && sessionRec && sessionRec.maxWeight ? sessionRec.maxWeight : null;
+
+  const entry = { group: isBW ? "bw" : "load", name: exercise, icon: exerciseIconSvg(exercise), tiles: [], notes: [], bigUnit: "", series: "load" };
+  if (headline) {
+    const rounded = formatKgValue(Math.round(headline.value));
+    Object.assign(entry, {
+      value: `${rounded} kg`,
+      big: rounded,
+      bigUnit: "kg",
+      label: headline.source === "manual" ? (isBW ? "lest noté" : "1RM noté") : "1RM estimé",
+      bigLabel: headline.source === "manual" ? (isBW ? "lest max (noté)" : "1RM noté") : "1RM estimé",
+      sub: headline.source === "manual" ? `noté ${recordAgo(headline.date)}` : `${kg(headline.weight)} × ${headline.reps} · ${recordAgo(headline.date)}`,
+      origin: headline.source === "manual" ? (headline.date ? `noté le ${recordDay(headline.date)}` : "noté à la main") : `d'après ${kg(headline.weight)} × ${headline.reps} · le ${recordDay(headline.date)}`,
+    });
+  } else if (showReps) {
+    const reps = manualRepsIsBest ? manualReps.reps : sessionReps.value;
+    const date = manualRepsIsBest ? manualReps.date : sessionReps.date;
+    const lest = !manualRepsIsBest && sessionReps.weight > 0 ? ` · lesté ${kg(sessionReps.weight)}` : "";
+    Object.assign(entry, {
+      value: `${reps} reps`,
+      big: String(reps),
+      bigUnit: "reps",
+      label: manualRepsIsBest ? "reps notées" : "en une série",
+      bigLabel: manualRepsIsBest ? "en une série (noté)" : "en une série",
+      sub: `${manualRepsIsBest ? "noté " : ""}${recordAgo(date)}${lest}`,
+      origin: date ? `${manualRepsIsBest ? "noté le" : "le"} ${recordDay(date)}${lest}` : "",
+      series: "reps",
+    });
+  } else if (weightOnly) {
+    Object.assign(entry, {
+      group: "load",
+      value: kg(weightOnly.value),
+      big: formatKgValue(weightOnly.value),
+      bigUnit: "kg",
+      label: "charge max (WOD)",
+      bigLabel: "charge max utilisée en WOD",
+      sub: `vue en WOD · ${recordAgo(weightOnly.date)}`,
+      origin: `le ${recordDay(weightOnly.date)} · pas de 1RM sans séance de muscu ou de spé`,
+    });
+  } else {
+    Object.assign(entry, { value: "—", big: "—", label: "", bigLabel: "", sub: "", origin: "" });
+  }
+
+  // Détails de la fiche (ce qui était sous la valeur dans les anciennes cartes)
+  if (!weightOnly && sessionRec && sessionRec.maxWeight && sessionRec.maxWeight.value > 0) {
+    const fromWod = sessionRec.maxWeight.source === "crossfit" ? " (vu en WOD)" : "";
+    entry.tiles.push({ v: `${kg(sessionRec.maxWeight.value)}${sessionRec.maxWeight.reps ? ` × ${sessionRec.maxWeight.reps}` : ""}`, l: `${isBW ? "Lest max" : "Charge max"}${fromWod}` });
+  }
+  if (sessionRec && sessionRec.maxReps && !showReps) {
+    entry.tiles.push({ v: `${sessionRec.maxReps.value} reps`, l: sessionRec.maxReps.weight > 0 ? `Reps max (à ${kg(sessionRec.maxReps.weight)})` : "Reps max" });
+  }
+  if (showReps && manualRepsIsBest && sessionReps) entry.tiles.push({ v: `${sessionReps.value} reps`, l: "En séance" });
+  if (showReps && manualReps && !manualRepsIsBest) entry.tiles.push({ v: `${manualReps.reps} reps`, l: "Reps notées" });
+  if (manual && isBW && showReps) entry.tiles.push({ v: kg(manual.weight), l: "Lest max noté (1 rep)" });
+  else if (manual && estimate && headline && headline.source === "manual" && Math.round(estimate.value) !== Math.round(manual.weight)) {
+    entry.tiles.push({ v: kg(Math.round(estimate.value)), l: "Estimé d'après tes séances" });
+  } else if (manual && headline && headline.source === "estimated") {
+    entry.tiles.push({ v: kg(manual.weight), l: "1RM noté" });
+  }
+  if (!sessionRec && !showReps) entry.notes.push("Aucune séance de musculation pour cet exercice : seulement ta valeur notée.");
+
+  entry.actions = [...progressAction];
+  if (isBW) {
+    entry.actions.push(manualReps
+      ? { label: "Modifier mes reps", cls: "edit-reps-link", style: "gold", run: () => open1rmForm(exercise, manualReps, { mode: "reps" }) }
+      : { label: "+ Noter mon max de reps", cls: "add-reps-link", style: "gold", run: () => open1rmForm(exercise, null, { mode: "reps" }) });
+    if (manual) entry.actions.push({ label: "Modifier le lest noté", cls: "edit-1rm-link", style: "ghost", run: () => open1rmForm(exercise, manual, { mode: "load" }) });
+    if (manualReps) entry.actions.push({ label: "Supprimer mes reps notées", cls: "delete-reps-link", style: "danger", run: () => {
+      if (!confirm(`Supprimer les reps que tu as notées pour ${exercise} ?`)) return false;
+      deleteManualReps(exercise);
+      afterManualRecordChange();
+    } });
+    if (manual) entry.actions.push({ label: "Supprimer le lest noté", cls: "delete-1rm-link", style: "danger", run: () => {
+      if (!confirm(`Supprimer le lest max que tu as saisi pour ${exercise} ?`)) return false;
+      deleteManualOneRM(exercise);
+      afterManualRecordChange();
+    } });
+  } else {
+    entry.actions.push(manual
+      ? { label: "Modifier mon 1RM noté", cls: "edit-1rm-link", style: "gold", run: () => open1rmForm(exercise, manual, { mode: "load" }) }
+      : { label: "+ Noter mon 1RM connu", cls: "add-1rm-link", style: "gold", run: () => open1rmForm(exercise, null, { mode: "load" }) });
+    if (manual) entry.actions.push({ label: "Supprimer mon 1RM noté", cls: "delete-1rm-link", style: "danger", run: () => {
+      if (!confirm(`Supprimer le 1RM connu que tu as saisi pour ${exercise} ?`)) return false;
+      deleteManualOneRM(exercise);
+      afterManualRecordChange();
+    } });
+  }
+  return entry;
+}
+
+/** Score d'un niveau : "7:10" ou "15 + 3". */
+function formatLevelScore(rec) {
+  if (rec.bestTime) return formatSecondsToTime(rec.bestTime.value);
+  if (rec.bestPerformance) return `${rec.bestPerformance.rounds}${rec.bestPerformance.extraReps ? ` + ${rec.bestPerformance.extraReps}` : ""}`;
+  return "—";
+}
+
+/** Le record d'un WOD, niveau par niveau (RX, Inter, Scaled). */
+function buildWodRecord(wodName, data) {
+  const byLevel = JSON.parse(JSON.stringify(data.cfRecords[wodName] || {}));
+  const manual = data.manualCf[wodName] || null;
+  if (manual) {
+    const level = getCfLevel(manual);
+    const rec = (byLevel[level] = byLevel[level] || { bestTime: null, bestPerformance: null });
+    if (manual.timeSeconds !== null && manual.timeSeconds !== undefined && (!rec.bestTime || manual.timeSeconds < rec.bestTime.value)) {
+      rec.bestTime = { value: manual.timeSeconds, date: manual.date, source: "manual" };
+    }
+    if (manual.rounds !== null && manual.rounds !== undefined) {
+      const perf = { rounds: manual.rounds, extraReps: manual.extraReps || 0, date: manual.date, source: "manual" };
+      if (isBetterPerformance(perf, rec.bestPerformance)) rec.bestPerformance = perf;
+    }
+  }
+  const levels = CF_LEVEL_ORDER.filter((level) => byLevel[level]);
+  const main = levels[0];
+  const mainRec = byLevel[main];
+  const mainDate = (mainRec.bestTime || mainRec.bestPerformance).date;
+  const preset = typeof BENCHMARK_WODS !== "undefined" ? BENCHMARK_WODS[wodName] : null;
+  const latest = getAllSessions().filter((s) => s.type === "crossfit" && s.wodName === wodName).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+
+  const actions = [];
+  if (data.cfRecords[wodName]) actions.push({ label: "Voir dans Stats", cls: "record-progress-link", style: "ghost", run: () => openProgressChart("wod", wodName) });
+  if (latest && typeof duplicateCfSession === "function") {
+    actions.push({ label: "Refaire ce WOD", cls: "repeat-wod-link", style: "ghost", run: () => {
+      if (duplicateCfSession(latest) === false) return false;
+      goToSection("crossfit");
+      window.scrollTo(0, 0);
+    } });
+  }
+  if (manual) {
+    actions.push({ label: "Modifier le résultat noté", cls: "edit-cf-link", style: "gold", run: () => openCfRecordForm(wodName, manual) });
+    actions.push({ label: "Supprimer le résultat noté", cls: "delete-cf-link", style: "danger", run: () => {
+      if (!confirm(`Supprimer le résultat connu que tu as saisi pour ${wodName} ?`)) return false;
+      deleteManualCfBest(wodName);
+      renderRecords();
+    } });
+  } else {
+    actions.push({ label: "+ Noter un résultat connu", cls: "add-cf-link", style: "gold", run: () => openCfRecordForm(wodName, null) });
+  }
+
+  return {
+    group: "wod",
+    name: wodName,
+    icon: RECORD_WOD_ICON,
+    level: main,
+    value: formatLevelScore(mainRec),
+    label: mainRec.bestTime ? `meilleur temps${mainRec.bestTime.source === "manual" ? " (noté)" : ""}` : `rounds + reps${mainRec.bestPerformance.source === "manual" ? " (noté)" : ""}`,
+    sub: levels.length > 1 ? levels.slice(1).map((l) => `${l} ${formatLevelScore(byLevel[l])}`).join(" · ") : recordAgo(mainDate),
+    description: preset ? [preset.wodType, ...preset.movements].join(" · ") : "",
+    byLevel,
+    manual,
+    actions,
+  };
+}
+
+/** Toutes les lignes de la page, dans l'ordre des groupes. */
+function buildAllRecordEntries(data) {
+  const exerciseNames = Array.from(new Set([
+    ...Object.keys(data.sessionRecords), ...Object.keys(data.manualOneRMs), ...Object.keys(data.manualReps),
+    ...Object.keys(data.cardioBests), ...Object.keys(data.manualTimes),
+  ])).sort((a, b) => a.localeCompare(b, "fr"));
+  const wodNames = Array.from(new Set([
+    ...Object.keys(data.cfRecords),
+    ...Object.keys(data.manualCf).filter((name) => isRecordableWod(name)),
+  ])).sort((a, b) => a.localeCompare(b, "fr"));
+  return [
+    ...exerciseNames.map((name) => buildExerciseRecord(name, data)),
+    ...wodNames.map((name) => buildWodRecord(name, data)),
+  ];
+}
+
 function renderRecords() {
-  const muscuGrid = document.getElementById("records-muscu-grid");
-  const cfGrid = document.getElementById("records-cf-grid");
-  if (!muscuGrid || !cfGrid) return; // sécurité si la page n'est pas encore dans le DOM
+  const list = document.getElementById("records-list");
+  const chips = document.getElementById("records-filters");
+  if (!list || !chips) return; // sécurité si la page n'est pas encore dans le DOM
 
   renderRecordFeed();
+  const entries = buildAllRecordEntries(collectRecordData());
 
-  // Exercices / WOD qui ont un graphique dans Statistiques
-  const chartable = typeof getChartableExercises === "function" ? getChartableExercises() : { lifts: [], cardio: [] };
+  // Pastilles de filtre (avec le nombre de records) ; un groupe vide n'en a pas
+  const counts = {};
+  RECORD_GROUPS.forEach((g) => { counts[g.id] = entries.filter((e) => e.group === g.id).length; });
+  if (recordsFilter !== "all" && !counts[recordsFilter]) recordsFilter = "all";
+  chips.innerHTML = [{ id: "all", chip: "Tout" }, ...RECORD_GROUPS]
+    .filter((g) => g.id === "all" || counts[g.id] > 0)
+    .map((g) => `<button type="button" class="rc-chip${recordsFilter === g.id ? " on" : ""}" data-filter="${g.id}" aria-pressed="${recordsFilter === g.id}">${g.chip}<small>${g.id === "all" ? entries.length : counts[g.id]}</small></button>`)
+    .join("");
+  chips.hidden = entries.length === 0;
+  const search = document.getElementById("records-search");
+  if (search) search.hidden = entries.length === 0;
 
-  // ========== MUSCULATION ==========
-  const sessionRecords = computeMuscuRecords();
-  const manualOneRMs = getManualOneRMs();
-  const manualRepsAll = getManualReps();
-  const manualTimesAll = getManualTimes();
-  const sessionCardioBests = computeCardioTestBests();
-  const exerciseNames = Array.from(new Set([
-    ...Object.keys(sessionRecords), ...Object.keys(manualOneRMs), ...Object.keys(manualRepsAll),
-    ...Object.keys(sessionCardioBests), ...Object.keys(manualTimesAll),
-  ])).sort();
-  const notedOn = (date) => (date ? ` le ${parseLocalDate(date).toLocaleDateString("fr-FR")}` : "");
-
-  muscuGrid.innerHTML = "";
-  if (exerciseNames.length === 0) {
-    muscuGrid.innerHTML = `<p class="empty-text">Ajoute une séance ou note une perf pour voir apparaître tes records ici.</p>`;
+  list.innerHTML = "";
+  if (entries.length === 0) {
+    list.innerHTML = `<p class="rc-empty">Ajoute une séance ou note une perf pour voir apparaître tes records ici. Pour les WOD, il faut un nom (Fran, Murph…) : le « WOD du jour » change à chaque fois, il n'a pas de record.</p>`;
+    return;
   }
 
-  /** Branche les liens d'une carte : progression, noter / modifier / supprimer. */
-  function wireRecordCard(card, exercise, handlers) {
-    Object.entries(handlers).forEach(([selector, handler]) => {
-      const el = card.querySelector(selector);
-      if (el) el.addEventListener("click", handler);
-    });
+  const query = typeof normalizeSearchText === "function" ? normalizeSearchText(recordsQuery) : recordsQuery.toLowerCase().trim();
+  const matches = (e) => !query || (e.group === "wod"
+    ? normalizeSearchText(e.name).includes(query)
+    : (typeof exerciseMatchesSearch === "function" ? exerciseMatchesSearch(e.name, query) : e.name.toLowerCase().includes(query)));
+  const visible = entries.filter((e) => (recordsFilter === "all" || e.group === recordsFilter) && matches(e));
+  if (visible.length === 0) {
+    list.innerHTML = `<p class="rc-empty">Aucun record ne correspond à « ${escapeHtml(recordsQuery.trim())} ».</p>`;
+    return;
   }
-  const afterManualDelete = () => {
-    renderRecords();
-    if (typeof notifyRankProgress === "function") notifyRankProgress();
-    if (typeof renderDashboard === "function") renderDashboard();
-  };
 
-  exerciseNames.forEach((exercise) => {
-    const progressLink = (chartable.lifts.includes(exercise) || chartable.cardio.includes(exercise))
-      ? `<button type="button" class="record-link record-progress-link">Voir la progression ›</button>`
-      : "";
-
-    // ----- Test cardio (Row 2000 m, Run 5 km…) : meilleur temps -----
-    if (sessionCardioBests[exercise] || manualTimesAll[exercise]) {
-      const sessionBest = sessionCardioBests[exercise] || null;
-      const manualTime = manualTimesAll[exercise] || null;
-      const manualIsBest = manualTime && (!sessionBest || manualTime.timeSeconds < sessionBest.value);
-      const best = manualIsBest ? { value: manualTime.timeSeconds } : sessionBest;
-      const sub = [];
-      if (manualIsBest) {
-        sub.push(`<span>Noté${notedOn(manualTime.date)}</span>`);
-        if (sessionBest) sub.push(`<span>En séance : ${formatDuration(sessionBest.value)}</span>`);
-      } else if (manualTime) {
-        sub.push(`<span>Temps noté : ${formatDuration(manualTime.timeSeconds)}</span>`);
-      }
-      const links = manualTime
-        ? `${progressLink}<button type="button" class="record-link edit-time-link">Modifier mon temps</button><button type="button" class="record-link record-link-danger delete-time-link">Supprimer</button>`
-        : `${progressLink}<button type="button" class="record-link add-time-link">+ Noter mon meilleur temps</button>`;
-      const card = document.createElement("div");
-      card.className = "record-card";
-      card.innerHTML = `
-        <span class="record-card-title">${escapeHtml(exercise)}</span>
-        <div class="record-main">
-          <span class="record-value">${formatDuration(best.value)}</span>
-          <span class="record-label">Meilleur temps${manualIsBest ? " (noté)" : ""}</span>
-        </div>
-        ${sub.length ? `<div class="record-sub">${sub.join("")}</div>` : ""}
-        <div class="record-manage">${links}</div>`;
-      wireRecordCard(card, exercise, {
-        ".record-progress-link": () => openProgressChart("exercise", exercise),
-        ".edit-time-link": () => open1rmForm(exercise, manualTime, { mode: "time" }),
-        ".add-time-link": () => open1rmForm(exercise, null, { mode: "time" }),
-        ".delete-time-link": () => {
-          if (!confirm(`Supprimer le temps que tu as noté pour ${exercise} ?`)) return;
-          deleteManualTime(exercise);
-          afterManualDelete();
-        },
-      });
-      muscuGrid.appendChild(card);
-      return;
-    }
-
-    const sessionRec = sessionRecords[exercise] || null;
-    const manual = manualOneRMs[exercise] || null;
-    const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(exercise);
-
-    // Exercice au poids du corps (pull-up, dips...) : ce qui compte, ce sont
-    // les répétitions max en une série (en séance ou notées à la main). Un
-    // "1RM" n'aurait pas de sens : le lest max apparaît seulement en dessous.
-    const sessionReps = sessionRec && sessionRec.maxReps && sessionRec.maxReps.value > 0 ? sessionRec.maxReps : null;
-    const manualReps = isBW ? manualRepsAll[exercise] || null : null;
-    const showRepsHeadline = isBW && Boolean(sessionReps || manualReps);
-    const manualRepsIsBest = Boolean(manualReps && (!sessionReps || manualReps.reps > sessionReps.value));
-
-    // Sinon : la valeur la plus élevée entre l'estimation calculée et la
-    // valeur saisie manuellement, en gardant toujours une trace de sa source.
-    const estimate = sessionRec && sessionRec.oneRM && sessionRec.oneRM.value > 0 ? sessionRec.oneRM : null;
-    let headline = null;
-    if (!showRepsHeadline) {
-      if (manual && (!estimate || manual.weight >= estimate.value)) {
-        headline = { value: manual.weight, source: "manual", date: manual.date };
-      } else if (estimate) {
-        headline = { value: estimate.value, source: "estimated", date: estimate.date };
-      }
-    }
-    // Exercice jamais vu en musculation, seulement dans un WOD : on n'a
-    // qu'une charge max utilisée, jamais de 1RM (voir note plus haut).
-    const showWeightOnlyHeadline = !headline && !showRepsHeadline && sessionRec && sessionRec.maxWeight;
-
-    const subLineParts = [];
-    if (showRepsHeadline && manualRepsIsBest) {
-      subLineParts.push(`<span>Noté${notedOn(manualReps.date)}</span>`);
-      if (sessionReps) subLineParts.push(`<span>En séance : ${sessionReps.value} reps${sessionReps.weight > 0 ? ` (lesté ${formatKgValue(sessionReps.weight)} kg)` : ""}</span>`);
-    } else if (showRepsHeadline && manualReps) {
-      subLineParts.push(`<span>Reps notées : ${manualReps.reps}</span>`);
-    }
-    if (showWeightOnlyHeadline) {
-      // La charge est déjà le chiffre principal de la carte : on ne la répète pas
-      subLineParts.push(`<span>Vue en WOD${notedOn(sessionRec.maxWeight.date)}</span>`);
-    } else if (sessionRec && sessionRec.maxWeight && sessionRec.maxWeight.value > 0) {
-      const repsText = sessionRec.maxWeight.reps ? ` × ${sessionRec.maxWeight.reps}` : "";
-      const fromWod = sessionRec.maxWeight.source === "crossfit" ? " (vu en WOD)" : "";
-      subLineParts.push(`<span>${isBW ? "Lest max" : "Charge max"} : ${formatKgValue(sessionRec.maxWeight.value)} kg${repsText}${fromWod}</span>`);
-    }
-    if (sessionRec && sessionRec.maxReps && !showRepsHeadline) {
-      subLineParts.push(`<span>Reps max : ${sessionRec.maxReps.value}${sessionRec.maxReps.weight > 0 ? ` (à ${formatKgValue(sessionRec.maxReps.weight)} kg)` : ""}</span>`);
-    }
-    if (manual && isBW && showRepsHeadline) {
-      subLineParts.push(`<span>Lest max noté (1 rep) : ${formatKgValue(manual.weight)} kg</span>`);
-    } else if (manual && estimate && Math.round(estimate.value) !== Math.round(manual.weight)) {
-      subLineParts.push(`<span>Estimé à partir des séances : ${Math.round(estimate.value)} kg</span>`);
-    }
-
-    let subLines = "";
-    if (subLineParts.length > 0) {
-      subLines = `<div class="record-sub">${subLineParts.join("")}</div>`;
-    } else if (!showRepsHeadline) {
-      subLines = `<p class="empty-text" style="margin-top:8px;">Aucune séance de musculation enregistrée pour cet exercice.</p>`;
-    }
-
-    let links = progressLink;
-    if (isBW) {
-      links += manualReps
-        ? `<button type="button" class="record-link edit-reps-link">Modifier mes reps</button><button type="button" class="record-link record-link-danger delete-reps-link">Supprimer</button>`
-        : `<button type="button" class="record-link add-reps-link">+ Noter mon max de reps</button>`;
-      if (manual) {
-        links += `<button type="button" class="record-link edit-1rm-link">Modifier le lest noté</button><button type="button" class="record-link record-link-danger delete-1rm-link">Supprimer le lest</button>`;
-      }
-    } else {
-      links += manual
-        ? `<button type="button" class="record-link edit-1rm-link">Modifier le 1RM connu</button><button type="button" class="record-link record-link-danger delete-1rm-link">Supprimer</button>`
-        : `<button type="button" class="record-link add-1rm-link">+ Noter mon 1RM connu</button>`;
-    }
-    const manageLinks = `<div class="record-manage">${links}</div>`;
-
-    let mainBlock;
-    if (headline) {
-      mainBlock = `
-        <div class="record-main">
-          <span class="record-value">${Math.round(headline.value)} <small>kg</small></span>
-          <span class="record-label">${headline.source === "manual" ? (isBW ? "Lest max (saisi)" : "1RM connu (saisi)") : "1RM estimé*"}</span>
-        </div>`;
-    } else if (showRepsHeadline && manualRepsIsBest) {
-      mainBlock = `
-        <div class="record-main">
-          <span class="record-value">${manualReps.reps} <small>reps</small></span>
-          <span class="record-label">Reps max en une série (notées)</span>
-        </div>`;
-    } else if (showRepsHeadline) {
-      mainBlock = `
-        <div class="record-main">
-          <span class="record-value">${sessionReps.value} <small>reps</small></span>
-          <span class="record-label">Reps max en une série${sessionReps.weight > 0 ? ` (lesté ${formatKgValue(sessionReps.weight)} kg)` : ""}</span>
-        </div>`;
-    } else if (showWeightOnlyHeadline) {
-      mainBlock = `
-        <div class="record-main">
-          <span class="record-value">${formatKgValue(sessionRec.maxWeight.value)} <small>kg</small></span>
-          <span class="record-label">Charge max utilisée (WOD)</span>
-        </div>`;
-    } else {
-      mainBlock = `<div class="record-main"><span class="record-value">—</span></div>`;
-    }
-
-    const card = document.createElement("div");
-    card.className = "record-card";
-    card.innerHTML = `
-      <span class="record-card-title">${escapeHtml(exercise)}</span>
-      ${mainBlock}
-      ${subLines}
-      ${manageLinks}
-    `;
-
-    wireRecordCard(card, exercise, {
-      ".record-progress-link": () => openProgressChart("exercise", exercise),
-      ".edit-1rm-link": () => open1rmForm(exercise, manual, { mode: "load" }),
-      ".add-1rm-link": () => open1rmForm(exercise, null, { mode: "load" }),
-      ".edit-reps-link": () => open1rmForm(exercise, manualReps, { mode: "reps" }),
-      ".add-reps-link": () => open1rmForm(exercise, null, { mode: "reps" }),
-      ".delete-1rm-link": () => {
-        const what = isBW ? "le lest max" : "le 1RM connu";
-        if (!confirm(`Supprimer ${what} que tu as saisi pour ${exercise} ?`)) return;
-        deleteManualOneRM(exercise);
-        afterManualDelete();
-      },
-      ".delete-reps-link": () => {
-        if (!confirm(`Supprimer les reps que tu as notées pour ${exercise} ?`)) return;
-        deleteManualReps(exercise);
-        afterManualDelete();
-      },
+  RECORD_GROUPS.forEach((group) => {
+    const rows = visible.filter((e) => e.group === group.id);
+    if (rows.length === 0) return;
+    if (recordsFilter === "all") list.insertAdjacentHTML("beforeend", `<div class="rc-group">${group.title}</div>`);
+    const box = document.createElement("div");
+    box.className = "rc-list";
+    rows.forEach((entry) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "rc-row";
+      row.dataset.record = entry.name;
+      row.innerHTML = `
+        <span class="rf-ex-ic">${entry.icon}</span>
+        <span class="rc-main"><span class="rc-name">${escapeHtml(entry.name)}</span>${entry.sub ? `<span class="rc-sub">${escapeHtml(entry.sub)}</span>` : ""}</span>
+        <span class="rc-val"><b>${entry.level ? `<span class="rc-lvl ${getLevelBadgeClass(entry.level)}">${entry.level}</span>` : ""}${escapeHtml(entry.value)}</b>${entry.label ? `<small>${escapeHtml(entry.label)}</small>` : ""}</span>
+        <span class="rc-chev" aria-hidden="true">›</span>`;
+      row.addEventListener("click", () => openRecordSheet(entry));
+      box.appendChild(row);
     });
-
-    muscuGrid.appendChild(card);
+    list.appendChild(box);
   });
+}
 
-  // ========== CROSSFIT ==========
-  // Un record par WOD ET par niveau (RX, Inter, Scaled) : un Fran Scaled ne
-  // se compare pas à un Fran RX. Le WOD du jour n'a pas de record.
-  const sessionCfRecords = computeCfRecords();
-  const manualCfBests = getManualCfBests();
-  const wodNames = Array.from(new Set([
-    ...Object.keys(sessionCfRecords),
-    ...Object.keys(manualCfBests).filter((name) => isRecordableWod(name)),
-  ])).sort();
+// --------------------------------------------------------------------------
+// FICHE DÉTAILLÉE (en touchant une ligne ou une carte du fil)
+// --------------------------------------------------------------------------
 
-  cfGrid.innerHTML = "";
-  if (wodNames.length === 0) {
-    cfGrid.innerHTML = `<p class="empty-text">Ajoute un WOD avec un nom (Fran, Murph...) ou note un résultat connu pour voir apparaître tes records ici. Le « WOD du jour » change à chaque fois : il n'a pas de record.</p>`;
-  }
-
-  wodNames.forEach((wodName) => {
-    const byLevel = JSON.parse(JSON.stringify(sessionCfRecords[wodName] || {}));
-    const manual = manualCfBests[wodName] || null;
-
-    // Le résultat noté à la main rejoint son niveau (RX par défaut pour les anciens)
-    if (manual) {
-      const level = getCfLevel(manual);
-      const rec = (byLevel[level] = byLevel[level] || { bestTime: null, bestPerformance: null });
-      if (manual.timeSeconds !== null && manual.timeSeconds !== undefined && (!rec.bestTime || manual.timeSeconds < rec.bestTime.value)) {
-        rec.bestTime = { value: manual.timeSeconds, date: manual.date, source: "manual" };
+/** Points de la courbe : la meilleure valeur de chaque séance. */
+function buildRecordSeries(name, kind) {
+  const byDate = {};
+  const better = (a, b) => (kind === "time" ? a < b : a > b);
+  const add = (date, value) => {
+    if (!(value > 0)) return;
+    if (byDate[date] === undefined || better(value, byDate[date])) byDate[date] = value;
+  };
+  getAllSessions().forEach((session) => {
+    (session.exercises || []).forEach((entry) => {
+      if (!entry || typeof entry !== "object" || entry.exercise !== name) return;
+      if (kind === "time") {
+        if (session.type === "musculation" && entry.kind === "cardio") add(session.date, entry.timeSeconds);
+        return;
       }
-      if (manual.rounds !== null && manual.rounds !== undefined) {
-        const perf = { rounds: manual.rounds, extraReps: manual.extraReps || 0, date: manual.date, source: "manual" };
-        if (isBetterPerformance(perf, rec.bestPerformance)) rec.bestPerformance = perf;
-      }
-    }
-
-    const levels = CF_LEVEL_ORDER.filter((level) => byLevel[level]);
-    const mainBlock = levels.map((level) => {
-      const rec = byLevel[level];
-      const parts = [];
-      if (rec.bestTime) {
-        parts.push(`
-          <div class="record-main">
-            <span class="record-value">${formatSecondsToTime(rec.bestTime.value)}</span>
-            <span class="record-label">Meilleur temps${rec.bestTime.source === "manual" ? " (saisi)" : ""}</span>
-          </div>`);
-      }
-      if (rec.bestPerformance) {
-        const extraText = rec.bestPerformance.extraReps ? ` + ${rec.bestPerformance.extraReps}` : "";
-        parts.push(`
-          <div class="record-main">
-            <span class="record-value">${rec.bestPerformance.rounds}${extraText}</span>
-            <span class="record-label">rounds${rec.bestPerformance.source === "manual" ? " (saisi)" : ""}</span>
-          </div>`);
-      }
-      return `
-        <div class="record-level">
-          <span class="badge-rpe ${getLevelBadgeClass(level)} record-level-badge">${level}</span>
-          ${parts.join("")}
-        </div>`;
-    }).join("");
-
-    const wodProgressLink = sessionCfRecords[wodName]
-      ? `<button type="button" class="record-link record-progress-link">Voir la progression ›</button>`
-      : "";
-    const manageLinks = manual
-      ? `
-        <div class="record-manage">
-          ${wodProgressLink}
-          <button type="button" class="record-link edit-cf-link">Modifier le résultat connu</button>
-          <button type="button" class="record-link record-link-danger delete-cf-link">Supprimer</button>
-        </div>`
-      : `<div class="record-manage">${wodProgressLink}<button type="button" class="record-link add-cf-link">+ Noter un résultat connu</button></div>`;
-
-    const card = document.createElement("div");
-    card.className = "record-card";
-    card.innerHTML = `<span class="record-card-title">${escapeHtml(wodName)}</span>${mainBlock}${manageLinks}`;
-
-    const wodProgress = card.querySelector(".record-progress-link");
-    if (wodProgress) wodProgress.addEventListener("click", () => openProgressChart("wod", wodName));
-
-    const editLink = card.querySelector(".edit-cf-link");
-    if (editLink) editLink.addEventListener("click", () => openCfRecordForm(wodName, manual));
-
-    const addLink = card.querySelector(".add-cf-link");
-    if (addLink) addLink.addEventListener("click", () => openCfRecordForm(wodName, null));
-
-    const deleteLink = card.querySelector(".delete-cf-link");
-    if (deleteLink) {
-      deleteLink.addEventListener("click", () => {
-        const confirmed = confirm(`Supprimer le résultat connu que tu as saisi pour ${wodName} ?`);
-        if (!confirmed) return;
-        deleteManualCfBest(wodName);
-        renderRecords();
+      let sets = [];
+      if (session.type === "musculation" && Array.isArray(entry.sets)) sets = entry.sets;
+      else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName) && getEntryUnit(entry) === "reps") sets = [{ reps: entry.reps, weight: entry.weight || 0, warmup: entry.warmup }];
+      sets.forEach((set) => {
+        if (!set || set.warmup === true) return;
+        add(session.date, kind === "reps" ? set.reps : (set.weight > 0 && set.reps > 0 ? estimateOneRepMax(set.weight, set.reps) : 0));
       });
-    }
+    });
+  });
+  return Object.keys(byDate).sort().map((date) => ({ date, value: byDate[date] }));
+}
 
-    cfGrid.appendChild(card);
+/** Petite courbe en SVG (les 12 dernières séances). Plus haut = mieux, même pour un temps. */
+function renderRecordChart(points, kind) {
+  const pts = points.slice(-12);
+  if (pts.length < 2) return "";
+  const W = 320, H = 110, padX = 14, top = 12, bottom = 22;
+  const values = pts.map((p) => p.value);
+  let min = Math.min(...values), max = Math.max(...values);
+  if (max - min < 1e-9) { min -= 1; max += 1; }
+  const x = (i) => padX + (i * (W - 2 * padX)) / (pts.length - 1);
+  const y = (v) => {
+    const t = (v - min) / (max - min);
+    return top + (kind === "time" ? t : 1 - t) * (H - top - bottom);
+  };
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(" ");
+  const first = pts[0], last = pts[pts.length - 1];
+  const days = Math.round((parseLocalDate(last.date) - parseLocalDate(first.date)) / 86400000);
+  const span = days < 14 ? `en ${Math.max(days, 1)} j` : days < 60 ? `en ${Math.round(days / 7)} sem.` : `en ${Math.round(days / 30)} mois`;
+  let delta = "";
+  let good = false;
+  if (kind === "time") {
+    const diff = Math.round(last.value - first.value);
+    good = diff < 0;
+    delta = diff === 0 ? "stable" : `${diff < 0 ? "−" : "+"}${formatDuration(Math.abs(diff))} ${span}`;
+  } else if (kind === "reps") {
+    const diff = last.value - first.value;
+    good = diff > 0;
+    delta = diff === 0 ? "stable" : `${diff > 0 ? "+" : "−"}${Math.abs(diff)} rep${Math.abs(diff) > 1 ? "s" : ""} ${span}`;
+  } else {
+    const diff = Math.round(last.value - first.value);
+    good = diff > 0;
+    delta = diff === 0 ? "stable" : `${diff > 0 ? "+" : "−"}${Math.abs(diff)} kg ${span}`;
+  }
+  const title = kind === "time" ? "Temps (plus haut = plus rapide)" : kind === "reps" ? "Reps max par séance" : "1RM estimé par séance";
+  return `
+    <div class="rc-chart">
+      <div class="rc-chart-h"><span>${title}</span><span class="${good ? "good" : ""}">${escapeHtml(delta)}</span></div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${escapeHtml(title)}">
+        <defs><linearGradient id="rcGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#D3A24E" stop-opacity=".35"/><stop offset="1" stop-color="#D3A24E" stop-opacity="0"/></linearGradient></defs>
+        <path d="${line} L${x(pts.length - 1).toFixed(1)} ${H - bottom + 4} L${x(0).toFixed(1)} ${H - bottom + 4} Z" fill="url(#rcGrad)"/>
+        <path d="${line}" fill="none" stroke="#E3B566" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        ${pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="4" fill="#17191C" stroke="#E3B566" stroke-width="2.5"/>`).join("")}
+        <text x="${x(0)}" y="${H - 4}" fill="#7B7F86" font-size="10" text-anchor="start">${escapeHtml(recordDay(first.date))}</text>
+        <text x="${x(pts.length - 1)}" y="${H - 4}" fill="#7B7F86" font-size="10" text-anchor="end">${escapeHtml(recordDay(last.date))}</text>
+      </svg>
+    </div>`;
+}
+
+/** Boutons de la fiche : chaque action ferme la fiche puis s'exécute. */
+function appendRecordActions(sheet, close, actions) {
+  const main = actions.filter((a) => a.style !== "danger");
+  const danger = actions.filter((a) => a.style === "danger");
+  const box = document.createElement("div");
+  box.className = "rc-actions";
+  main.forEach((action) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `rf-btn ${action.style === "gold" ? "rf-btn-gold" : "rf-btn-ghost"} ${action.cls}`;
+    button.textContent = action.label;
+    button.addEventListener("click", () => { close(); action.run(); });
+    box.appendChild(button);
+  });
+  if (main.length === 1) box.classList.add("single");
+  sheet.appendChild(box);
+  danger.forEach((action) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `rf-link-danger ${action.cls}`;
+    button.textContent = action.label;
+    button.addEventListener("click", () => { if (action.run() !== false) close(); });
+    sheet.appendChild(button);
+  });
+}
+
+function openRecordSheet(entry) {
+  if (entry.group === "wod") return openWodRecordSheet(entry);
+  return openSheet((sheet, close) => {
+    sheet.classList.add("rc-sheet");
+    const hint = typeof EXERCISE_FRENCH_HINTS !== "undefined" ? EXERCISE_FRENCH_HINTS[entry.name] : "";
+    const events = computeRecordHistory().filter((e) => e.target && e.target.section === "exercise" && e.title === entry.name).slice(0, 8);
+    sheet.insertAdjacentHTML("beforeend", `
+      <div class="rc-sheet-head"><span class="rf-ex-ic">${entry.icon}</span><div><h2>${escapeHtml(entry.name)}</h2>${hint ? `<div class="rf-ex-sub">${escapeHtml(hint)}</div>` : ""}</div></div>
+      <div class="rc-big"><b>${escapeHtml(entry.big)}</b>${entry.bigUnit || entry.bigLabel ? `<span>${escapeHtml([entry.bigUnit, entry.bigLabel].filter(Boolean).join(" · "))}</span>` : ""}</div>
+      ${entry.origin ? `<div class="rc-origin">${escapeHtml(entry.origin)}</div>` : ""}
+      ${entry.tiles.length ? `<div class="rf-stats">${entry.tiles.map((t) => `<div class="rf-stat"><b>${escapeHtml(t.v)}</b><span>${escapeHtml(t.l)}</span></div>`).join("")}</div>` : ""}
+      ${entry.notes.map((n) => `<p class="rc-note">${escapeHtml(n)}</p>`).join("")}
+      ${renderRecordChart(buildRecordSeries(entry.name, entry.series), entry.series)}
+      ${events.length ? `<div class="rf-cmp-h">Records battus</div><div class="rc-timeline">${events.map((e) => `<div><span>${escapeHtml(recordDay(e.date))}</span><b>${escapeHtml(e.value)}</b><em>${escapeHtml(e.gain)}</em></div>`).join("")}</div>` : ""}`);
+    appendRecordActions(sheet, close, entry.actions);
+  });
+}
+
+function openWodRecordSheet(entry) {
+  return openSheet((sheet, close) => {
+    sheet.classList.add("rc-sheet");
+    const sessions = getAllSessions()
+      .filter((s) => s.type === "crossfit" && s.wodName === entry.name)
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    const score = (s) => (s.timeSeconds > 0 ? formatSecondsToTime(s.timeSeconds) : typeof s.rounds === "number" ? `${s.rounds}${s.extraReps ? ` + ${s.extraReps}` : ""} rounds` : "—");
+    const isBest = (s) => {
+      const rec = entry.byLevel[getCfLevel(s)];
+      if (!rec) return false;
+      if (rec.bestTime && s.timeSeconds > 0) return rec.bestTime.source !== "manual" && rec.bestTime.value === s.timeSeconds && rec.bestTime.date === s.date;
+      if (rec.bestPerformance && typeof s.rounds === "number") return rec.bestPerformance.source !== "manual" && rec.bestPerformance.rounds === s.rounds && (rec.bestPerformance.extraReps || 0) === (s.extraReps || 0) && rec.bestPerformance.date === s.date;
+      return false;
+    };
+    const rows = sessions.slice(0, 10).map((s) => {
+      const level = getCfLevel(s);
+      return `<div><span>${escapeHtml(recordDay(s.date))}</span><b><span class="rc-lvl ${getLevelBadgeClass(level)}">${level}</span>${escapeHtml(score(s))}</b>${isBest(s) ? "<em>record</em>" : "<i></i>"}</div>`;
+    });
+    if (entry.manual) {
+      const level = getCfLevel(entry.manual);
+      const value = entry.manual.timeSeconds > 0 ? formatSecondsToTime(entry.manual.timeSeconds) : `${entry.manual.rounds}${entry.manual.extraReps ? ` + ${entry.manual.extraReps}` : ""} rounds`;
+      rows.push(`<div><span>${entry.manual.date ? escapeHtml(recordDay(entry.manual.date)) : "—"}</span><b><span class="rc-lvl ${getLevelBadgeClass(level)}">${level}</span>${escapeHtml(value)}</b><em class="noted">noté</em></div>`);
+    }
+    sheet.insertAdjacentHTML("beforeend", `
+      <div class="rc-sheet-head"><span class="rf-ex-ic">${RECORD_WOD_ICON}</span><div><h2>${escapeHtml(entry.name)}</h2>${entry.description ? `<div class="rf-ex-sub">${escapeHtml(entry.description)}</div>` : ""}</div></div>
+      <div class="rc-levels">${CF_LEVEL_ORDER.map((level) => {
+        const rec = entry.byLevel[level];
+        const date = rec ? (rec.bestTime || rec.bestPerformance || {}).date : null;
+        const noted = rec && ((rec.bestTime && rec.bestTime.source === "manual") || (!rec.bestTime && rec.bestPerformance && rec.bestPerformance.source === "manual"));
+        return `<div class="${rec ? "" : "empty"}"><span class="rc-lvl ${getLevelBadgeClass(level)}">${level}</span><b>${rec ? escapeHtml(formatLevelScore(rec)) : "—"}</b><small>${rec ? `${noted ? "noté " : ""}${date ? `le ${escapeHtml(recordDay(date))}` : ""}` : "pas encore"}</small></div>`;
+      }).join("")}</div>
+      ${rows.length ? `<div class="rf-cmp-h">Tous tes ${escapeHtml(entry.name)}</div><div class="rc-timeline">${rows.join("")}</div>` : ""}`);
+    appendRecordActions(sheet, close, entry.actions);
+  });
+}
+
+/** Ouvre la fiche d'un exercice ou d'un WOD par son nom (fil des records). */
+function openRecordSheetByName(name, kind) {
+  const entry = buildAllRecordEntries(collectRecordData()).find((e) => e.name === name && (kind === "wod" ? e.group === "wod" : e.group !== "wod"));
+  if (entry) openRecordSheet(entry);
+}
+
+// ----- En-tête : « + Noter une perf », explication ⓘ, recherche, filtres -----
+const btnNotePerf = document.getElementById("btn-note-perf");
+if (btnNotePerf) {
+  btnNotePerf.addEventListener("click", () => openActionSheet("Noter une perf", [
+    { label: "Un exercice : charge, reps ou temps", onClick: () => open1rmForm(null, null) },
+    { label: "Un WOD : temps ou rounds", onClick: () => openCfRecordForm(null, null) },
+  ]));
+}
+const recordsInfoBtn = document.getElementById("records-info-btn");
+if (recordsInfoBtn) {
+  recordsInfoBtn.addEventListener("click", () => openSheet((sheet, close) => {
+    sheet.insertAdjacentHTML("beforeend", `
+      <h2>Comment sont calculés tes records ?</h2>
+      <p class="rc-info-p"><b>1RM estimé</b> : calculé à partir de tes séries avec la formule d'Epley, seulement avec les séries de 10 reps maximum. Au-delà, c'est la charge soulevée qui compte. Une estimation n'est jamais une valeur mesurée.</p>
+      <p class="rc-info-p"><b>1RM noté</b> : une charge que tu as vraiment testée et notée à la main. Elle est affichée si elle est plus haute que l'estimation.</p>
+      <p class="rc-info-p"><b>Poids du corps</b> : le plus de reps d'affilée en une série. <b>Cardio</b> : ton meilleur temps. <b>WOD</b> : ton meilleur score, niveau par niveau (RX, Inter, Scaled) ; le « WOD du jour » n'a pas de record.</p>
+      <p class="rc-info-p">Les séries d'échauffement ne comptent jamais.</p>
+      <button type="button" class="rf-btn rf-btn-gold rf-btn-wide" data-act="close">Compris</button>`);
+    sheet.querySelector('[data-act="close"]').addEventListener("click", close);
+  }));
+}
+const recordsSearchInput = document.getElementById("records-search");
+if (recordsSearchInput) {
+  recordsSearchInput.addEventListener("input", () => { recordsQuery = recordsSearchInput.value; renderRecords(); });
+}
+const recordsFiltersEl = document.getElementById("records-filters");
+if (recordsFiltersEl) {
+  recordsFiltersEl.addEventListener("click", (event) => {
+    const chip = event.target.closest(".rc-chip");
+    if (!chip) return;
+    recordsFilter = chip.dataset.filter;
+    renderRecords();
   });
 }
 
@@ -839,8 +1070,7 @@ function countRecordsBeatenSince(startDate) {
 // FIL "DERNIERS RECORDS BATTUS" (en haut de la page Records)
 // --------------------------------------------------------------------------
 
-let recordFeedLimit = 6;
-
+/** Les derniers records battus, en petites cartes qui défilent de côté. */
 function renderRecordFeed() {
   const container = document.getElementById("record-feed");
   if (!container) return;
@@ -853,26 +1083,22 @@ function renderRecordFeed() {
   if (badge) badge.textContent = `${thisMonth} ce mois-ci`;
 
   if (events.length === 0) {
-    container.innerHTML = `<p class="empty-text">Aucun record battu pour l'instant. Ils apparaîtront ici dès que tu feras mieux qu'avant sur un exercice, un test chrono ou un WOD.</p>`;
+    container.innerHTML = `<p class="rc-feed-empty">Aucun record battu pour l'instant. Ils apparaîtront ici dès que tu feras mieux qu'avant sur un exercice, un test chrono ou un WOD.</p>`;
     return;
   }
 
-  container.innerHTML = `<ol class="pr-timeline">${events.slice(0, recordFeedLimit).map((e) => `
-    <li>
-      <span class="pr-dot" aria-hidden="true"></span>
-      <div class="pr-line">
-        <div class="pr-line-top"><strong>${escapeHtml(e.title)}</strong><span class="pr-date">${parseLocalDate(e.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span></div>
-        <div class="pr-line-bottom">
-          <span class="pr-value">${escapeHtml(e.value)}</span>
-          <span class="pr-gain">${escapeHtml(e.gain)}</span>
-          ${e.detail ? `<span class="pr-detail">${escapeHtml(e.detail)}</span>` : ""}
-        </div>
-      </div>
-    </li>`).join("")}</ol>`;
-  appendShowMoreButton(container, events.length - recordFeedLimit, () => {
-    recordFeedLimit += 6;
-    renderRecordFeed();
-  });
+  const shown = events.slice(0, 10);
+  container.innerHTML = shown.map((e, i) => `
+    <button type="button" class="rc-fc" data-i="${i}">
+      <span class="n">${escapeHtml(e.title)}</span>
+      <span class="v">${escapeHtml(e.value)}</span>
+      <span class="g">${escapeHtml(e.gain)}</span>
+      <span class="d">${escapeHtml(recordDay(e.date))}</span>
+    </button>`).join("");
+  container.querySelectorAll(".rc-fc").forEach((card) => card.addEventListener("click", () => {
+    const event = shown[Number(card.dataset.i)];
+    if (event && event.target) openRecordSheetByName(event.target.name, event.target.section === "wod" ? "wod" : "exercise");
+  }));
 }
 
 // --------------------------------------------------------------------------
