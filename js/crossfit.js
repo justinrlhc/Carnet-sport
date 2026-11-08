@@ -257,13 +257,13 @@ function renderCfWodChips() {
   // Nom d'une séance modifiée qui ne serait plus dans la liste : on l'ajoute
   if (cfState.wod !== CF_CUSTOM_WOD && !names.includes(cfState.wod)) names.push(cfState.wod);
   const small = (name) => {
-    if (name === DAILY_WOD_LABEL) return "Libre";
+    if (name === DAILY_WOD_LABEL) return "";
     if (isSpeSession(name)) return "Cours";
     if (BENCHMARK_WODS[name]) return BENCHMARK_WODS[name].wodType;
     return "Perso";
   };
   cfWodChips.innerHTML = names
-    .map((name) => `<button type="button" class="rf-wodchip${cfState.wod === name ? " on" : ""}" data-wod="${escapeHtml(name)}" aria-pressed="${cfState.wod === name}"><small>${escapeHtml(small(name))}</small>${escapeHtml(name)}</button>`)
+    .map((name) => `<button type="button" class="rf-wodchip${cfState.wod === name ? " on" : ""}" data-wod="${escapeHtml(name)}" aria-pressed="${cfState.wod === name}">${small(name) ? `<small>${escapeHtml(small(name))}</small>` : ""}${escapeHtml(name)}</button>`)
     .join("") +
     `<button type="button" class="rf-wodchip${cfState.wod === CF_CUSTOM_WOD ? " on" : ""}" data-wod="${CF_CUSTOM_WOD}" aria-pressed="${cfState.wod === CF_CUSTOM_WOD}"><small>Nouveau</small>+ Autre</button>`;
   const selected = cfWodChips.querySelector(".rf-wodchip.on");

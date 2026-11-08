@@ -44,6 +44,8 @@ function goToSection(targetId) {
   document.getElementById(`section-${targetId}`).classList.add("is-active");
 
   pageTitle.textContent = titles[targetId];
+  // Sur Musculation et CrossFit, la page sert déjà à ajouter une séance : pas de bouton en double
+  document.getElementById("btn-add-session").hidden = targetId === "musculation" || targetId === "crossfit";
   revealActiveNavItem();
 
   // On rafraîchit la page avec les données les plus récentes à chaque visite

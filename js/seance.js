@@ -15,7 +15,8 @@ const RF_ICONS = {
   dots: '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm-3 4h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Zm0 2v10h10V9H5Z"/></svg>',
   bar: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2 10h2V8h2v8H4v-2H2v-4Zm4-3h2v10H6V7Zm10 0h2v10h-2V7Zm2 1h2v2h2v4h-2v2h-2V8ZM8 11h8v2H8v-2Z"/></svg>',
-  ring: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="7" cy="15" r="4"/><circle cx="17" cy="15" r="4"/><path d="M7 11V3M17 11V3"/></svg>',
+  // Poids du corps : un bonhomme en traction sous une barre
+  ring: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="1.5" y="1.4" width="21" height="2.4" rx="1.2"/><circle cx="12" cy="7.6" r="2.3"/><path d="M8.8 10.6h6.4l-1.3 6h-3.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M7.4 3.4l1.5 7.4M16.6 3.4l-1.5 7.4M10.9 16.4l-.7 5.4M13.1 16.4l.7 5.4" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg>',
   run: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="15" cy="4.5" r="2"/><path d="M6 21l3.5-6 3 2.5V22M8 11l3-3.5 3.5 1.5 2 3.5H20M11 7.5l-1.5 6"/></svg>',
   text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>',
   play: '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
@@ -356,7 +357,7 @@ function createSetCard(item, ctx) {
     rowsEl.innerHTML = "";
     rowEls = item.sets.map((set, index) => {
       const row = createRow(set, index);
-      rowsEl.appendChild(row);
+      rowsEl.appendChild(row.parentNode); // la ligne est dans son enveloppe (glisser pour supprimer)
       return row;
     });
     refresh();
@@ -401,9 +402,21 @@ function createSetCard(item, ctx) {
     if (typeof ctx.onSetChecked === "function") ctx.onSetChecked(item, set);
   }
 
+  function deleteSet(set) {
+    const position = item.sets.indexOf(set);
+    if (position === -1) return;
+    item.sets.splice(position, 1);
+    ctx.persist();
+    rebuild();
+  }
+
   function createRow(set, index) {
+    const wrap = document.createElement("div");
+    wrap.className = "rf-row-wrap";
+    wrap.innerHTML = `<button type="button" class="rf-swipe-del" tabindex="-1">Supprimer</button>`;
     const row = document.createElement("div");
     row.className = "rf-grid rf-row";
+    wrap.appendChild(row);
     row.innerHTML = `
       <button type="button" class="rf-set" aria-label="Options de la série"></button>
       <button type="button" class="rf-prev" aria-label="Reprendre la valeur précédente"></button>
@@ -436,9 +449,10 @@ function createSetCard(item, ctx) {
       openActionSheet(setLabel(item.exercise, set, infos[position].number), [
         { label: set.warmup ? "En faire une série normale" : "Marquer comme échauffement", onClick: () => { set.warmup = !set.warmup; ctx.persist(); refresh(); } },
         { label: "Copier cette série", onClick: () => insertCopy(item.sets.indexOf(set)) },
-        { label: "Supprimer cette série", danger: true, onClick: () => { item.sets.splice(item.sets.indexOf(set), 1); ctx.persist(); rebuild(); } },
+        { label: "Supprimer cette série", danger: true, onClick: () => deleteSet(set) },
       ]);
     });
+    attachSwipeToDelete(wrap, row, () => deleteSet(set));
     return row;
   }
 
@@ -470,6 +484,94 @@ function createSetCard(item, ctx) {
   card.refreshCard = refresh;
   rebuild();
   return card;
+}
+
+// --------------------------------------------------------------------------
+// GLISSER UNE SÉRIE VERS LA GAUCHE POUR LA SUPPRIMER
+// Comme dans Mail ou les applis de muscu : la ligne glisse et découvre un
+// bouton rouge « Supprimer ». Un glissement vertical fait défiler la page
+// normalement ; toucher ailleurs referme la ligne.
+// --------------------------------------------------------------------------
+
+const SWIPE_WIDTH = 92;
+let rfOpenSwipe = null; // { wrap, close }
+
+function closeOpenSwipe(except) {
+  if (rfOpenSwipe && rfOpenSwipe.wrap !== except) rfOpenSwipe.close();
+}
+
+document.addEventListener("touchstart", (event) => {
+  if (rfOpenSwipe && !rfOpenSwipe.wrap.contains(event.target)) rfOpenSwipe.close();
+}, { passive: true });
+
+function attachSwipeToDelete(wrap, row, onDelete) {
+  let startX = 0;
+  let startY = 0;
+  let offset = 0;
+  let tracking = false;
+  let horizontal = null; // null : pas encore décidé
+  const isOpen = () => wrap.classList.contains("open");
+  const setOffset = (x, animate) => {
+    offset = x;
+    row.style.transition = animate ? "" : "none";
+    row.style.transform = x ? `translateX(${x}px)` : "";
+  };
+  const close = () => {
+    wrap.classList.remove("open");
+    setOffset(0, true);
+    if (rfOpenSwipe && rfOpenSwipe.wrap === wrap) rfOpenSwipe = null;
+  };
+  const open = () => {
+    closeOpenSwipe(wrap);
+    wrap.classList.add("open");
+    setOffset(-SWIPE_WIDTH, true);
+    rfOpenSwipe = { wrap, close };
+  };
+
+  row.addEventListener("touchstart", (event) => {
+    if (event.touches.length !== 1) { tracking = false; return; }
+    closeOpenSwipe(wrap);
+    startX = event.touches[0].clientX;
+    startY = event.touches[0].clientY;
+    tracking = true;
+    horizontal = null;
+  }, { passive: true });
+
+  row.addEventListener("touchmove", (event) => {
+    if (!tracking) return;
+    const dx = event.touches[0].clientX - startX;
+    const dy = event.touches[0].clientY - startY;
+    if (horizontal === null) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      horizontal = Math.abs(dx) > Math.abs(dy);
+      if (!horizontal) { tracking = false; return; } // défilement de la page
+    }
+    if (event.cancelable) event.preventDefault();
+    const base = isOpen() ? -SWIPE_WIDTH : 0;
+    setOffset(Math.min(0, Math.max(-SWIPE_WIDTH * 1.25, base + dx)), false);
+  }, { passive: false });
+
+  const end = () => {
+    if (!tracking || !horizontal) { tracking = false; return; }
+    tracking = false;
+    if (offset < -SWIPE_WIDTH / 2) open();
+    else close();
+  };
+  row.addEventListener("touchend", end);
+  row.addEventListener("touchcancel", end);
+
+  // Ligne ouverte : un toucher dessus la referme (sans cocher ni ouvrir de menu)
+  row.addEventListener("click", (event) => {
+    if (!isOpen()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  }, true);
+
+  wrap.querySelector(".rf-swipe-del").addEventListener("click", () => {
+    if (rfOpenSwipe && rfOpenSwipe.wrap === wrap) rfOpenSwipe = null;
+    onDelete();
+  });
 }
 
 /**
