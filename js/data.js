@@ -324,6 +324,66 @@ function computeBmi() {
 }
 
 // --------------------------------------------------------------------------
+// MENSURATIONS (tours en cm) ET OBJECTIF DE POIDS — version 26
+// Une entrée = une date + les tours mesurés ce jour-là (tous facultatifs).
+// --------------------------------------------------------------------------
+
+const STORAGE_KEY_MEASUREMENTS = "carnet_measurements";
+const STORAGE_KEY_WEIGHT_GOAL = "carnet_weight_goal";
+
+const MEASUREMENT_KEYS = ["arm", "chest", "waist", "thigh", "calf", "neck"];
+const MEASUREMENT_MIN = 10;
+const MEASUREMENT_MAX = 250;
+
+const newMeasurementId = () => "m_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+
+/** Toutes les mensurations, de la plus ancienne à la plus récente. */
+function getAllMeasurements() {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(STORAGE_KEY_MEASUREMENTS) || "[]"); } catch { list = []; }
+  if (!Array.isArray(list)) return [];
+  return list.filter((m) => m && typeof m === "object" && typeof m.date === "string" && m.values && typeof m.values === "object").sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+function saveAllMeasurements(list) {
+  localStorage.setItem(STORAGE_KEY_MEASUREMENTS, JSON.stringify(list));
+}
+
+/** Enregistre les tours d'une date (remplace ceux déjà notés ce jour-là). Renvoie "added" ou "updated". */
+function saveMeasurement(date, values) {
+  const list = getAllMeasurements();
+  const existing = list.find((m) => m.date === date);
+  if (existing) {
+    existing.values = { ...values };
+    saveAllMeasurements(list);
+    return "updated";
+  }
+  list.push({ id: newMeasurementId(), date, values: { ...values } });
+  saveAllMeasurements(list);
+  return "added";
+}
+
+function deleteMeasurement(id) {
+  saveAllMeasurements(getAllMeasurements().filter((m) => m.id !== id));
+}
+
+/** Objectif de poids : { target, startWeight, startDate } ou null. */
+function getWeightGoal() {
+  let goal = null;
+  try { goal = JSON.parse(localStorage.getItem(STORAGE_KEY_WEIGHT_GOAL)); } catch { goal = null; }
+  if (!goal || typeof goal !== "object" || !(Number(goal.target) > 0)) return null;
+  return { target: Number(goal.target), startWeight: Number(goal.startWeight) > 0 ? Number(goal.startWeight) : null, startDate: isValidDateString(goal.startDate) ? goal.startDate : null };
+}
+
+function setWeightGoal(goal) {
+  localStorage.setItem(STORAGE_KEY_WEIGHT_GOAL, JSON.stringify(goal));
+}
+
+function clearWeightGoal() {
+  localStorage.removeItem(STORAGE_KEY_WEIGHT_GOAL);
+}
+
+// --------------------------------------------------------------------------
 // ANNÉE DE NAISSANCE
 // Sert aux barèmes d'endurance (Row 2000 m, Run 5 km), qui dépendent de
 // l'âge. On garde l'année plutôt que l'âge pour que celui-ci suive tout seul
@@ -485,7 +545,8 @@ function hasAnyUserData() {
     Object.keys(getManualCfBests()).length > 0 ||
     Object.keys(getManualReps()).length > 0 ||
     Object.keys(getManualTimes()).length > 0 ||
-    getBirthYear() !== null || getHeight() !== null;
+    getBirthYear() !== null || getHeight() !== null ||
+    getAllMeasurements().length > 0;
 }
 
 function isOnboardingDone() {
@@ -539,6 +600,8 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_KEY_HEIGHT);
   localStorage.removeItem(STORAGE_KEY_BIRTH_YEAR);
   localStorage.removeItem(STORAGE_KEY_SEX);
+  localStorage.removeItem(STORAGE_KEY_MEASUREMENTS);
+  localStorage.removeItem(STORAGE_KEY_WEIGHT_GOAL);
   // L'appli redevient neuve : l'accueil reviendra à la prochaine ouverture
   localStorage.removeItem(STORAGE_KEY_ONBOARDED);
   localStorage.removeItem(STORAGE_KEY_LAST_EXPORT);
@@ -630,6 +693,8 @@ function exportAllData() {
     heightCm: getHeight(),
     birthYear: getBirthYear(),
     sex: getSex(),
+    measurements: getAllMeasurements(),
+    weightGoal: getWeightGoal(),
     // Succès débloqués (avec leur date) : ils restent acquis même après un import
     achievements: JSON.parse(localStorage.getItem("carnet_achievements") || "{}"),
   };
@@ -663,6 +728,10 @@ function importAllData(jsonString) {
   if (payload.heightCm) setHeight(payload.heightCm);
   if (Number.isInteger(payload.birthYear) && payload.birthYear > 1900) setBirthYear(payload.birthYear);
   if (payload.sex === "female" || payload.sex === "male") setSex(payload.sex);
+  // Mensurations et objectif (absents des sauvegardes d'avant la version 26)
+  localStorage.setItem(STORAGE_KEY_MEASUREMENTS, JSON.stringify(Array.isArray(payload.measurements) ? payload.measurements : []));
+  if (payload.weightGoal && typeof payload.weightGoal === "object") localStorage.setItem(STORAGE_KEY_WEIGHT_GOAL, JSON.stringify(payload.weightGoal));
+  else localStorage.removeItem(STORAGE_KEY_WEIGHT_GOAL);
 
   // Succès : on restaure ceux de la sauvegarde (une ancienne sauvegarde n'en a pas)
   const achievements = payload.achievements && typeof payload.achievements === "object" ? payload.achievements : {};
@@ -962,6 +1031,32 @@ function ensureDataSanitized() {
   rejectedCount += sanitizeManualStore(STORAGE_KEY_MANUAL_REPS, (e) => readStoredNumber(e.reps, 0) > 0);
   rejectedCount += sanitizeManualStore(STORAGE_KEY_MANUAL_TIMES, (e) => readStoredNumber(e.timeSeconds, 0) > 0);
   rejectedCount += sanitizeManualStore(STORAGE_KEY_MANUAL_CF_BEST, (e) => readStoredNumber(e.timeSeconds, 0) > 0 || readStoredNumber(e.rounds, -1) >= 0);
+
+  // Mensurations : une date valide et au moins un tour lisible (en cm)
+  const rawMeasures = localStorage.getItem(STORAGE_KEY_MEASUREMENTS);
+  if (rawMeasures !== null) {
+    let parsed = null;
+    try { parsed = JSON.parse(rawMeasures); } catch { parsed = null; }
+    const kept = [];
+    const rejected = [];
+    (Array.isArray(parsed) ? parsed : [parsed]).forEach((raw) => {
+      if (!isPlainObject(raw) || !isValidDateString(raw.date) || !isPlainObject(raw.values)) { rejected.push(raw); return; }
+      const values = {};
+      MEASUREMENT_KEYS.forEach((key) => {
+        const v = readStoredNumber(raw.values[key], 0);
+        if (v >= MEASUREMENT_MIN && v <= MEASUREMENT_MAX) values[key] = v;
+      });
+      if (Object.keys(values).length === 0) { rejected.push(raw); return; }
+      kept.push({ id: typeof raw.id === "string" && raw.id ? raw.id : newMeasurementId(), date: raw.date, values });
+    });
+    keepRejectedItems("measurements", rejected);
+    rejectedCount += rejected.length;
+    kept.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const serialized = JSON.stringify(kept);
+    if (serialized !== rawMeasures) localStorage.setItem(STORAGE_KEY_MEASUREMENTS, serialized);
+  }
+  // Objectif de poids illisible : retiré
+  if (localStorage.getItem(STORAGE_KEY_WEIGHT_GOAL) !== null && getWeightGoal() === null) localStorage.removeItem(STORAGE_KEY_WEIGHT_GOAL);
   return rejectedCount;
 }
 

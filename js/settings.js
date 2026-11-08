@@ -32,12 +32,11 @@ function refreshEntireApp() {
   if (typeof renderCfHistory === "function") renderCfHistory();
   renderRestSetting();
 
-  if (typeof renderWeightHistory === "function") renderWeightHistory();
+  if (typeof renderMensurations === "function") renderMensurations();
   const heightInputEl = document.getElementById("height-input");
   if (heightInputEl && typeof getHeight === "function") heightInputEl.value = getHeight() || "";
   const birthYearInputEl = document.getElementById("birth-year-input");
   if (birthYearInputEl && typeof getBirthYear === "function") birthYearInputEl.value = getBirthYear() || "";
-  if (typeof renderBmiGauge === "function") renderBmiGauge();
   if (typeof renderRecords === "function") renderRecords();
   if (typeof renderAllStatsCharts === "function") renderAllStatsCharts();
   // Rangs : nouvelle "photo" calculée sans annonce (pas de fenêtre "Rang

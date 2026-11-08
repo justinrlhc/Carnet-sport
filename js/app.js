@@ -54,10 +54,7 @@ function goToSection(targetId) {
   if (targetId === "profil" && typeof renderProfile === "function") renderProfile();
   if (targetId === "musculation" && typeof renderMuscuHistory === "function") renderMuscuHistory();
   if (targetId === "crossfit" && typeof renderCfHistory === "function") renderCfHistory();
-  if (targetId === "mensurations" && typeof renderWeightHistory === "function") {
-    renderWeightHistory();
-    if (typeof renderBmiGauge === "function") renderBmiGauge();
-  }
+  if (targetId === "mensurations" && typeof renderMensurations === "function") renderMensurations();
   if (targetId === "records" && typeof renderRecords === "function") renderRecords();
   if (targetId === "statistiques" && typeof renderAllStatsCharts === "function") renderAllStatsCharts();
   // Minuteur de repos : visible seulement sur la page Musculation
