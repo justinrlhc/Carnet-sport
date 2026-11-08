@@ -19,13 +19,18 @@ function showSettingsFeedback(message, isError) {
  * plusieurs pages à la fois, même celles qu'on ne regarde pas en ce moment.
  */
 function refreshEntireApp() {
+  // Séance en cours et saisie CrossFit : leur brouillon est gardé tel quel
+  // (sauf après une remise à zéro, qui les efface aussi)
   if (typeof populateExerciseSelects === "function") populateExerciseSelects();
-  if (typeof resetExerciseBlocks === "function") resetExerciseBlocks();
+  if (typeof loadMuscuDraft === "function") muscuDraft = loadMuscuDraft();
+  if (typeof renderMuscuView === "function") renderMuscuView();
   if (typeof renderMuscuHistory === "function") renderMuscuHistory();
 
+  if (typeof loadCfDraft === "function") cfState = loadCfDraft() || defaultCfState();
   if (typeof populateWodSelects === "function") populateWodSelects();
-  if (typeof resetExerciseRows === "function") resetExerciseRows();
+  if (typeof renderCfForm === "function") renderCfForm();
   if (typeof renderCfHistory === "function") renderCfHistory();
+  renderRestSetting();
 
   if (typeof renderWeightHistory === "function") renderWeightHistory();
   const heightInputEl = document.getElementById("height-input");
@@ -447,3 +452,28 @@ setupOnboarding();
 // État de la sauvegarde au démarrage (Réglages + rappel du tableau de bord)
 renderBackupStatus();
 renderBackupReminder();
+
+// --------------------------------------------------------------------------
+// SÉANCES DE MUSCULATION : TEMPS DE REPOS (minuteur de seance.js)
+// --------------------------------------------------------------------------
+
+const restSelect = document.getElementById("settings-rest-select");
+
+function renderRestSetting() {
+  if (restSelect) restSelect.value = String(getRestSeconds());
+}
+
+if (restSelect) {
+  restSelect.addEventListener("change", () => {
+    setRestSeconds(Number(restSelect.value));
+    const feedback = document.getElementById("rest-feedback");
+    if (!feedback) return;
+    const seconds = getRestSeconds();
+    feedback.textContent = seconds > 0
+      ? `Repos réglé sur ${formatClock(seconds)} : il s'appliquera à ta prochaine série cochée.`
+      : "Minuteur de repos désactivé.";
+    feedback.className = "form-feedback form-feedback-success";
+    setTimeout(() => { feedback.textContent = ""; }, 3500);
+  });
+}
+renderRestSetting();

@@ -1,11 +1,11 @@
 // ==========================================================================
 // musculation.js — tout ce qui concerne la page Musculation.
 //
-// Point important sur la structure : une séance peut désormais contenir
-// PLUSIEURS exercices (ex : une séance "pecs" avec Bench Press, Incline
-// Bench Press et Dumbbell Floor Press le même jour). Le formulaire affiche
-// donc une liste de "blocs exercice" qu'on peut ajouter/enlever, chacun
-// avec son propre choix d'exercice, ses séries et son RPE.
+// Une séance contient plusieurs exercices. Elle se remplit "en direct" :
+// on démarre la séance (chrono), chaque exercice est une carte avec ses
+// séries, et chaque série se coche (✓) dès qu'elle est faite. Tout est
+// gardé au fur et à mesure dans un brouillon ; "Terminer" l'enregistre.
+// Les briques communes (cartes, séries, minuteur) sont dans seance.js.
 // ==========================================================================
 
 // Liste des exercices proposés par défaut. Le joueur peut aussi taper
@@ -186,16 +186,11 @@ function isCardioEntry(entry) {
 }
 
 /**
- * Lit les champs minutes + secondes d'un bloc cardio. Renvoie des secondes,
- * ou null si c'est vide ou illisible. Les dixièmes sont acceptés ("43,5").
+ * Lit les champs minutes + secondes d'une carte de test cardio. Renvoie des
+ * secondes, ou null si c'est vide ou illisible. Les dixièmes sont acceptés ("43,5").
  */
 function readCardioTime(block) {
-  const minText = block.querySelector(".cardio-block-min").value.trim();
-  const secText = block.querySelector(".cardio-block-sec").value.trim().replace(",", ".");
-  if (!minText && !secText) return null;
-  if ((minText && !/^\d+$/.test(minText)) || (secText && !/^\d+(\.\d)?$/.test(secText))) return null;
-  const total = (Number(minText) || 0) * 60 + (Number(secText) || 0);
-  return total > 0 ? Math.round(total * 10) / 10 : null;
+  return parseCardioTime(block.querySelector(".cardio-block-min").value, block.querySelector(".cardio-block-sec").value);
 }
 
 /** 103 → "1:43" ; 103,5 → "1:43,5" */
@@ -217,15 +212,29 @@ function getRpeBadgeClass(rpe) {
 }
 
 // --------------------------------------------------------------------------
-// ÉLÉMENTS GÉNÉRAUX DU FORMULAIRE
+// ÉLÉMENTS DE LA PAGE
+// L'onglet a deux écrans : l'accueil (démarrer, refaire une séance,
+// historique) et la séance en cours (chrono, cartes d'exercice, séries à
+// cocher). Une séance ancienne se modifie dans ce même écran.
 // --------------------------------------------------------------------------
 
-const muscuForm = document.getElementById("muscu-form");
+const muscuHome = document.getElementById("muscu-home");
+const muscuLive = document.getElementById("muscu-live");
+const muscuTemplates = document.getElementById("muscu-templates");
+const muscuStartBtn = document.getElementById("muscu-start-btn");
+const muscuLiveTitle = document.getElementById("muscu-live-title");
+const muscuChrono = document.getElementById("muscu-chrono");
+const muscuChronoTime = document.getElementById("muscu-chrono-time");
+const muscuNameInput = document.getElementById("muscu-name");
 const muscuDateInput = document.getElementById("muscu-date");
 const muscuExercisesList = document.getElementById("muscu-exercises-list");
 const muscuAddExerciseBlockBtn = document.getElementById("muscu-add-exercise-block");
+const muscuAddCardioBtn = document.getElementById("muscu-add-cardio-block");
 const muscuNotesInput = document.getElementById("muscu-notes");
 const muscuFeedback = document.getElementById("muscu-feedback");
+const muscuSubmitBtn = document.getElementById("muscu-submit-btn");
+const muscuCancelEditBtn = document.getElementById("muscu-cancel-edit");
+const muscuDiscardBtn = document.getElementById("muscu-discard-btn");
 const muscuFilterSelect = document.getElementById("muscu-filter-exercise");
 const muscuHistoryList = document.getElementById("muscu-history-list");
 const muscuHistorySearch = document.getElementById("muscu-history-search");
@@ -236,18 +245,13 @@ const muscuLastSeen = document.getElementById("muscu-last-seen");
  * pour que "elevations" trouve "Élévations latérales". Partagée avec crossfit.js.
  */
 function normalizeSearchText(text) {
-  return String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  return String(text || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
-const muscuSubmitBtn = document.getElementById("muscu-submit-btn");
-const muscuCancelEditBtn = document.getElementById("muscu-cancel-edit");
-
-// Quand cette variable contient un id, le formulaire est en mode "édition".
-let muscuEditingId = null;
 
 /**
  * Renvoie la liste des exercices déjà utilisés dans l'historique, fusionnée
  * avec la liste par défaut (sans doublons). Ça permet aux exercices
- * "personnalisés" ajoutés une fois de réapparaître dans les listes déroulantes.
+ * "personnalisés" ajoutés une fois de réapparaître dans les listes.
  */
 function getAllKnownExercises() {
   const used = getAllSessions()
@@ -256,11 +260,6 @@ function getAllKnownExercises() {
   return Array.from(new Set([...DEFAULT_EXERCISES, ...used])).filter((name) => !isMeasuredExercise(name)).sort();
 }
 
-/**
- * Remplit un <select> avec la liste des exercices connus + option "Autre".
- * options.includeMeasured : ajoute aussi le groupe "Cardio et distance"
- * (row, bike, run...), proposé uniquement dans les WOD.
- */
 /**
  * Les derniers exercices utilisés (séances de muscu et exercices structurés
  * des WOD), du plus récent au plus ancien, sans doublons. Les tests cardio
@@ -293,6 +292,11 @@ function createExerciseOption(name, label) {
   return opt;
 }
 
+/**
+ * Remplit un <select> avec la liste des exercices connus + option "Autre"
+ * (utilisée par la page Records). options.includeMeasured : ajoute aussi
+ * le groupe "Cardio et distance" (row, bike, run...).
+ */
 function populateExerciseSelectElement(selectEl, options) {
   const includeMeasured = Boolean(options && options.includeMeasured);
   const measuredLabel = (ex) => `${exerciseOptionLabel(ex)} (${MEASURED_EXERCISES[ex].map((u) => UNIT_LABELS[u]).join(" ou ")})`;
@@ -330,44 +334,14 @@ function populateExerciseSelects() {
 }
 
 function populateExerciseFilterSelect() {
+  const previous = muscuFilterSelect.value;
   muscuFilterSelect.innerHTML = "";
   const allOpt = document.createElement("option");
   allOpt.value = "all";
   allOpt.textContent = "Tous les exercices";
   muscuFilterSelect.appendChild(allOpt);
   getAllKnownExercises().forEach((ex) => muscuFilterSelect.appendChild(createExerciseOption(ex)));
-}
-
-// --------------------------------------------------------------------------
-// SÉRIES DYNAMIQUES (ajouter / enlever des lignes reps x poids)
-// --------------------------------------------------------------------------
-
-function createSetRow() {
-  const row = document.createElement("div");
-  row.className = "set-row";
-  row.innerHTML = `
-    <input type="number" class="set-reps" placeholder="Reps" min="0" inputmode="numeric">
-    <span class="set-x">×</span>
-    <input type="number" class="set-weight" placeholder="kg" min="0" step="0.5">
-    <button type="button" class="set-duplicate" title="Refaire cette série" aria-label="Refaire cette série">
-      <svg viewBox="0 0 24 24"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm-3 4h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Zm0 2v10h10V9H5Z"/></svg>
-    </button>
-    <button type="button" class="set-remove" title="Supprimer cette série">✕</button>
-  `;
-  row.querySelector(".set-remove").addEventListener("click", () => row.remove());
-
-  // "Refaire cette série" : insère juste en dessous une copie exacte de la
-  // série (mêmes reps, même charge), pour ne pas tout retaper quand on
-  // enchaîne plusieurs séries identiques (ex : 5 × 10 reps à 40 kg).
-  row.querySelector(".set-duplicate").addEventListener("click", () => {
-    const copy = createSetRow();
-    const sourceWeight = row.querySelector(".set-weight");
-    copy.querySelector(".set-reps").value = row.querySelector(".set-reps").value;
-    copy.querySelector(".set-weight").value = sourceWeight.value;
-    copy.querySelector(".set-weight").placeholder = sourceWeight.placeholder;
-    row.after(copy);
-  });
-  return row;
+  if (previous && [...muscuFilterSelect.options].some((o) => o.value === previous)) muscuFilterSelect.value = previous;
 }
 
 // --------------------------------------------------------------------------
@@ -375,6 +349,7 @@ function createSetRow() {
 // Les séries identiques qui se suivent sont regroupées :
 // [70×5, 70×5, 70×5, 75×3] → "3 × 5 à 70 kg · 1 × 3 à 75 kg"
 // (séries × reps à charge). Poids du corps : "3 × 8 reps", ou "lesté".
+// Échauffement : "échauff. 1 × 10 à 40 kg".
 // --------------------------------------------------------------------------
 
 function formatSetsCompact(sets, isBW) {
@@ -383,12 +358,13 @@ function formatSetsCompact(sets, isBW) {
     if (!set) return;
     const reps = Number(set.reps) || 0;
     const weight = Number(set.weight) || 0;
+    const warmup = set.warmup === true;
     const last = groups[groups.length - 1];
-    if (last && last.reps === reps && last.weight === weight) last.count += 1;
-    else groups.push({ reps, weight, count: 1 });
+    if (last && last.reps === reps && last.weight === weight && last.warmup === warmup) last.count += 1;
+    else groups.push({ reps, weight, warmup, count: 1 });
   });
   return groups
-    .map(({ count, reps, weight }) => (weight > 0
+    .map(({ count, reps, weight, warmup }) => (warmup ? "échauff. " : "") + (weight > 0
       ? `${count} × ${reps} ${isBW ? "lesté" : "à"} ${formatNumberFr(weight)} kg`
       : `${count} × ${reps} rep${reps > 1 ? "s" : ""}`))
     .join(" · ");
@@ -401,10 +377,24 @@ function formatShortDate(dateStr) {
   return date.toLocaleDateString("fr-FR", sameYear ? { day: "2-digit", month: "2-digit" } : { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+/** "lun. 2 nov." (avec l'année si ce n'est pas l'année en cours). */
+function formatDayDate(dateStr) {
+  const date = parseLocalDate(dateStr);
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString("fr-FR", sameYear
+    ? { weekday: "short", day: "numeric", month: "short" }
+    : { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** 3480 → "58 min" ; 3900 → "1 h 05". */
+function formatSessionDuration(totalSeconds) {
+  const minutes = Math.max(1, Math.round(totalSeconds / 60));
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`;
+}
+
 // --------------------------------------------------------------------------
-// "DERNIÈRE FOIS" DANS LE FORMULAIRE
-// Sous chaque exercice choisi : ta dernière perf sur cet exercice et ton
-// record, pour savoir quoi charger sans aller fouiller l'historique.
+// "DERNIÈRE FOIS" ET RECORDS D'UN EXERCICE
 // --------------------------------------------------------------------------
 
 /** Séances de la plus récente à la plus ancienne (à date égale : la dernière ajoutée d'abord). */
@@ -416,7 +406,10 @@ function getSessionsNewestFirst(excludeSessionId) {
     .map(({ session }) => session);
 }
 
-/** Dernière fois qu'un exercice a été fait : séries (musculation) ou ligne de WOD. null si jamais. */
+/**
+ * Dernière fois qu'un exercice a été fait : ses séries (musculation ou cours
+ * de spé) ou sa ligne de WOD. null si jamais.
+ */
 function getLastExercisePerformance(name, excludeSessionId) {
   if (!name) return null;
   for (const session of getSessionsNewestFirst(excludeSessionId)) {
@@ -424,11 +417,16 @@ function getLastExercisePerformance(name, excludeSessionId) {
       const entry = session.exercises.find((e) => e && e.exercise === name && !isCardioEntry(e) && Array.isArray(e.sets) && e.sets.length > 0);
       if (entry) return { source: "muscu", date: session.date, sets: entry.sets };
     } else if (session.type === "crossfit") {
-      const entry = session.exercises.find((e) => e && typeof e === "object" && e.exercise === name && getEntryUnit(e) === "reps" && e.reps > 0);
-      if (entry) {
-        const perRound = session.wodType === "AMRAP" && typeof session.rounds === "number";
-        return { source: "wod", date: session.date, wodName: session.wodName, reps: entry.reps, weight: entry.weight || 0, perRound };
+      const matching = session.exercises.filter((e) => e && typeof e === "object" && e.exercise === name && getEntryUnit(e) === "reps" && e.reps > 0);
+      if (matching.length === 0) continue;
+      if (typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
+        // Cours de spé : une ligne par série
+        const sets = matching.map((e) => (e.warmup === true ? { reps: e.reps, weight: e.weight || 0, warmup: true } : { reps: e.reps, weight: e.weight || 0 }));
+        return { source: "spe", date: session.date, wodName: session.wodName, sets };
       }
+      const entry = matching[0];
+      const perRound = session.wodType === "AMRAP" && typeof session.rounds === "number";
+      return { source: "wod", date: session.date, wodName: session.wodName, reps: entry.reps, weight: entry.weight || 0, perRound };
     }
   }
   return null;
@@ -467,354 +465,568 @@ function getCardioLastAndBest(name, excludeSessionId) {
   return { last, best };
 }
 
-/** Remet à jour la ligne "Dernière fois" de tous les blocs du formulaire. */
+/**
+ * Réaffiche les cartes de la séance en cours (records et "précédent" à
+ * jour). Appelée au démarrage par app.js, une fois stats.js chargé.
+ */
 function refreshExerciseLastSeen() {
-  muscuExercisesList.querySelectorAll(".exercise-block").forEach((block) => {
-    if (typeof block.refreshLastSeen === "function") block.refreshLastSeen();
-  });
+  if (muscuDraft) renderMuscuList();
+  if (typeof refreshCfSpeCards === "function") refreshCfSpeCards();
 }
 
 // --------------------------------------------------------------------------
-// BLOCS EXERCICE (un bloc = un exercice avec ses séries et son RPE)
+// SÉANCE EN COURS : BROUILLON
+// Tout ce qui est tapé ou coché est gardé tout de suite sur le téléphone
+// ("carnet_muscu_draft") : fermer l'appli ne fait rien perdre. Le brouillon
+// devient une vraie séance seulement avec "Terminer" → "Enregistrer".
 // --------------------------------------------------------------------------
 
-/** Crée un nouveau bloc exercice, vide ou pré-rempli si prefill est fourni. */
-function createExerciseBlock(prefill) {
-  const block = document.createElement("div");
-  block.className = "exercise-block";
-  block.innerHTML = `
-    <div class="exercise-block-header">
-      <select class="exercise-block-select"></select>
-      <input type="text" class="exercise-block-custom form-input-spaced" placeholder="Nom de l'exercice" style="display:none;">
-      <button type="button" class="exercise-block-remove" title="Supprimer cet exercice">✕</button>
-    </div>
-    <div class="exercise-last-seen" style="display:none;"></div>
-    <p class="exercise-block-hint" style="display:none;">Poids de corps : la charge est facultative — ajoute un lest si tu es lesté.</p>
-    <div class="exercise-block-sets sets-list"></div>
-    <button type="button" class="exercise-block-add-set btn btn-secondary btn-small">+ Ajouter une série</button>
-    <div class="form-row" style="margin-top: 10px;">
-      <label>RPE <span class="label-optional">(optionnel)</span></label>
-      <input type="number" class="exercise-block-rpe" min="1" max="10" step="0.5" placeholder="ex : 8">
-    </div>
-  `;
+const STORAGE_KEY_MUSCU_DRAFT = "carnet_muscu_draft";
+let muscuDraft = null;
 
-  const select = block.querySelector(".exercise-block-select");
-  const customInput = block.querySelector(".exercise-block-custom");
-  const hint = block.querySelector(".exercise-block-hint");
-  const setsList = block.querySelector(".exercise-block-sets");
-  const addSetBtn = block.querySelector(".exercise-block-add-set");
-  const removeBtn = block.querySelector(".exercise-block-remove");
-  const rpeInput = block.querySelector(".exercise-block-rpe");
-  const lastSeenEl = block.querySelector(".exercise-last-seen");
-  let lastPerformance = null;
+const newEmptySet = (warmup) => ({ reps: "", weight: "", done: false, warmup: Boolean(warmup) });
 
-  populateExerciseSelectElement(select);
-
-  /** Renvoie le nom d'exercice actuellement choisi dans ce bloc (liste ou saisie libre). */
-  function getBlockExerciseName() {
-    return select.value === "__custom__" ? customInput.value.trim() : select.value;
-  }
-
-  /**
-   * Adapte le bloc à l'exercice choisi : indice "poids du corps", ligne
-   * "Dernière fois" (+ record) et charges de la dernière fois en grisé
-   * dans les cases vides (ce n'est qu'un repère : rien n'est enregistré
-   * tant que tu n'as pas tapé la valeur).
-   */
-  function updateBodyweightUI() {
-    const name = getBlockExerciseName();
-    const isBW = isBodyweightExercise(name);
-    hint.style.display = isBW ? "block" : "none";
-
-    lastPerformance = getLastExercisePerformance(name, muscuEditingId);
-    const lastSets = lastPerformance && lastPerformance.source === "muscu" ? lastPerformance.sets : [];
-    setsList.querySelectorAll(".set-row").forEach((row, index) => {
-      const reference = lastSets.length ? lastSets[Math.min(index, lastSets.length - 1)] : null;
-      const input = row.querySelector(".set-weight");
-      input.placeholder = reference && reference.weight > 0
-        ? formatNumberFr(reference.weight)
-        : (isBW ? "Lest (kg)" : "kg");
-    });
-
-    const record = describeExerciseRecord(name);
-    if (!lastPerformance && !record) {
-      lastSeenEl.style.display = "none";
-      lastSeenEl.innerHTML = "";
-      return;
-    }
-    let lastText = "";
-    if (lastPerformance && lastPerformance.source === "muscu") {
-      lastText = formatSetsCompact(lastPerformance.sets, isBW);
-    } else if (lastPerformance) {
-      const amount = `${lastPerformance.reps} rep${lastPerformance.reps > 1 ? "s" : ""}${lastPerformance.perRound ? "/tour" : ""}`;
-      const load = lastPerformance.weight > 0 ? ` ${isBW ? "lesté" : "à"} ${formatNumberFr(lastPerformance.weight)} kg` : "";
-      lastText = `${amount}${load} (${lastPerformance.wodName || "WOD"})`;
-    }
-    lastSeenEl.innerHTML = `
-      ${lastPerformance ? `<span class="exercise-last-seen-text"><strong>Dernière fois</strong> · ${escapeHtml(formatShortDate(lastPerformance.date))} : ${escapeHtml(lastText)}</span>` : ""}
-      ${record ? `<span class="exercise-last-seen-record">${escapeHtml(record)}</span>` : ""}
-      ${lastSets.length ? `<button type="button" class="exercise-last-seen-reuse">Reprendre ces séries</button>` : ""}`;
-    lastSeenEl.style.display = "";
-    const reuse = lastSeenEl.querySelector(".exercise-last-seen-reuse");
-    if (reuse) reuse.addEventListener("click", () => reuseLastSets(lastSets));
-  }
-
-  /** Recopie les séries de la dernière fois dans les lignes vides (en ajoute si besoin). */
-  function reuseLastSets(lastSets) {
-    lastSets.forEach((set, index) => {
-      let row = setsList.querySelectorAll(".set-row")[index];
-      if (!row) {
-        row = createSetRow();
-        setsList.appendChild(row);
+/** Lit le brouillon enregistré (ou null s'il n'y en a pas ou s'il est illisible). */
+function loadMuscuDraft() {
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem(STORAGE_KEY_MUSCU_DRAFT)); } catch { draft = null; }
+  if (!isPlainObject(draft) || !Array.isArray(draft.exercises)) return null;
+  draft.exercises = draft.exercises
+    .filter((item) => isPlainObject(item) && typeof item.exercise === "string" && item.exercise.trim())
+    .map((item) => {
+      if (item.kind === "cardio") {
+        return { kind: "cardio", exercise: item.exercise, min: String(item.min ?? ""), sec: String(item.sec ?? ""), done: Boolean(item.done) };
       }
-      const repsInput = row.querySelector(".set-reps");
-      const weightInput = row.querySelector(".set-weight");
-      if (repsInput.value.trim() || weightInput.value.trim()) return; // ligne déjà remplie : on n'y touche pas
-      repsInput.value = set.reps;
-      weightInput.value = set.weight > 0 ? set.weight : "";
+      const rpe = Number(item.rpe);
+      return {
+        kind: "sets",
+        exercise: item.exercise,
+        rpe: rpe > 0 ? rpe : null,
+        sets: (Array.isArray(item.sets) ? item.sets : []).filter(isPlainObject).map((set) => ({
+          reps: String(set.reps ?? ""), weight: String(set.weight ?? ""), done: Boolean(set.done), warmup: Boolean(set.warmup),
+        })),
+      };
     });
-    updateBodyweightUI();
-  }
-  block.refreshLastSeen = updateBodyweightUI;
-
-  select.addEventListener("change", () => {
-    const isCustom = select.value === "__custom__";
-    customInput.style.display = isCustom ? "block" : "none";
-    if (isCustom) customInput.focus();
-    updateBodyweightUI();
-  });
-  customInput.addEventListener("input", updateBodyweightUI);
-
-  addSetBtn.addEventListener("click", () => {
-    setsList.appendChild(createSetRow());
-    updateBodyweightUI();
-  });
-
-  removeBtn.addEventListener("click", () => {
-    if (muscuExercisesList.children.length <= 1) {
-      showMuscuFeedback("Une séance doit contenir au moins un exercice.", true);
-      return;
-    }
-    block.remove();
-  });
-
-  // Pré-remplissage (mode édition) ou lignes vides par défaut (mode ajout)
-  if (prefill) {
-    const exists = getAllKnownExercises().includes(prefill.exercise);
-    if (exists) {
-      select.value = prefill.exercise;
-    } else {
-      select.value = "__custom__";
-      customInput.style.display = "block";
-      customInput.value = prefill.exercise;
-    }
-    prefill.sets.forEach((set) => {
-      const row = createSetRow();
-      row.querySelector(".set-reps").value = set.reps;
-      row.querySelector(".set-weight").value = set.weight;
-      setsList.appendChild(row);
-    });
-    rpeInput.value = prefill.rpe || "";
-  } else {
-    for (let i = 0; i < 3; i++) setsList.appendChild(createSetRow());
-  }
-
-  updateBodyweightUI();
-
-  return block;
+  draft.editingId = typeof draft.editingId === "string" && draft.editingId ? draft.editingId : null;
+  // Séance modifiée supprimée entre-temps : plus rien à modifier
+  if (draft.editingId && !getAllSessions().some((s) => s.id === draft.editingId)) return null;
+  draft.mode = draft.editingId ? "edit" : "new";
+  if (!isValidDateString(draft.date)) draft.date = todayLocalDateString();
+  if (draft.mode === "new" && !(Number(draft.startedAt) > 0)) draft.startedAt = Date.now();
+  draft.name = typeof draft.name === "string" ? draft.name : "";
+  draft.notes = typeof draft.notes === "string" ? draft.notes : "";
+  draft.rest = isPlainObject(draft.rest) ? draft.rest : null;
+  return draft;
 }
 
-muscuAddExerciseBlockBtn.addEventListener("click", () => {
-  muscuExercisesList.appendChild(createExerciseBlock(null));
-});
-
-/** Crée un bloc "test cardio" : le test choisi et le temps réalisé. */
-function createCardioBlock(prefill) {
-  const block = document.createElement("div");
-  block.className = "exercise-block cardio-block";
-  block.innerHTML = `
-    <div class="exercise-block-header">
-      <select class="exercise-block-select cardio-block-select" aria-label="Test cardio"></select>
-      <button type="button" class="exercise-block-remove" title="Supprimer ce test">✕</button>
-    </div>
-    <div class="exercise-last-seen" style="display:none;"></div>
-    <div class="form-row" style="margin-bottom: 0;">
-      <label>Temps réalisé</label>
-      <!-- Deux champs séparés : le pavé numérique de l'iPhone n'a pas de touche ":" -->
-      <div class="cardio-time-row">
-        <input type="text" class="cardio-block-min" inputmode="numeric" pattern="[0-9]*" placeholder="7" aria-label="Minutes">
-        <span class="cardio-time-unit">min</span>
-        <input type="text" class="cardio-block-sec" inputmode="decimal" placeholder="45" aria-label="Secondes">
-        <span class="cardio-time-unit">s</span>
-      </div>
-    </div>
-  `;
-  const select = block.querySelector(".cardio-block-select");
-  CARDIO_TESTS.forEach((name) => select.appendChild(createExerciseOption(name)));
-  const lastSeenEl = block.querySelector(".exercise-last-seen");
-
-  /** "Dernière fois · 12/10 : 8:02" et le record du test choisi. */
-  function updateCardioLastSeen() {
-    const { last, best } = getCardioLastAndBest(select.value, muscuEditingId);
-    if (!last && best === null) {
-      lastSeenEl.style.display = "none";
-      lastSeenEl.innerHTML = "";
-      return;
-    }
-    lastSeenEl.innerHTML = `
-      ${last ? `<span class="exercise-last-seen-text"><strong>Dernière fois</strong> · ${escapeHtml(formatShortDate(last.date))} : ${formatDuration(last.timeSeconds)}</span>` : ""}
-      ${best !== null ? `<span class="exercise-last-seen-record">Record : ${formatDuration(best)}</span>` : ""}`;
-    lastSeenEl.style.display = "";
+function saveMuscuDraft() {
+  try {
+    if (muscuDraft) localStorage.setItem(STORAGE_KEY_MUSCU_DRAFT, JSON.stringify(muscuDraft));
+    else localStorage.removeItem(STORAGE_KEY_MUSCU_DRAFT);
+  } catch (error) {
+    console.warn("Brouillon de séance non enregistré :", error);
   }
-  select.addEventListener("change", updateCardioLastSeen);
-  block.refreshLastSeen = updateCardioLastSeen;
-  block.querySelector(".exercise-block-remove").addEventListener("click", () => {
-    if (muscuExercisesList.children.length <= 1) {
-      showMuscuFeedback("Une séance doit contenir au moins un exercice.", true);
-      return;
+}
+
+/** Cartes d'une séance enregistrée : vides pour "Refaire", remplies et cochées pour "Modifier". */
+function buildItemsFromSession(session, forEdit) {
+  return (session.exercises || []).filter(Boolean).map((entry) => {
+    if (isCardioEntry(entry)) {
+      if (!forEdit) return { kind: "cardio", exercise: entry.exercise, min: "", sec: "", done: false };
+      const minutes = Math.floor(entry.timeSeconds / 60);
+      const seconds = Math.round((entry.timeSeconds - minutes * 60) * 10) / 10;
+      return { kind: "cardio", exercise: entry.exercise, min: String(minutes), sec: String(seconds).replace(".", ","), done: true };
     }
-    block.remove();
+    const sets = (entry.sets || []).map((set) => (forEdit
+      ? { reps: rfInputNumber(set.reps), weight: set.weight > 0 ? rfInputNumber(set.weight) : "", done: true, warmup: set.warmup === true }
+      : newEmptySet(set.warmup === true)));
+    return { kind: "sets", exercise: entry.exercise, rpe: forEdit && entry.rpe ? entry.rpe : null, sets };
   });
-  if (prefill) {
-    // Ancien test qui n'est plus proposé : on le garde tel quel pour ne pas
-    // le transformer en un autre test par erreur en modifiant la séance
-    if (prefill.exercise && !CARDIO_TESTS.includes(prefill.exercise)) {
-      const legacy = document.createElement("option");
-      legacy.value = prefill.exercise;
-      legacy.textContent = `${prefill.exercise} (ancien test)`;
-      select.appendChild(legacy);
-    }
-    select.value = prefill.exercise;
-    if (prefill.timeSeconds > 0) {
-      const minutes = Math.floor(prefill.timeSeconds / 60);
-      const seconds = Math.round((prefill.timeSeconds - minutes * 60) * 10) / 10;
-      block.querySelector(".cardio-block-min").value = String(minutes);
-      block.querySelector(".cardio-block-sec").value = String(seconds).replace(".", ",");
-    }
-  }
-  updateCardioLastSeen();
-  return block;
 }
 
-/** Crée le bon type de bloc pour une entrée enregistrée (exercice ou test cardio). */
-function createBlockForEntry(entry) {
-  return isCardioEntry(entry) ? createCardioBlock(entry) : createExerciseBlock(entry);
+/** Une séance est déjà en cours : on demande avant de la remplacer. */
+function confirmReplaceMuscuDraft() {
+  if (!muscuDraft) return true;
+  const message = muscuDraft.mode === "edit"
+    ? "Une modification de séance est en cours. L'abandonner ?"
+    : "Une séance est déjà en cours. L'abandonner pour en commencer une autre ? Rien n'en sera enregistré.";
+  return confirm(message);
 }
 
-document.getElementById("muscu-add-cardio-block").addEventListener("click", () => {
-  muscuExercisesList.appendChild(createCardioBlock(null));
-});
+/** Démarre une séance : vide, ou avec les exercices d'une séance passée ("Refaire"). */
+function startNewMuscuSession(template) {
+  if (!confirmReplaceMuscuDraft()) return false;
+  stopRestTimer();
+  muscuDraft = {
+    mode: "new",
+    editingId: null,
+    startedAt: Date.now(),
+    date: todayLocalDateString(),
+    name: template && template.name ? template.name : "",
+    notes: "",
+    exercises: template ? buildItemsFromSession(template, false) : [],
+    rest: null,
+  };
+  saveMuscuDraft();
+  renderMuscuView();
+  window.scrollTo(0, 0);
+  if (!template) openMuscuExercisePicker();
+  return true;
+}
 
-/** Vide la liste des blocs et en remet un seul, vide. */
-function resetExerciseBlocks() {
+/**
+ * "Refaire cette séance" : mêmes exercices, même nombre de séries, avec les
+ * charges de la dernière fois en grisé. La séance repart d'aujourd'hui.
+ */
+function duplicateMuscuSession(session) {
+  return startNewMuscuSession(session);
+}
+
+/** "Modifier" : la séance s'ouvre dans le même écran, toutes ses séries cochées. */
+function startEditMuscuSession(session) {
+  if (!confirmReplaceMuscuDraft()) return false;
+  stopRestTimer();
+  muscuDraft = {
+    mode: "edit",
+    editingId: session.id,
+    startedAt: null,
+    date: session.date,
+    name: session.name || "",
+    notes: session.notes || "",
+    exercises: buildItemsFromSession(session, true),
+    rest: null,
+  };
+  saveMuscuDraft();
+  renderMuscuView();
+  window.scrollTo(0, 0);
+  return true;
+}
+
+/** Annule une modification en cours (la séance d'origine n'est pas touchée). */
+function cancelMuscuEdit() {
+  muscuDraft = null;
+  stopRestTimer();
+  saveMuscuDraft();
+  renderMuscuView();
+}
+
+function discardMuscuSession() {
+  if (!confirm("Abandonner cette séance ? Rien ne sera enregistré.")) return;
+  cancelMuscuEdit();
+  window.scrollTo(0, 0);
+}
+
+// --------------------------------------------------------------------------
+// SÉANCE EN COURS : AFFICHAGE
+// --------------------------------------------------------------------------
+
+let muscuChronoInterval = null;
+
+function updateMuscuChrono() {
+  if (!muscuDraft || muscuDraft.mode !== "new") return;
+  const elapsed = Math.max(0, Math.floor((Date.now() - muscuDraft.startedAt) / 1000));
+  const h = Math.floor(elapsed / 3600);
+  const m = Math.floor((elapsed % 3600) / 60);
+  const s = elapsed % 60;
+  muscuChronoTime.textContent = [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
+}
+
+function updateMuscuLiveTitle() {
+  if (!muscuDraft) return;
+  // Modification : la date est déjà dans son champ, le titre reste court (place pour 2 boutons)
+  muscuLiveTitle.textContent = muscuDraft.mode === "edit"
+    ? "Modification"
+    : `${muscuDraft.name.trim() || "Séance"} · ${formatDayDate(muscuDraft.date)}`;
+}
+
+function muscuCardContext() {
+  const editing = muscuDraft.mode === "edit";
+  return {
+    excludeSessionId: muscuDraft.editingId,
+    showRpe: true,
+    showPR: !editing,
+    recordsBefore: typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {},
+    persist: saveMuscuDraft,
+    feedback: showMuscuFeedback,
+    onSetChecked: (item) => { if (!editing) startRestTimer(item.exercise, getRestSeconds()); },
+    menu: muscuItemMenu,
+  };
+}
+
+/** Menu ⋮ d'une carte : changer d'exercice, déplacer, supprimer. */
+function muscuItemMenu(item) {
+  const list = muscuDraft.exercises;
+  const index = list.indexOf(item);
+  const isCardio = item.kind === "cardio";
+  const move = (delta) => {
+    list.splice(index, 1);
+    list.splice(index + delta, 0, item);
+    saveMuscuDraft();
+    renderMuscuList();
+  };
+  const actions = [];
+  actions.push({
+    label: isCardio ? "Changer de test" : "Changer d'exercice",
+    onClick: () => (isCardio ? openCardioTestPicker((name) => { item.exercise = name; item.done = false; saveMuscuDraft(); renderMuscuList(); })
+      : openMuscuExercisePicker((name) => { item.exercise = name; saveMuscuDraft(); renderMuscuList(); }, "Changer d'exercice")),
+  });
+  if (index > 0) actions.push({ label: "Monter", onClick: () => move(-1) });
+  if (index < list.length - 1) actions.push({ label: "Descendre", onClick: () => move(1) });
+  actions.push({
+    label: isCardio ? "Supprimer le test" : "Supprimer l'exercice",
+    danger: true,
+    onClick: () => {
+      const hasContent = isCardio ? Boolean(item.done || item.min || item.sec) : item.sets.some(isSetFilled);
+      if (hasContent && !confirm(`Supprimer ${item.exercise} de la séance ?`)) return;
+      list.splice(list.indexOf(item), 1);
+      saveMuscuDraft();
+      renderMuscuList();
+    },
+  });
+  return actions;
+}
+
+function createMuscuCard(item, ctx) {
+  return item.kind === "cardio" ? createCardioCard(item, ctx) : createSetCard(item, ctx);
+}
+
+function renderMuscuList() {
+  if (!muscuDraft) return;
   muscuExercisesList.innerHTML = "";
-  muscuExercisesList.appendChild(createExerciseBlock(null));
+  if (muscuDraft.exercises.length === 0) {
+    muscuExercisesList.innerHTML = `<p class="rf-empty">Ajoute ton premier exercice avec le bouton ci-dessous.</p>`;
+    return;
+  }
+  const ctx = muscuCardContext();
+  muscuDraft.exercises.forEach((item) => muscuExercisesList.appendChild(createMuscuCard(item, ctx)));
 }
 
-// --------------------------------------------------------------------------
-// SOUMISSION DU FORMULAIRE
-// --------------------------------------------------------------------------
+/** Affiche l'accueil, ou la séance en cours s'il y en a une. */
+function renderMuscuView() {
+  document.body.classList.toggle("rf-live-on", Boolean(muscuDraft));
+  if (!muscuDraft) {
+    muscuHome.hidden = false;
+    muscuLive.hidden = true;
+    if (muscuChronoInterval) clearInterval(muscuChronoInterval);
+    muscuChronoInterval = null;
+    renderMuscuTemplates();
+    if (restTimer.state) stopRestTimer();
+    else renderRestTimer();
+    return;
+  }
+  const editing = muscuDraft.mode === "edit";
+  muscuHome.hidden = true;
+  muscuLive.hidden = false;
+  muscuLive.classList.toggle("is-edit", editing);
+  muscuChrono.hidden = editing;
+  muscuSubmitBtn.textContent = editing ? "Enregistrer" : "Terminer";
+  muscuCancelEditBtn.hidden = !editing;
+  muscuDiscardBtn.hidden = editing;
+  muscuNameInput.value = muscuDraft.name;
+  muscuDateInput.value = muscuDraft.date;
+  muscuNotesInput.value = muscuDraft.notes;
+  updateMuscuLiveTitle();
+  renderMuscuList();
+  if (muscuChronoInterval) clearInterval(muscuChronoInterval);
+  muscuChronoInterval = null;
+  if (!editing) {
+    updateMuscuChrono();
+    muscuChronoInterval = setInterval(updateMuscuChrono, 1000);
+  }
+  restoreRestTimer(editing ? null : muscuDraft.rest);
+}
 
-muscuForm.addEventListener("submit", (event) => {
-  event.preventDefault(); // empêche la page de se recharger, comportement par défaut d'un formulaire
+// ----- Ajout d'exercices -----
 
-  const blocks = [...muscuExercisesList.children];
-  const exercises = [];
-
-  for (const block of blocks) {
-    if (block.classList.contains("cardio-block")) {
-      const testName = block.querySelector(".cardio-block-select").value;
-      const timeSeconds = readCardioTime(block);
-      if (timeSeconds === null) {
-        showMuscuFeedback(`Merci d'indiquer ton temps pour le test ${testName} (minutes et secondes, ex : 1 min 43 s).`, true);
+function openMuscuExercisePicker(onPick, title) {
+  openExercisePicker({
+    title: title || "Ajouter un exercice",
+    includeMeasured: false,
+    onPick: (name) => {
+      if (isMeasuredExercise(name)) {
+        showMuscuFeedback(`${name} se note dans un WOD (onglet CrossFit). Pour un test chronométré, utilise « + Test cardio ».`, true);
         return;
       }
-      exercises.push({ exercise: testName, kind: "cardio", timeSeconds });
+      (onPick || addMuscuExercise)(name);
+    },
+  });
+}
+
+function openCardioTestPicker(onPick) {
+  openExercisePicker({ title: "Ajouter un test cardio", choices: CARDIO_TESTS, allowCustom: false, onPick });
+}
+
+/** Nouvelle carte : autant de séries que la dernière fois (3 si jamais fait). */
+function addMuscuExercise(name) {
+  if (!muscuDraft) return;
+  const previous = getPreviousSets(name, muscuDraft.editingId).slice(0, 12);
+  const sets = previous.length ? previous.map((set) => newEmptySet(set.warmup === true)) : [newEmptySet(), newEmptySet(), newEmptySet()];
+  const item = { kind: "sets", exercise: name, rpe: null, sets };
+  muscuDraft.exercises.push(item);
+  saveMuscuDraft();
+  renderMuscuList();
+  const cards = muscuExercisesList.querySelectorAll(".rf-card");
+  const card = cards[cards.length - 1];
+  if (card && typeof card.scrollIntoView === "function") card.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function addMuscuCardioTest(name) {
+  if (!muscuDraft) return;
+  muscuDraft.exercises.push({ kind: "cardio", exercise: name, min: "", sec: "", done: false });
+  saveMuscuDraft();
+  renderMuscuList();
+}
+
+muscuStartBtn.addEventListener("click", () => startNewMuscuSession(null));
+muscuAddExerciseBlockBtn.addEventListener("click", () => openMuscuExercisePicker());
+muscuAddCardioBtn.addEventListener("click", () => openCardioTestPicker(addMuscuCardioTest));
+muscuNameInput.addEventListener("input", () => {
+  if (!muscuDraft) return;
+  muscuDraft.name = muscuNameInput.value;
+  saveMuscuDraft();
+  updateMuscuLiveTitle();
+});
+muscuDateInput.addEventListener("change", () => {
+  if (!muscuDraft) return;
+  if (!isValidDateString(muscuDateInput.value)) { muscuDateInput.value = muscuDraft.date; return; }
+  muscuDraft.date = muscuDateInput.value;
+  saveMuscuDraft();
+  updateMuscuLiveTitle();
+});
+muscuNotesInput.addEventListener("input", () => {
+  if (!muscuDraft) return;
+  muscuDraft.notes = muscuNotesInput.value;
+  saveMuscuDraft();
+});
+muscuCancelEditBtn.addEventListener("click", () => { cancelMuscuEdit(); window.scrollTo(0, 0); });
+muscuDiscardBtn.addEventListener("click", discardMuscuSession);
+
+// Le minuteur de repos est gardé dans le brouillon, et ne s'affiche que sur cette page
+restTimer.onChange = (state) => {
+  if (!muscuDraft) return;
+  muscuDraft.rest = state ? { ...state } : null;
+  saveMuscuDraft();
+};
+restTimer.visibleWhen = () => Boolean(muscuDraft) && document.getElementById("section-musculation").classList.contains("is-active");
+
+// --------------------------------------------------------------------------
+// "REFAIRE UNE SÉANCE" (accueil de l'onglet)
+// --------------------------------------------------------------------------
+
+/** Les 3 dernières séances différentes (même nom et mêmes exercices = une seule). */
+function getMuscuTemplates(limit) {
+  const seen = new Set();
+  const list = [];
+  for (const session of getSessionsNewestFirst()) {
+    if (session.type !== "musculation" || session.exercises.length === 0) continue;
+    const key = `${session.name || ""}|${session.exercises.map((e) => e && e.exercise).join("|")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push(session);
+    if (list.length >= limit) break;
+  }
+  return list;
+}
+
+function renderMuscuTemplates() {
+  const templates = getMuscuTemplates(3);
+  if (templates.length === 0) {
+    muscuTemplates.innerHTML = "";
+    return;
+  }
+  muscuTemplates.innerHTML = `<div class="rf-h3">Refaire une séance</div>`;
+  templates.forEach((session) => {
+    const names = session.exercises.map((e) => e.exercise);
+    const setCount = session.exercises.reduce((total, e) => total + (Array.isArray(e.sets) ? e.sets.length : 0), 0);
+    const when = [formatDayDate(session.date)];
+    if (session.durationSeconds > 0) when.push(formatSessionDuration(session.durationSeconds));
+    if (setCount > 0) when.push(`${setCount} série${setCount > 1 ? "s" : ""}`);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "rf-tpl";
+    button.innerHTML = `
+      <span class="rf-tpl-main">
+        <span class="rf-tpl-name">${escapeHtml(session.name || (names.length === 1 ? names[0] : `Séance du ${formatDayDate(session.date)}`))}</span>
+        <span class="rf-tpl-ex">${escapeHtml(names.slice(0, 4).join(" · "))}${names.length > 4 ? ` · +${names.length - 4}` : ""}</span>
+        <span class="rf-tpl-when">${escapeHtml(when.join(" · "))}</span>
+      </span>
+      <span class="rf-go">${RF_ICONS.arrow}</span>`;
+    button.setAttribute("aria-label", `Refaire : ${session.name || names.join(", ")}`);
+    button.addEventListener("click", () => duplicateMuscuSession(session));
+    muscuTemplates.appendChild(button);
+  });
+}
+
+// --------------------------------------------------------------------------
+// TERMINER LA SÉANCE
+// Les séries cochées sont enregistrées, et aussi celles remplies sans être
+// cochées. Une ligne vide (juste les valeurs grisées) est ignorée.
+// --------------------------------------------------------------------------
+
+/** "7" min et "45,5" s → 465.5 secondes ; null si vide ou illisible. */
+function parseCardioTime(minText, secText) {
+  const min = String(minText ?? "").trim();
+  const sec = String(secText ?? "").trim().replace(",", ".");
+  if (!min && !sec) return null;
+  if ((min && !/^\d+$/.test(min)) || (sec && !/^\d+(\.\d)?$/.test(sec))) return null;
+  const total = (Number(min) || 0) * 60 + (Number(sec) || 0);
+  return total > 0 ? Math.round(total * 10) / 10 : null;
+}
+
+/**
+ * Transforme le brouillon en séance prête à enregistrer.
+ * Renvoie { error } ou { sessionData, doneCount, totalCount, unchecked, dropped }.
+ */
+function collectMuscuSession(draft) {
+  const exercises = [];
+  const dropped = [];
+  const unchecked = [];
+  let doneCount = 0;
+  let totalCount = 0;
+
+  for (const item of draft.exercises) {
+    if (item.kind === "cardio") {
+      totalCount += 1;
+      if (item.done) doneCount += 1;
+      if (!String(item.min).trim() && !String(item.sec).trim()) { dropped.push(item.exercise); continue; }
+      const timeSeconds = parseCardioTime(item.min, item.sec);
+      if (timeSeconds === null) {
+        return { error: `Merci d'indiquer ton temps pour le test ${item.exercise} (minutes et secondes, ex : 1 min 43 s).` };
+      }
+      if (!item.done) unchecked.push(item.exercise);
+      exercises.push({ exercise: item.exercise, kind: "cardio", timeSeconds });
       continue;
     }
 
-    const select = block.querySelector(".exercise-block-select");
-    const customInput = block.querySelector(".exercise-block-custom");
-    const isCustom = select.value === "__custom__";
-    const exerciseName = isCustom ? customInput.value.trim() : select.value;
-
-    if (!exerciseName) {
-      showMuscuFeedback("Merci d'indiquer un nom pour chaque exercice de la séance.", true);
-      return;
-    }
-
-    const isBW = isBodyweightExercise(exerciseName);
-    // Une ligne entièrement vide est ignorée (on n'est pas obligé de remplir
-    // les 3 lignes proposées). Une ligne à moitié remplie, en revanche, n'est
-    // jamais jetée en silence : on dit exactement ce qui manque.
-    // Pour un exercice au poids du corps, la charge (un éventuel lest) reste
-    // facultative ; avec barre/haltères, elle est obligatoire.
     const sets = [];
-    const rows = [...block.querySelectorAll(".set-row")];
-    for (let i = 0; i < rows.length; i++) {
-      const repsText = rows[i].querySelector(".set-reps").value.trim();
-      const weightText = rows[i].querySelector(".set-weight").value.trim().replace(",", ".");
-      if (!repsText && !weightText) continue;
-      const label = `Série ${i + 1} de ${exerciseName}`;
-      const reps = Number(repsText);
-      const weight = weightText ? Number(weightText) : 0;
-      if (!repsText) {
-        showMuscuFeedback(`${label} : il manque le nombre de reps.`, true);
-        return;
-      }
-      if (!Number.isInteger(reps) || reps <= 0) {
-        showMuscuFeedback(`${label} : le nombre de reps doit être un nombre entier.`, true);
-        return;
-      }
-      if (!isBW && !weightText) {
-        showMuscuFeedback(`${label} : il manque la charge (kg).`, true);
-        return;
-      }
-      if (!Number.isFinite(weight) || weight < 0 || (!isBW && weight === 0)) {
-        showMuscuFeedback(`${label} : la charge n'est pas valide.`, true);
-        return;
-      }
-      sets.push({ reps, weight });
+    let number = 0;
+    for (const set of item.sets) {
+      if (!set.warmup) number += 1;
+      totalCount += 1;
+      if (set.done) doneCount += 1;
+      if (!isSetFilled(set)) continue;
+      const result = validateSetInput(item.exercise, set.reps, set.weight, setLabel(item.exercise, set, number), false);
+      if (result.error) return { error: result.error };
+      if (!set.done) unchecked.push(item.exercise);
+      sets.push(set.warmup ? { reps: result.reps, weight: result.weight, warmup: true } : { reps: result.reps, weight: result.weight });
     }
-
-    if (sets.length === 0) {
-      showMuscuFeedback(`Merci de renseigner au moins une série pour ${exerciseName}.`, true);
-      return;
-    }
-
-    const rpeValue = block.querySelector(".exercise-block-rpe").value;
-    exercises.push({ exercise: exerciseName, sets, rpe: rpeValue ? Number(rpeValue) : null });
+    if (sets.length === 0) { dropped.push(item.exercise); continue; }
+    exercises.push({ exercise: item.exercise, sets, rpe: item.rpe > 0 ? Number(item.rpe) : null });
   }
 
   if (exercises.length === 0) {
-    showMuscuFeedback("Ajoute au moins un exercice à ta séance.", true);
-    return;
+    return { error: "Remplis au moins une série (ou un test cardio) pour enregistrer ta séance." };
   }
-
   const sessionData = {
     type: "musculation",
-    date: muscuDateInput.value || todayLocalDateString(),
+    date: isValidDateString(draft.date) ? draft.date : todayLocalDateString(),
     exercises,
-    notes: muscuNotesInput.value.trim(),
+    notes: (draft.notes || "").trim(),
   };
+  const name = (draft.name || "").trim();
+  if (name || draft.mode === "edit") sessionData.name = name;
+  return { sessionData, doneCount, totalCount, unchecked, dropped };
+}
 
-  if (muscuEditingId) {
-    updateSession(muscuEditingId, sessionData);
+/** Records que la séance va battre (aperçu avant d'enregistrer, mêmes règles que la page Records). */
+function previewMuscuRecords(exercises) {
+  const recordsBefore = typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {};
+  const cardioBests = typeof computeCardioTestBests === "function" ? computeCardioTestBests() : {};
+  const manualTimes = typeof getManualTimes === "function" ? getManualTimes() : {};
+  const best = {};
+  exercises.forEach((entry) => {
+    if (isCardioEntry(entry)) {
+      const current = best[entry.exercise];
+      if (!current || entry.timeSeconds < current.value) best[entry.exercise] = { mode: "time", value: entry.timeSeconds };
+      return;
+    }
+    const isBW = isBodyweightExercise(entry.exercise);
+    entry.sets.forEach((set) => {
+      if (set.warmup) return;
+      const value = setRecordValue(entry.exercise, set.reps, set.weight);
+      const current = best[entry.exercise];
+      if (value > 0 && (!current || value > current.value)) best[entry.exercise] = { mode: isBW ? "reps" : "load", value };
+    });
+  });
+  const hits = [];
+  Object.keys(best).forEach((name) => {
+    const { mode, value } = best[name];
+    if (mode === "time") {
+      const candidates = [];
+      if (cardioBests[name]) candidates.push(cardioBests[name].value);
+      if (manualTimes[name] && manualTimes[name].timeSeconds > 0) candidates.push(manualTimes[name].timeSeconds);
+      if (candidates.length === 0 || value < Math.min(...candidates)) hits.push({ exercise: name, text: formatDuration(value) });
+      return;
+    }
+    if (value > getRecordBestBefore(name, recordsBefore)) {
+      hits.push({ exercise: name, text: mode === "reps" ? `${value} rep${value > 1 ? "s" : ""}` : `1RM estimé ${formatNumberFr(Math.round(value))} kg` });
+    }
+  });
+  return hits;
+}
+
+/** Liste lisible : "Skull Crusher (2), Pull-up". */
+function describeNameCounts(names) {
+  const counts = {};
+  names.forEach((name) => { counts[name] = (counts[name] || 0) + 1; });
+  return Object.keys(counts).map((name) => (counts[name] > 1 ? `${name} (${counts[name]})` : name)).join(", ");
+}
+
+function openMuscuFinishSheet(result) {
+  const { sessionData, doneCount, totalCount, unchecked, dropped } = result;
+  const duration = muscuDraft.startedAt ? (Date.now() - muscuDraft.startedAt) / 1000 : 0;
+  const volume = sessionData.exercises.reduce((total, entry) => total + (isCardioEntry(entry) || typeof computeExerciseVolume !== "function" ? 0 : computeExerciseVolume(entry, sessionData.date)), 0);
+  const records = previewMuscuRecords(sessionData.exercises);
+
+  openSheet((sheet, close) => {
+    const infos = [];
+    if (unchecked.length > 0) {
+      infos.push(`<b>${unchecked.length} série${unchecked.length > 1 ? "s" : ""} remplie${unchecked.length > 1 ? "s" : ""} mais pas cochée${unchecked.length > 1 ? "s" : ""}</b> (${escapeHtml(describeNameCounts(unchecked))}) : ${unchecked.length > 1 ? "elles seront" : "elle sera"} quand même enregistrée${unchecked.length > 1 ? "s" : ""}.`);
+    }
+    if (dropped.length > 0) {
+      infos.push(`Rien de rempli pour ${escapeHtml(describeNameCounts(dropped))} : ${dropped.length > 1 ? "ils ne seront pas enregistrés" : "il ne sera pas enregistré"}.`);
+    }
+    sheet.insertAdjacentHTML("beforeend", `
+      <h2>Terminer la séance ?</h2>
+      <div class="rf-stats">
+        <div class="rf-stat"><b>${duration > 0 ? formatSessionDuration(duration) : "—"}</b><span>Durée</span></div>
+        <div class="rf-stat"><b>${doneCount} / ${totalCount}</b><span>Séries cochées</span></div>
+        <div class="rf-stat"><b>${volume > 0 ? `${Math.round(volume).toLocaleString("fr-FR")} kg` : "—"}</b><span>Volume</span></div>
+        <div class="rf-stat"><b>${records.length}</b><span>Record${records.length > 1 ? "s" : ""} battu${records.length > 1 ? "s" : ""}</span></div>
+      </div>
+      ${records.length ? `<div class="rf-prs">${records.map((r) => `<div><span>${escapeHtml(r.exercise)}</span><b>${escapeHtml(r.text)}</b></div>`).join("")}</div>` : ""}
+      ${infos.map((text) => `<div class="rf-warn">${text}</div>`).join("")}
+      <button type="button" class="rf-btn rf-btn-gold rf-btn-wide" data-act="save">Enregistrer la séance</button>
+      <button type="button" class="rf-btn rf-btn-ghost rf-btn-wide" data-act="continue">Continuer la séance</button>
+      <button type="button" class="rf-link-danger" data-act="discard">Abandonner la séance</button>`);
+    sheet.querySelector('[data-act="save"]').addEventListener("click", () => { close(); saveMuscuSession(result); });
+    sheet.querySelector('[data-act="continue"]').addEventListener("click", close);
+    sheet.querySelector('[data-act="discard"]').addEventListener("click", () => { close(); discardMuscuSession(); });
+  });
+}
+
+/** Enregistre (ou met à jour) la séance, puis revient à l'accueil de l'onglet. */
+function saveMuscuSession(result) {
+  const sessionData = result.sessionData;
+  if (muscuDraft.mode === "edit") {
+    updateSession(muscuDraft.editingId, sessionData);
     showMuscuFeedback("Séance mise à jour !", false);
   } else {
+    if (muscuDraft.startedAt) {
+      const duration = Math.round((Date.now() - muscuDraft.startedAt) / 1000);
+      if (duration > 0 && duration <= 6 * 3600) sessionData.durationSeconds = duration; // au-delà : séance oubliée ouverte
+    }
     const recordsBefore = typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {};
     const cardioBestsBefore = typeof computeCardioTestBests === "function" ? computeCardioTestBests() : {};
     addSession(sessionData);
 
     const newRecords = typeof detectMuscuNewRecords === "function"
-      ? detectMuscuNewRecords(recordsBefore, exercises, sessionData.date, cardioBestsBefore)
+      ? detectMuscuNewRecords(recordsBefore, sessionData.exercises, sessionData.date, cardioBestsBefore)
       : [];
 
-    // Si la séance contient un exercice au poids du corps mais qu'aucun poids
-    // n'est encore connu (onglet Mensurations vide), le volume de ces
-    // exercices ne pourra pas être calculé — on le signale simplement,
-    // sans jamais empêcher l'enregistrement de la séance.
-    const hasBodyweightExercise = exercises.some((ex) => isBodyweightExercise(ex.exercise));
+    // Exercice au poids du corps sans poids connu (Mensurations vide) : le
+    // volume ne peut pas être calculé — on le signale, sans rien bloquer.
+    const hasBodyweightExercise = sessionData.exercises.some((ex) => isBodyweightExercise(ex.exercise));
     const bodyweightUnknown = hasBodyweightExercise &&
       typeof getCurrentBodyweight === "function" && getCurrentBodyweight() === null;
 
@@ -827,83 +1039,54 @@ muscuForm.addEventListener("submit", (event) => {
     }
   }
 
-  cancelMuscuEdit(); // remet le formulaire à zéro et sort du mode édition
+  muscuDraft = null;
+  stopRestTimer();
+  saveMuscuDraft();
+  renderMuscuView();
+  window.scrollTo(0, 0);
   populateExerciseFilterSelect();
   renderMuscuHistory();
   if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
   if (typeof renderDashboard === "function") renderDashboard();
   if (typeof renderRecords === "function") renderRecords();
-});
+}
+
+/** Bouton "Terminer" (séance en cours) ou "Enregistrer" (modification). */
+function finishMuscuSession() {
+  if (!muscuDraft) return;
+  if (document.activeElement && typeof document.activeElement.blur === "function") document.activeElement.blur();
+  const result = collectMuscuSession(muscuDraft);
+  if (result.error) {
+    showMuscuFeedback(result.error, true);
+    return;
+  }
+  if (muscuDraft.mode === "edit") saveMuscuSession(result);
+  else openMuscuFinishSheet(result);
+}
+
+muscuSubmitBtn.addEventListener("click", finishMuscuSession);
+
+let muscuFeedbackTimer = null;
 
 function showMuscuFeedback(message, isError) {
+  clearTimeout(muscuFeedbackTimer);
   muscuFeedback.textContent = message;
-  muscuFeedback.className = "form-feedback " + (isError ? "form-feedback-error" : "form-feedback-success");
-  setTimeout(() => { muscuFeedback.textContent = ""; }, 3500);
+  muscuFeedback.className = "form-feedback rf-toast " + (isError ? "form-feedback-error" : "form-feedback-success");
+  muscuFeedbackTimer = setTimeout(() => { muscuFeedback.textContent = ""; }, isError ? 4500 : 3500);
 }
 
 /** Affiche un badge mis en avant quand la séance qu'on vient d'enregistrer bat un record. */
 function showMuscuRecordBadge(newRecords) {
+  clearTimeout(muscuFeedbackTimer);
   const list = newRecords.map((r) => `${escapeHtml(r.exercise)} : ${escapeHtml(r.text || `${formatNumberFr(r.value)} kg`)}`).join(" · ");
   muscuFeedback.innerHTML = `
     <span class="record-badge">
       <svg viewBox="0 0 24 24" class="record-badge-icon"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>
       Nouveau record ! ${list}
     </span>`;
-  muscuFeedback.className = "form-feedback";
-  setTimeout(() => { muscuFeedback.innerHTML = ""; }, 5000);
+  muscuFeedback.className = "form-feedback rf-toast rf-toast-record";
+  muscuFeedbackTimer = setTimeout(() => { muscuFeedback.innerHTML = ""; }, 6000);
 }
-
-/**
- * Pré-remplit le formulaire avec les exercices d'une séance existante, mais
- * SANS passer en mode édition : la validation créera une toute nouvelle
- * séance, datée d'aujourd'hui. Pratique pour un programme qui revient
- * régulièrement, où seules les charges changent d'une fois sur l'autre.
- */
-function duplicateMuscuSession(session) {
-  muscuEditingId = null; // on s'assure de bien être en mode "ajout", pas "édition"
-
-  muscuDateInput.value = todayLocalDateString();
-  muscuNotesInput.value = "";
-
-  muscuExercisesList.innerHTML = "";
-  (session.exercises || []).forEach((entry) => {
-    muscuExercisesList.appendChild(createBlockForEntry(entry));
-  });
-
-  muscuSubmitBtn.textContent = "Enregistrer la séance";
-  muscuCancelEditBtn.style.display = "none";
-}
-
-/**
- * Remplit le formulaire avec les valeurs d'une séance existante (tous ses
- * exercices) et bascule en mode édition. Appelée depuis l'historique.
- */
-function startEditMuscuSession(session) {
-  muscuEditingId = session.id;
-
-  muscuDateInput.value = session.date;
-  muscuNotesInput.value = session.notes || "";
-
-  muscuExercisesList.innerHTML = "";
-  (session.exercises || []).forEach((entry) => {
-    muscuExercisesList.appendChild(createBlockForEntry(entry));
-  });
-
-  muscuSubmitBtn.textContent = "Mettre à jour la séance";
-  muscuCancelEditBtn.style.display = "inline-block";
-}
-
-/** Sort du mode édition et remet le formulaire à son état "ajout". */
-function cancelMuscuEdit() {
-  muscuEditingId = null;
-  muscuDateInput.value = todayLocalDateString();
-  muscuNotesInput.value = "";
-  resetExerciseBlocks();
-  muscuSubmitBtn.textContent = "Enregistrer la séance";
-  muscuCancelEditBtn.style.display = "none";
-}
-
-muscuCancelEditBtn.addEventListener("click", cancelMuscuEdit);
 
 // --------------------------------------------------------------------------
 // HISTORIQUE (liste des séances de musculation, filtrable par exercice)
@@ -985,8 +1168,8 @@ function renderMuscuHistory() {
 
     card.innerHTML = `
       <div class="history-card-header">
-        <span class="history-card-title">Séance</span>
-        <span class="history-card-date">${new Date(session.date).toLocaleDateString("fr-FR")}</span>
+        <span class="history-card-title">${escapeHtml(session.name || "Séance")}</span>
+        <span class="history-card-date">${parseLocalDate(session.date).toLocaleDateString("fr-FR")}${session.durationSeconds > 0 ? ` · ${formatSessionDuration(session.durationSeconds)}` : ""}</span>
       </div>
       ${exercisesHtml}
       ${session.notes ? `<p class="history-card-notes">${escapeHtml(session.notes)}</p>` : ""}
@@ -996,20 +1179,14 @@ function renderMuscuHistory() {
         <button type="button" class="btn btn-secondary btn-small hist-delete-btn">Supprimer</button>
       </div>
     `;
-    card.querySelector(".hist-repeat-btn").addEventListener("click", () => {
-      duplicateMuscuSession(session);
-      document.querySelector("#section-musculation .form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-    card.querySelector(".hist-edit-btn").addEventListener("click", () => {
-      startEditMuscuSession(session);
-      document.querySelector("#section-musculation .form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    card.querySelector(".hist-repeat-btn").addEventListener("click", () => duplicateMuscuSession(session));
+    card.querySelector(".hist-edit-btn").addEventListener("click", () => startEditMuscuSession(session));
     card.querySelector(".hist-delete-btn").addEventListener("click", () => {
       const confirmed = confirm("Supprimer définitivement cette séance ? Cette action est irréversible.");
       if (!confirmed) return;
       deleteSession(session.id);
       renderMuscuHistory();
-      refreshExerciseLastSeen(); // la "dernière fois" a peut-être changé
+      renderMuscuTemplates(); // "Refaire une séance" a peut-être changé
       if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
       if (typeof renderDashboard === "function") renderDashboard();
       if (typeof renderRecords === "function") renderRecords();
@@ -1025,9 +1202,12 @@ function renderMuscuHistory() {
 
 // --------------------------------------------------------------------------
 // INITIALISATION DE LA PAGE
+// Une séance en cours (appli fermée pendant l'entraînement) reprend là où
+// elle en était : séries cochées, chrono et minuteur de repos.
 // --------------------------------------------------------------------------
 
-muscuDateInput.value = todayLocalDateString(); // aujourd'hui par défaut
+muscuDraft = loadMuscuDraft();
+if (!muscuDraft) localStorage.removeItem(STORAGE_KEY_MUSCU_DRAFT);
 populateExerciseFilterSelect();
-resetExerciseBlocks();
+renderMuscuView();
 renderMuscuHistory();

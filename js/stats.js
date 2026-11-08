@@ -145,6 +145,7 @@ function computeMuscuRecords(options) {
 
   /** Une vraie série (musculation) : alimente le 1RM, la charge max et les reps max. */
   function registerSet(exercise, set, date) {
+    if (set.warmup === true) return; // échauffement : jamais un record
     const rec = ensureRecord(exercise);
     const estimated1RM = estimateOneRepMax(set.weight, set.reps);
 
@@ -184,7 +185,7 @@ function computeMuscuRecords(options) {
         if (typeof entry === "object" && entry !== null && entry.reps > 0) {
           if (typeof getEntryUnit === "function" && getEntryUnit(entry) !== "reps") return; // calories / mètres
           if (isSpe) {
-            registerSet(entry.exercise, { reps: entry.reps, weight: entry.weight || 0 }, session.date);
+            registerSet(entry.exercise, { reps: entry.reps, weight: entry.weight || 0, warmup: entry.warmup === true }, session.date);
           } else {
             registerWeightUsage(entry.exercise, entry.weight || 0, session.date);
           }
@@ -205,7 +206,7 @@ function computeMuscuRecords(options) {
 function detectStructuredWeightRecords(recordsBefore, structuredEntries) {
   const hits = [];
   structuredEntries.forEach((entry) => {
-    if (!entry.weight || entry.weight <= 0) return;
+    if (!entry.weight || entry.weight <= 0 || entry.warmup === true) return;
     const before = recordsBefore[entry.exercise];
     const isNewRecord = !before || !before.maxWeight || entry.weight > before.maxWeight.value;
     if (isNewRecord) hits.push({ exercise: entry.exercise, value: entry.weight });
@@ -749,12 +750,12 @@ function computeRecordHistory() {
         if (entry.kind === "cardio") {
           if (entry.timeSeconds > 0) entries.push({ name: entry.exercise, time: entry.timeSeconds });
         } else if (Array.isArray(entry.sets)) {
-          entries.push({ name: entry.exercise, sets: entry.sets });
+          entries.push({ name: entry.exercise, sets: entry.sets.filter((set) => set && set.warmup !== true) });
         }
       });
     } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
       entries = (session.exercises || [])
-        .filter((e) => typeof e === "object" && e !== null && e.reps > 0 && getEntryUnit(e) === "reps")
+        .filter((e) => typeof e === "object" && e !== null && e.reps > 0 && getEntryUnit(e) === "reps" && e.warmup !== true)
         .map((e) => ({ name: e.exercise, sets: [{ reps: e.reps, weight: e.weight || 0 }] }));
     }
 

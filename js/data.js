@@ -546,6 +546,10 @@ function clearAllData() {
   // Rangs et succès : on repart de zéro aussi
   localStorage.removeItem("carnet_achievements");
   localStorage.removeItem("carnet_rank_snapshot");
+  // Séance en cours, saisie CrossFit et réglage du repos
+  localStorage.removeItem("carnet_muscu_draft");
+  localStorage.removeItem("carnet_cf_draft");
+  localStorage.removeItem("carnet_rest_seconds");
 }
 
 // --------------------------------------------------------------------------
@@ -795,7 +799,11 @@ function sanitizeMuscuEntry(entry) {
   }
   const sets = (Array.isArray(entry.sets) ? entry.sets : [])
     .filter(isPlainObject)
-    .map((set) => ({ ...set, reps: readStoredNumber(set.reps, 0), weight: Math.max(0, readStoredNumber(set.weight, 0)) }))
+    .map((set) => {
+      const clean = { ...set, reps: readStoredNumber(set.reps, 0), weight: Math.max(0, readStoredNumber(set.weight, 0)) };
+      if (clean.warmup !== true) delete clean.warmup; // série d'échauffement : true, sinon rien
+      return clean;
+    })
     .filter((set) => set.reps > 0);
   if (sets.length === 0) return null;
   const rpe = readStoredNumber(entry.rpe, null);
@@ -810,6 +818,7 @@ function sanitizeCfEntry(entry) {
   if (!exercise || !(reps > 0)) return null;
   const clean = { ...entry, exercise, reps, weight: Math.max(0, readStoredNumber(entry.weight, 0)), extraReps: Math.max(0, readStoredNumber(entry.extraReps, 0)) };
   if (clean.unit !== "cal" && clean.unit !== "m") delete clean.unit;
+  if (clean.warmup !== true) delete clean.warmup;
   return clean;
 }
 
@@ -822,6 +831,13 @@ function sanitizeSession(raw) {
   if (typeof session.id === "number") session.id = String(session.id);
   if (typeof session.id !== "string" || !session.id) session.id = "s_" + Date.now() + "_" + Math.floor(Math.random() * 1000000);
   session.notes = typeof raw.notes === "string" ? raw.notes : "";
+  // Nom de la séance et durée (chrono) : facultatifs
+  if (session.name !== undefined && typeof session.name !== "string") delete session.name;
+  if (session.durationSeconds !== undefined) {
+    const duration = readStoredNumber(session.durationSeconds, 0);
+    if (duration > 0) session.durationSeconds = duration;
+    else delete session.durationSeconds;
+  }
 
   if (raw.type === "musculation") {
     // Très ancien format : un seul exercice directement sur la séance

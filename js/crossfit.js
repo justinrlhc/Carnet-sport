@@ -1,9 +1,10 @@
 // ==========================================================================
 // crossfit.js — tout ce qui concerne la page CrossFit :
-//   - remplir la liste déroulante des noms de WOD
-//   - ajouter/enlever des lignes de mouvements dans le formulaire
-//   - enregistrer un WOD (via addSession, fourni par data.js)
-//   - afficher l'historique, filtrable par nom de WOD
+//   - choisir le WOD (pastilles), son format, son niveau et noter le score
+//   - les mouvements du WOD (exercices structurés ou texte libre)
+//   - les cours de spé : exercices avec séries à cocher, comme en musculation
+//     (briques communes dans seance.js)
+//   - enregistrer (via addSession, fourni par data.js) et l'historique
 // ==========================================================================
 
 // Quelques WOD "benchmark" bien connus, proposés par défaut.
@@ -81,40 +82,42 @@ const BENCHMARK_WODS = {
 };
 
 // --------------------------------------------------------------------------
-// ÉLÉMENTS DU FORMULAIRE
+// ÉLÉMENTS DE LA PAGE
 // --------------------------------------------------------------------------
 
-const cfForm = document.getElementById("cf-form");
-const cfDateInput = document.getElementById("cf-date");
-const cfWodSelect = document.getElementById("cf-wod-select");
-const cfTypeSelect = document.getElementById("cf-type");
-const cfTypeRow = document.getElementById("cf-type-row");
-const cfLevelRow = document.getElementById("cf-level-row");
-const cfRxSelect = document.getElementById("cf-rx");
-const cfTimeRow = document.getElementById("cf-time-row");
-const cfTimeInput = document.getElementById("cf-time");
-const cfRoundsRow = document.getElementById("cf-rounds-row");
+const cfFormTitle = document.getElementById("cf-form-title");
+const cfWodChips = document.getElementById("cf-wod-chips");
+const cfCustomNameInput = document.getElementById("cf-custom-name");
+const cfWodFields = document.getElementById("cf-wod-fields");
+const cfTypeSeg = document.getElementById("cf-type-seg");
+const cfLevelSeg = document.getElementById("cf-level-seg");
+const cfScoreHint = document.getElementById("cf-score-hint");
+const cfTimeBlock = document.getElementById("cf-time-block");
+const cfTimeMinInput = document.getElementById("cf-time-min");
+const cfTimeSecInput = document.getElementById("cf-time-sec");
+const cfRoundsBlock = document.getElementById("cf-rounds-block");
 const cfRoundsInput = document.getElementById("cf-rounds");
 const cfExtraRepsInput = document.getElementById("cf-extra-reps");
+const cfScoreCompare = document.getElementById("cf-score-compare");
+const cfItemsLabel = document.getElementById("cf-items-label");
+const cfItemsHint = document.getElementById("cf-items-hint");
 const cfExercisesList = document.getElementById("cf-exercises-list");
-const cfAddExerciseBtn = document.getElementById("cf-add-exercise");
 const cfAddStructuredExerciseBtn = document.getElementById("cf-add-structured-exercise");
+const cfAddExerciseBtn = document.getElementById("cf-add-exercise");
+const cfDateInput = document.getElementById("cf-date");
 const cfNotesInput = document.getElementById("cf-notes");
+const cfSubmitBtn = document.getElementById("cf-submit-btn");
+const cfCancelEditBtn = document.getElementById("cf-cancel-edit");
+const cfClearBtn = document.getElementById("cf-clear-btn");
 const cfFeedback = document.getElementById("cf-feedback");
 const cfFilterSelect = document.getElementById("cf-filter-wod");
 const cfFilterLevelSelect = document.getElementById("cf-filter-level");
 const cfHistoryList = document.getElementById("cf-history-list");
-const cfSubmitBtn = document.getElementById("cf-submit-btn");
-const cfCancelEditBtn = document.getElementById("cf-cancel-edit");
-
-// Quand cette variable contient un id, le formulaire est en mode "édition".
-let cfEditingId = null;
 
 /**
  * Renvoie la liste des noms de WOD déjà utilisés dans l'historique,
  * fusionnée avec la liste des benchmarks par défaut (sans doublons).
- * "WOD du jour" est volontairement exclu d'ici : il est géré à part,
- * toujours affiché en premier dans les listes déroulantes.
+ * "WOD du jour" et les cours de spé sont gérés à part (toujours en premier).
  */
 function getAllKnownWods() {
   const used = getAllSessions()
@@ -124,282 +127,505 @@ function getAllKnownWods() {
   return Array.from(new Set([...DEFAULT_WODS, ...used])).sort();
 }
 
+/** Remplit le filtre de l'historique et les pastilles de WOD du formulaire. */
 function populateWodSelects() {
-  const wods = getAllKnownWods();
-
-  // ----- Select du formulaire : "WOD du jour" toujours en premier,
-  // c'est le cas le plus courant (un WOD sans nom particulier) -----
-  cfWodSelect.innerHTML = "";
-  const dailyOpt = document.createElement("option");
-  dailyOpt.value = DAILY_WOD_LABEL;
-  dailyOpt.textContent = DAILY_WOD_LABEL;
-  cfWodSelect.appendChild(dailyOpt);
-  SPE_SESSIONS.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    cfWodSelect.appendChild(opt);
-  });
-  wods.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    cfWodSelect.appendChild(opt);
-  });
-
-  // ----- Select du filtre d'historique -----
+  const previous = cfFilterSelect.value;
   cfFilterSelect.innerHTML = "";
-  const allOpt = document.createElement("option");
-  allOpt.value = "all";
-  allOpt.textContent = "Tous les WOD";
-  cfFilterSelect.appendChild(allOpt);
-  const dailyFilterOpt = document.createElement("option");
-  dailyFilterOpt.value = DAILY_WOD_LABEL;
-  dailyFilterOpt.textContent = DAILY_WOD_LABEL;
-  cfFilterSelect.appendChild(dailyFilterOpt);
-  SPE_SESSIONS.forEach((name) => {
+  const addOption = (value, label) => {
     const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
+    opt.value = value;
+    opt.textContent = label;
     cfFilterSelect.appendChild(opt);
-  });
-  wods.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    cfFilterSelect.appendChild(opt);
-  });
+  };
+  addOption("all", "Tous les WOD");
+  addOption(DAILY_WOD_LABEL, DAILY_WOD_LABEL);
+  SPE_SESSIONS.forEach((name) => addOption(name, name));
+  getAllKnownWods().forEach((name) => addOption(name, name));
+  if (previous && [...cfFilterSelect.options].some((o) => o.value === previous)) cfFilterSelect.value = previous;
+  if (cfState) renderCfWodChips();
 }
 
 // Formats chronométrés : le score est un temps. AMRAP : des rounds (+ reps).
 // Les autres (EMOM, Tabata, Autre) ont un score facultatif : les deux champs restent proposés.
 const TIME_SCORED_WOD_TYPES = ["For Time", "Chipper"];
+const CF_WOD_TYPES = ["For Time", "AMRAP", "EMOM", "Chipper", "Tabata", "Autre"];
+const CF_LEVELS = ["RX", "Inter", "Scaled"];
+const CF_CUSTOM_WOD = "__custom__";
+
+// --------------------------------------------------------------------------
+// ÉTAT DU FORMULAIRE (gardé en brouillon : "carnet_cf_draft")
+// wodItems : mouvements d'un WOD ; speItems : exercices d'un cours de spé
+// (séries à cocher). Les deux listes sont gardées séparément : passer d'un
+// WOD à un cours de spé ne fait rien perdre.
+// --------------------------------------------------------------------------
+
+const STORAGE_KEY_CF_DRAFT = "carnet_cf_draft";
+let cfState = null;
+
+function defaultCfState() {
+  return {
+    editingId: null,
+    wod: DAILY_WOD_LABEL,
+    customName: "",
+    wodType: "For Time",
+    level: "RX",
+    timeMin: "",
+    timeSec: "",
+    rounds: "",
+    extraReps: "",
+    date: todayLocalDateString(),
+    dateTouched: false,
+    notes: "",
+    wodItems: [],
+    speItems: [],
+  };
+}
+
+/** Le formulaire est-il vide (rien à garder) ? */
+function isCfStatePristine(state) {
+  const strip = (s) => JSON.stringify({ ...s, date: null, dateTouched: null });
+  return !state.editingId && !state.dateTouched && strip(state) === strip(defaultCfState());
+}
+
+function sanitizeCfItem(item, forSpe) {
+  if (!isPlainObject(item)) return null;
+  if (item.kind === "text") return { kind: "text", text: String(item.text ?? "") };
+  if (typeof item.exercise !== "string" || !item.exercise.trim()) return null;
+  const unit = item.unit === "cal" || item.unit === "m" ? item.unit : undefined;
+  if (forSpe) {
+    return {
+      kind: "sets",
+      exercise: item.exercise,
+      unit,
+      sets: (Array.isArray(item.sets) ? item.sets : []).filter(isPlainObject).map((set) => ({
+        reps: String(set.reps ?? ""), weight: String(set.weight ?? ""), done: Boolean(set.done), warmup: Boolean(set.warmup),
+      })),
+    };
+  }
+  return { kind: "mv", exercise: item.exercise, unit, reps: String(item.reps ?? ""), weight: String(item.weight ?? ""), extraReps: String(item.extraReps ?? "") };
+}
+
+function loadCfDraft() {
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY_CF_DRAFT)); } catch { raw = null; }
+  if (!isPlainObject(raw)) return null;
+  const state = defaultCfState();
+  ["customName", "timeMin", "timeSec", "rounds", "extraReps", "notes"].forEach((key) => {
+    if (typeof raw[key] === "string") state[key] = raw[key];
+  });
+  if (typeof raw.wod === "string" && raw.wod) state.wod = raw.wod;
+  if (CF_WOD_TYPES.includes(raw.wodType)) state.wodType = raw.wodType;
+  if (CF_LEVELS.includes(raw.level)) state.level = raw.level;
+  state.editingId = typeof raw.editingId === "string" && raw.editingId ? raw.editingId : null;
+  if (state.editingId && !getAllSessions().some((s) => s.id === state.editingId)) return null;
+  state.dateTouched = Boolean(raw.dateTouched) || Boolean(state.editingId);
+  // Date jamais changée à la main : le brouillon d'hier passe à aujourd'hui
+  if (state.dateTouched && isValidDateString(raw.date)) state.date = raw.date;
+  state.wodItems = (Array.isArray(raw.wodItems) ? raw.wodItems : []).map((i) => sanitizeCfItem(i, false)).filter(Boolean);
+  state.speItems = (Array.isArray(raw.speItems) ? raw.speItems : []).map((i) => sanitizeCfItem(i, true)).filter(Boolean);
+  return state;
+}
+
+function saveCfDraft() {
+  try {
+    if (!cfState || isCfStatePristine(cfState)) localStorage.removeItem(STORAGE_KEY_CF_DRAFT);
+    else localStorage.setItem(STORAGE_KEY_CF_DRAFT, JSON.stringify(cfState));
+  } catch (error) {
+    console.warn("Brouillon de WOD non enregistré :", error);
+  }
+}
+
+/** Nom du WOD choisi (pastille, ou nom tapé pour "Autre"). */
+function getCfWodName() {
+  return cfState.wod === CF_CUSTOM_WOD ? cfState.customName.trim() : cfState.wod;
+}
+
+function isCfSpeMode() {
+  return isSpeSession(getCfWodName());
+}
+
+function getCfItems() {
+  return isCfSpeMode() ? cfState.speItems : cfState.wodItems;
+}
+
+// --------------------------------------------------------------------------
+// AFFICHAGE DU FORMULAIRE
+// --------------------------------------------------------------------------
+
+function renderCfWodChips() {
+  const names = [DAILY_WOD_LABEL, ...SPE_SESSIONS, ...getAllKnownWods()];
+  // Nom d'une séance modifiée qui ne serait plus dans la liste : on l'ajoute
+  if (cfState.wod !== CF_CUSTOM_WOD && !names.includes(cfState.wod)) names.push(cfState.wod);
+  const small = (name) => {
+    if (name === DAILY_WOD_LABEL) return "Libre";
+    if (isSpeSession(name)) return "Cours";
+    if (BENCHMARK_WODS[name]) return BENCHMARK_WODS[name].wodType;
+    return "Perso";
+  };
+  cfWodChips.innerHTML = names
+    .map((name) => `<button type="button" class="rf-wodchip${cfState.wod === name ? " on" : ""}" data-wod="${escapeHtml(name)}" aria-pressed="${cfState.wod === name}"><small>${escapeHtml(small(name))}</small>${escapeHtml(name)}</button>`)
+    .join("") +
+    `<button type="button" class="rf-wodchip${cfState.wod === CF_CUSTOM_WOD ? " on" : ""}" data-wod="${CF_CUSTOM_WOD}" aria-pressed="${cfState.wod === CF_CUSTOM_WOD}"><small>Nouveau</small>+ Autre</button>`;
+  const selected = cfWodChips.querySelector(".rf-wodchip.on");
+  if (selected && typeof selected.scrollIntoView === "function" && cfWodChips.scrollWidth > cfWodChips.clientWidth) {
+    cfWodChips.scrollLeft = Math.max(0, selected.offsetLeft - cfWodChips.offsetLeft - 16);
+  }
+}
+
+function renderCfSegments() {
+  cfTypeSeg.querySelectorAll("button").forEach((b) => {
+    const on = b.dataset.value === cfState.wodType;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+  cfLevelSeg.querySelectorAll("button").forEach((b) => {
+    const on = b.dataset.value === cfState.level;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+}
 
 /**
- * N'affiche que les champs de score utiles au type de WOD choisi.
- * Un champ déjà rempli reste toujours visible (rien ne disparaît en
- * silence si tu changes le type après avoir noté ton score).
+ * N'affiche que les champs de score utiles au format choisi. Un champ déjà
+ * rempli reste toujours visible (rien ne disparaît en silence si tu changes
+ * de format après avoir noté ton score).
  */
-function updateScoreFields(wodName) {
-  if (isSpeSession(wodName === undefined ? cfWodSelect.value : wodName)) {
-    cfTimeRow.style.display = "none";
-    cfRoundsRow.style.display = "none";
-    return;
-  }
-  const type = cfTypeSelect.value;
+function updateScoreFields() {
+  const type = cfState.wodType;
   const optional = !isScoreRequired(type);
-  const hasTime = cfTimeInput.value.trim() !== "";
-  const hasRounds = cfRoundsInput.value !== "" || cfExtraRepsInput.value !== "";
-  const showTime = optional || TIME_SCORED_WOD_TYPES.includes(type) || hasTime;
-  const showRounds = optional || type === "AMRAP" || hasRounds;
-  cfTimeRow.style.display = showTime ? "" : "none";
-  cfRoundsRow.style.display = showRounds ? "" : "none";
-  const timeOptional = document.getElementById("cf-time-optional");
-  const roundsOptional = document.getElementById("cf-rounds-optional");
-  if (timeOptional) timeOptional.textContent = optional ? "(facultatif)" : "";
-  if (roundsOptional) roundsOptional.textContent = optional ? "(facultatif)" : "";
+  const hasTime = cfState.timeMin.trim() !== "" || cfState.timeSec.trim() !== "";
+  const hasRounds = cfState.rounds.trim() !== "" || cfState.extraReps.trim() !== "";
+  cfTimeBlock.hidden = !(optional || TIME_SCORED_WOD_TYPES.includes(type) || hasTime);
+  cfRoundsBlock.hidden = !(optional || type === "AMRAP" || hasRounds);
+  document.getElementById("cf-time-optional").textContent = optional ? " (facultatif)" : "";
+  document.getElementById("cf-rounds-optional").textContent = optional ? " (facultatif)" : "";
+  cfScoreHint.hidden = !optional;
+  updateCfScoreCompare();
 }
 
-/** Champs propres au WOD choisi : type et niveau masqués pour un cours de spé, puis les champs de score. */
-function setScoreFieldsVisibility(name) {
-  const isSpe = isSpeSession(name);
-  cfTypeRow.style.display = isSpe ? "none" : "";
-  cfLevelRow.style.display = isSpe ? "none" : "";
-  updateScoreFields(name);
+/** Temps tapé en minutes + secondes → { seconds } (null si vide) ou { error }. */
+function readCfTime(minText, secText) {
+  const min = String(minText ?? "").trim();
+  const sec = String(secText ?? "").trim();
+  if (!min && !sec) return { seconds: null };
+  if ((min && !/^\d+$/.test(min)) || (sec && (!/^\d{1,2}$/.test(sec) || Number(sec) > 59))) {
+    return { error: "Temps illisible : indique les minutes et les secondes (de 0 à 59), par exemple 6 min 42 s." };
+  }
+  const total = (Number(min) || 0) * 60 + (Number(sec) || 0);
+  return total > 0 ? { seconds: total } : { error: "Temps illisible : il doit être supérieur à 0." };
 }
 
-/**
- * Applique automatiquement le préréglage d'un benchmark quand on le
- * sélectionne dans le formulaire : type de WOD, mouvements préremplis, et
- * affichage des seuls champs de score pertinents. Pour "WOD du jour" ou un
- * nom sans préréglage connu, on repart sur des mouvements vides.
- */
-function applyWodSelection(name) {
-  const preset = BENCHMARK_WODS[name];
-  setScoreFieldsVisibility(name);
+/** Sous le score : le record à battre, et l'écart dès que le score est tapé. */
+function updateCfScoreCompare() {
+  const name = getCfWodName();
+  cfScoreCompare.innerHTML = "";
+  if (typeof computeCfRecords !== "function" || cfState.editingId || !isRecordableWod(name)) return;
+  const level = cfState.level;
+  const fromSessions = (computeCfRecords()[name] || {})[level] || { bestTime: null, bestPerformance: null };
+  let bestTime = fromSessions.bestTime ? fromSessions.bestTime.value : null;
+  let bestPerf = fromSessions.bestPerformance;
+  const manual = typeof getManualCfBests === "function" ? getManualCfBests()[name] : null;
+  if (manual && getCfLevel(manual) === level) {
+    if (manual.timeSeconds > 0 && (bestTime === null || manual.timeSeconds < bestTime)) bestTime = manual.timeSeconds;
+    if (typeof manual.rounds === "number") {
+      const perf = { rounds: manual.rounds, extraReps: manual.extraReps || 0 };
+      if (isBetterPerformance(perf, bestPerf)) bestPerf = perf;
+    }
+  }
+  const label = `${escapeHtml(name)} ${escapeHtml(level)}`;
+  const time = readCfTime(cfState.timeMin, cfState.timeSec).seconds || null;
+  const rounds = /^\d+$/.test(cfState.rounds.trim()) ? Number(cfState.rounds) : null;
+  const extra = /^\d+$/.test(cfState.extraReps.trim()) ? Number(cfState.extraReps) : 0;
+  const perfText = (p) => `${p.rounds} round${p.rounds > 1 ? "s" : ""}${p.extraReps ? ` + ${p.extraReps} reps` : ""}`;
 
-  if (!preset) {
-    resetExerciseRows();
+  if (!cfTimeBlock.hidden && bestTime !== null) {
+    let text = `Record ${label} : ${formatSecondsToTime(bestTime)}`;
+    if (time !== null) {
+      const diff = time - bestTime;
+      text += diff < 0 ? ` → <b>−${formatSecondsToTime(-diff)}, nouveau record !</b>` : ` (+${formatSecondsToTime(diff)})`;
+    }
+    cfScoreCompare.innerHTML = text;
+  } else if (!cfRoundsBlock.hidden && bestPerf) {
+    let text = `Record ${label} : ${perfText(bestPerf)}`;
+    if (rounds !== null && isBetterPerformance({ rounds, extraReps: extra }, bestPerf)) text += ` → <b>nouveau record !</b>`;
+    cfScoreCompare.innerHTML = text;
+  } else if (bestTime === null && !bestPerf) {
+    cfScoreCompare.textContent = `Premier ${name} en ${level} : ce sera ton record.`;
+  }
+}
+
+/** Ligne de mouvement d'un WOD (exercice structuré, ou texte libre). */
+function createCfMovementRow(item, items) {
+  const row = document.createElement("div");
+  const remove = () => {
+    items.splice(items.indexOf(item), 1);
+    saveCfDraft();
+    renderCfItems();
+  };
+  if (item.kind === "text") {
+    row.className = "rf-mv rf-mv-text";
+    row.innerHTML = `
+      <span class="rf-ex-ic">${RF_ICONS.text}</span>
+      <input type="text" class="rf-text cf-exercise-input" placeholder="ex : 21-15-9 reps, for time" aria-label="Mouvement libre">
+      <button type="button" class="rf-x" aria-label="Retirer ce mouvement">${RF_ICONS.close}</button>`;
+    const input = row.querySelector("input");
+    input.value = item.text;
+    input.addEventListener("input", () => { item.text = input.value; saveCfDraft(); });
+    row.querySelector(".rf-x").addEventListener("click", remove);
+    return row;
+  }
+
+  const measured = isMeasuredExercise(item.exercise);
+  const units = measured ? MEASURED_EXERCISES[item.exercise] : [];
+  const unit = measured ? (units.includes(item.unit) ? item.unit : units[0]) : "reps";
+  const isBW = !measured && isBodyweightExercise(item.exercise);
+  const isAmrap = cfState.wodType === "AMRAP";
+  const word = { reps: "REPS", cal: "CAL", m: "MÈTRES" }[unit];
+  row.className = "rf-mv rf-mv-struct cf-structured-row";
+  row.innerHTML = `
+    <span class="rf-ex-ic">${exerciseIconSvg(item.exercise)}</span>
+    <button type="button" class="rf-mv-main" aria-label="Changer d'exercice">
+      <span class="rf-mv-name">${escapeHtml(item.exercise)}</span>
+      <span class="rf-mv-sub">${isAmrap ? "Quantité par tour" : "Quantité totale"}${isBW ? " · lest facultatif" : ""}</span>
+    </button>
+    <button type="button" class="rf-x" aria-label="Retirer cet exercice">${RF_ICONS.close}</button>
+    <div class="rf-qty">
+      <label><small>${word}${isAmrap ? "/TOUR" : ""}</small><input type="text" class="rf-in cf-structured-reps" inputmode="${measured ? "decimal" : "numeric"}" autocomplete="off"></label>
+      ${measured
+        ? (units.length > 1 ? `<div class="rf-units">${units.map((u) => `<button type="button" class="rf-chip${u === unit ? " on" : ""}" data-unit="${u}">${u === "cal" ? "Calories" : "Mètres"}</button>`).join("")}</div>` : "")
+        : `<label><small>${isBW ? "LEST KG" : "KG"}</small><input type="text" class="rf-in cf-structured-weight" inputmode="decimal" autocomplete="off"></label>`}
+      ${isAmrap ? `<label><small>+ EN PLUS</small><input type="text" class="rf-in cf-structured-extra" inputmode="decimal" autocomplete="off"></label>` : ""}
+    </div>`;
+  const bind = (selector, key) => {
+    const input = row.querySelector(selector);
+    if (!input) return;
+    input.value = item[key];
+    input.addEventListener("input", () => { item[key] = input.value; saveCfDraft(); });
+  };
+  bind(".cf-structured-reps", "reps");
+  bind(".cf-structured-weight", "weight");
+  bind(".cf-structured-extra", "extraReps");
+  row.querySelectorAll(".rf-units .rf-chip").forEach((chip) => chip.addEventListener("click", () => {
+    item.unit = chip.dataset.unit;
+    saveCfDraft();
+    renderCfItems();
+  }));
+  row.querySelector(".rf-mv-main").addEventListener("click", () => openExercisePicker({
+    title: "Changer d'exercice",
+    includeMeasured: true,
+    onPick: (name) => {
+      item.exercise = name;
+      if (!isMeasuredExercise(name)) item.unit = undefined;
+      saveCfDraft();
+      renderCfItems();
+    },
+  }));
+  row.querySelector(".rf-x").addEventListener("click", remove);
+  return row;
+}
+
+/** Carte "texte libre" d'un cours de spé. */
+function createCfTextCard(item, items) {
+  const card = document.createElement("div");
+  card.className = "rf-card rf-text-card";
+  card.appendChild(createCfMovementRow(item, items));
+  return card;
+}
+
+function cfSpeCardContext() {
+  const editing = Boolean(cfState.editingId);
+  return {
+    excludeSessionId: cfState.editingId,
+    showRpe: false,
+    showPR: !editing,
+    recordsBefore: typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {},
+    persist: saveCfDraft,
+    feedback: showCfFeedback,
+    onSetChecked: null, // pas de minuteur de repos pendant un cours
+    menu: (item) => {
+      const list = cfState.speItems;
+      const index = list.indexOf(item);
+      const move = (delta) => {
+        list.splice(index, 1);
+        list.splice(index + delta, 0, item);
+        saveCfDraft();
+        renderCfItems();
+      };
+      const actions = [{
+        label: "Changer d'exercice",
+        onClick: () => openExercisePicker({
+          title: "Changer d'exercice",
+          includeMeasured: true,
+          onPick: (name) => { item.exercise = name; item.unit = undefined; saveCfDraft(); renderCfItems(); },
+        }),
+      }];
+      if (index > 0) actions.push({ label: "Monter", onClick: () => move(-1) });
+      if (index < list.length - 1) actions.push({ label: "Descendre", onClick: () => move(1) });
+      actions.push({
+        label: "Supprimer l'exercice",
+        danger: true,
+        onClick: () => {
+          if (item.sets.some(isSetFilled) && !confirm(`Supprimer ${item.exercise} de la séance ?`)) return;
+          list.splice(list.indexOf(item), 1);
+          saveCfDraft();
+          renderCfItems();
+        },
+      });
+      return actions;
+    },
+  };
+}
+
+function renderCfItems() {
+  const spe = isCfSpeMode();
+  const items = getCfItems();
+  cfExercisesList.innerHTML = "";
+  if (items.length === 0) {
+    cfExercisesList.innerHTML = `<p class="rf-empty">${spe ? "Ajoute les exercices travaillés pendant le cours." : "Ajoute les mouvements du WOD (facultatif)."}</p>`;
     return;
   }
-
-  cfTypeSelect.value = preset.wodType;
-  updateScoreHint();
-
-  cfExercisesList.innerHTML = "";
-  preset.movements.forEach((movement) => {
-    const row = createExerciseRow();
-    row.querySelector(".cf-exercise-input").value = movement;
-    cfExercisesList.appendChild(row);
-  });
-
-  if (preset.scoreType === "time") {
-    cfRoundsInput.value = "";
-    cfExtraRepsInput.value = "";
-  } else {
-    cfTimeInput.value = "";
+  if (spe) {
+    const ctx = cfSpeCardContext();
+    items.forEach((item) => cfExercisesList.appendChild(item.kind === "text" ? createCfTextCard(item, items) : createSetCard(item, ctx)));
+    return;
   }
+  const card = document.createElement("div");
+  card.className = "rf-card rf-mv-card";
+  items.forEach((item) => card.appendChild(createCfMovementRow(item, items)));
+  cfExercisesList.appendChild(card);
 }
 
-cfWodSelect.addEventListener("change", () => applyWodSelection(cfWodSelect.value));
-
-// --------------------------------------------------------------------------
-// MOUVEMENTS DYNAMIQUES
-// Deux types de lignes peuvent être ajoutées à un WOD :
-//  - un "mouvement libre" (texte simple, ex: "Thrusters 42,5 kg") : reste
-//    dans l'historique, mais n'alimente aucun calcul ;
-//  - un "exercice structuré" (choisi dans la même base que Musculation,
-//    avec répétitions + charge) : alimente le volume, les records et le
-//    1RM estimé de l'exercice, exactement comme dans l'onglet Musculation.
-// --------------------------------------------------------------------------
-
-function createExerciseRow() {
-  const row = document.createElement("div");
-  row.className = "set-row set-row-single";
-  row.innerHTML = `
-    <input type="text" class="cf-exercise-input" placeholder="ex : Thrusters 42,5 kg">
-    <button type="button" class="set-remove" title="Supprimer ce mouvement">✕</button>
-  `;
-  row.querySelector(".set-remove").addEventListener("click", () => row.remove());
-  return row;
+/** Réaffiche les cartes du cours de spé et le record à battre (records à jour). */
+function refreshCfSpeCards() {
+  if (!cfState) return;
+  if (isCfSpeMode()) renderCfItems();
+  else updateCfScoreCompare();
 }
+
+/** Affiche tout le formulaire à partir de son état. */
+function renderCfForm() {
+  const spe = isCfSpeMode();
+  const editing = Boolean(cfState.editingId);
+  cfFormTitle.textContent = editing
+    ? (spe ? "Modifier la séance de spé" : "Modifier le WOD")
+    : (spe ? "Ajouter une séance de spé" : "Ajouter un WOD");
+  renderCfWodChips();
+  cfCustomNameInput.hidden = cfState.wod !== CF_CUSTOM_WOD;
+  cfCustomNameInput.value = cfState.customName;
+  cfWodFields.hidden = spe;
+  renderCfSegments();
+  cfTimeMinInput.value = cfState.timeMin;
+  cfTimeSecInput.value = cfState.timeSec;
+  cfRoundsInput.value = cfState.rounds;
+  cfExtraRepsInput.value = cfState.extraReps;
+  if (!spe) updateScoreFields();
+  cfItemsLabel.textContent = spe ? "Exercices" : "Mouvements";
+  cfItemsHint.textContent = spe
+    ? "Coche chaque série une fois faite (✓). Les séries remplies sont enregistrées, même non cochées, et comptent dans tes records."
+    : "Un exercice alimente tes statistiques (volume, charge max) ; un texte libre reste juste dans l'historique.";
+  renderCfItems();
+  cfDateInput.value = cfState.date;
+  cfNotesInput.value = cfState.notes;
+  cfSubmitBtn.textContent = editing
+    ? (spe ? "Mettre à jour la séance" : "Mettre à jour le WOD")
+    : (spe ? "Enregistrer la séance" : "Enregistrer le WOD");
+  cfCancelEditBtn.hidden = !editing;
+  cfClearBtn.hidden = editing || isCfStatePristine(cfState);
+}
+
+// --------------------------------------------------------------------------
+// INTERACTIONS
+// --------------------------------------------------------------------------
 
 /**
- * Crée une ligne d'exercice structuré, avec sélection de l'exercice
- * (réutilise exactement la même liste que Musculation), répétitions et
- * charge. Si le WOD est un AMRAP, un champ "reps par tour" + un champ
- * "reps supplémentaires" apparaissent au lieu d'un simple total.
+ * Choix d'un WOD : un benchmark préremplit son format et ses mouvements ;
+ * un cours de spé passe en mode "séries à cocher".
  */
-function createStructuredExerciseRow(prefill) {
-  const row = document.createElement("div");
-  row.className = "cf-structured-row";
-  row.innerHTML = `
-    <div class="cf-structured-row-header">
-      <select class="cf-structured-select"></select>
-      <input type="text" class="cf-structured-custom form-input-spaced" placeholder="Nom de l'exercice" style="display:none;">
-      <button type="button" class="set-remove" title="Supprimer cet exercice">✕</button>
-    </div>
-    <div class="cf-structured-fields">
-      <input type="number" class="cf-structured-reps" min="0" inputmode="numeric" placeholder="Reps" aria-label="Répétitions">
-      <input type="number" class="cf-structured-weight" min="0" step="0.5" placeholder="kg" aria-label="Charge (kg)">
-      <select class="cf-structured-unit" aria-label="Unité" style="display:none;"></select>
-      <input type="number" class="cf-structured-extra" min="0" inputmode="numeric" placeholder="+ reps" aria-label="Répétitions en plus (tour incomplet)" style="display:none;">
-    </div>
-  `;
-
-  const select = row.querySelector(".cf-structured-select");
-  const customInput = row.querySelector(".cf-structured-custom");
-  const repsInput = row.querySelector(".cf-structured-reps");
-  const weightInput = row.querySelector(".cf-structured-weight");
-  const extraInput = row.querySelector(".cf-structured-extra");
-
-  const unitSelect = row.querySelector(".cf-structured-unit");
-
-  // On réutilise directement la fonction de musculation.js : même base
-  // d'exercices, même option "+ Autre exercice…", plus le groupe
-  // "Cardio et distance" (calories ou mètres) propre aux WOD.
-  populateExerciseSelectElement(select, { includeMeasured: true });
-
-  function getRowExerciseName() {
-    return select.value === "__custom__" ? customInput.value.trim() : select.value;
-  }
-
-  /** Charge (kg) pour un exercice classique ; unité (cal / m) pour le cardio et la distance. */
-  function updateWeightPlaceholder() {
-    const name = getRowExerciseName();
-    const units = isMeasuredExercise(name) ? MEASURED_EXERCISES[name] : null;
-    if (units) {
-      const previous = unitSelect.value;
-      unitSelect.innerHTML = units.map((u) => `<option value="${u}">${u === "cal" ? "Calories" : "Mètres"}</option>`).join("");
-      if (units.includes(previous)) unitSelect.value = previous;
-      unitSelect.style.display = "";
-      weightInput.style.display = "none";
-      weightInput.value = "";
-    } else {
-      unitSelect.innerHTML = "";
-      unitSelect.style.display = "none";
-      weightInput.style.display = "";
-      const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(name);
-      weightInput.placeholder = isBW ? "Lest kg" : "kg";
+function selectCfWod(name) {
+  const previousPreset = BENCHMARK_WODS[getCfWodName()];
+  cfState.wod = name;
+  const preset = BENCHMARK_WODS[name];
+  if (name !== CF_CUSTOM_WOD && !isSpeSession(name)) {
+    if (preset) {
+      cfState.wodType = preset.wodType;
+      cfState.wodItems = preset.movements.map((text) => ({ kind: "text", text }));
+      if (preset.scoreType === "time") { cfState.rounds = ""; cfState.extraReps = ""; } else { cfState.timeMin = ""; cfState.timeSec = ""; }
+    } else if (previousPreset && JSON.stringify(cfState.wodItems) === JSON.stringify(previousPreset.movements.map((text) => ({ kind: "text", text })))) {
+      cfState.wodItems = []; // mouvements du benchmark précédent, pas retouchés : ils ne vont plus avec ce WOD
     }
-    updateStructuredRowForWodType(row);
   }
-  unitSelect.addEventListener("change", () => updateStructuredRowForWodType(row));
-
-  select.addEventListener("change", () => {
-    const isCustom = select.value === "__custom__";
-    customInput.style.display = isCustom ? "block" : "none";
-    if (isCustom) customInput.focus();
-    updateWeightPlaceholder();
-  });
-  customInput.addEventListener("input", updateWeightPlaceholder);
-
-  row.querySelector(".set-remove").addEventListener("click", () => row.remove());
-
-  if (prefill) {
-    const exists = getAllKnownExercises().includes(prefill.exercise) || isMeasuredExercise(prefill.exercise);
-    if (exists) {
-      select.value = prefill.exercise;
-    } else {
-      select.value = "__custom__";
-      customInput.style.display = "block";
-      customInput.value = prefill.exercise;
-    }
-    repsInput.value = prefill.reps ?? "";
-    weightInput.value = prefill.weight || "";
-    extraInput.value = prefill.extraReps ?? "";
-  }
-
-  updateWeightPlaceholder();
-  if (prefill && getEntryUnit(prefill) !== "reps") {
-    unitSelect.value = getEntryUnit(prefill);
-    updateStructuredRowForWodType(row);
-  }
-
-  return row;
+  saveCfDraft();
+  renderCfForm();
+  if (name === CF_CUSTOM_WOD) cfCustomNameInput.focus();
 }
 
-/** Adapte les libellés (reps, calories ou mètres) et le champ "en plus" selon le type de WOD. */
-function updateStructuredRowForWodType(row) {
-  const isAmrap = cfTypeSelect.value === "AMRAP";
-  const repsInput = row.querySelector(".cf-structured-reps");
-  const extraInput = row.querySelector(".cf-structured-extra");
-  const unitSelect = row.querySelector(".cf-structured-unit");
-  const unit = unitSelect && unitSelect.style.display !== "none" && unitSelect.value ? unitSelect.value : "reps";
-  const word = { reps: "Reps", cal: "Cal", m: "Mètres" }[unit];
-  repsInput.placeholder = isAmrap ? `${word}/tour` : unit === "reps" ? "Reps totales" : `${word} au total`;
-  extraInput.placeholder = `+ ${UNIT_LABELS[unit]}`;
-  extraInput.style.display = isAmrap ? "block" : "none";
-}
-
-/** Réapplique l'adaptation AMRAP à toutes les lignes structurées déjà présentes. */
-function updateAllStructuredRowsForWodType() {
-  cfExercisesList.querySelectorAll(".cf-structured-row").forEach(updateStructuredRowForWodType);
-  updateScoreHint();
-}
-
-/** Petit rappel sous le type de WOD quand le score est facultatif (EMOM, Tabata, Autre). */
-function updateScoreHint() {
-  const hint = document.getElementById("cf-score-hint");
-  if (hint) hint.style.display = isScoreRequired(cfTypeSelect.value) ? "none" : "block";
+cfWodChips.addEventListener("click", (event) => {
+  const chip = event.target.closest(".rf-wodchip");
+  if (chip) selectCfWod(chip.dataset.wod);
+});
+cfCustomNameInput.addEventListener("input", () => {
+  const wasSpe = isCfSpeMode();
+  cfState.customName = cfCustomNameInput.value;
+  saveCfDraft();
+  if (wasSpe !== isCfSpeMode()) renderCfForm();
+  else { updateCfScoreCompare(); cfClearBtn.hidden = isCfStatePristine(cfState); }
+});
+cfTypeSeg.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  cfState.wodType = button.dataset.value;
+  saveCfDraft();
+  renderCfSegments();
   updateScoreFields();
-}
+  renderCfItems(); // "par tour" et "+ en plus" n'existent qu'en AMRAP
+});
+cfLevelSeg.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  cfState.level = button.dataset.value;
+  saveCfDraft();
+  renderCfSegments();
+  updateCfScoreCompare();
+});
+[[cfTimeMinInput, "timeMin"], [cfTimeSecInput, "timeSec"], [cfRoundsInput, "rounds"], [cfExtraRepsInput, "extraReps"]].forEach(([input, key]) => {
+  input.addEventListener("input", () => {
+    cfState[key] = input.value;
+    saveCfDraft();
+    updateCfScoreCompare();
+  });
+});
+cfDateInput.addEventListener("change", () => {
+  if (!isValidDateString(cfDateInput.value)) { cfDateInput.value = cfState.date; return; }
+  cfState.date = cfDateInput.value;
+  cfState.dateTouched = cfState.date !== todayLocalDateString() || Boolean(cfState.editingId);
+  saveCfDraft();
+});
+cfNotesInput.addEventListener("input", () => { cfState.notes = cfNotesInput.value; saveCfDraft(); });
 
-cfTypeSelect.addEventListener("change", updateAllStructuredRowsForWodType);
-
-function resetExerciseRows() {
-  cfExercisesList.innerHTML = "";
-  for (let i = 0; i < 2; i++) {
-    cfExercisesList.appendChild(createExerciseRow());
-  }
-}
+cfAddStructuredExerciseBtn.addEventListener("click", () => openExercisePicker({
+  title: "Ajouter un exercice",
+  includeMeasured: true,
+  onPick: (name) => {
+    const measured = isMeasuredExercise(name);
+    if (isCfSpeMode()) {
+      const previous = getPreviousSets(name, cfState.editingId).slice(0, 12);
+      const sets = previous.length ? previous.map((set) => newEmptySet(set.warmup === true)) : [newEmptySet(), newEmptySet(), newEmptySet()];
+      cfState.speItems.push({ kind: "sets", exercise: name, unit: measured ? MEASURED_EXERCISES[name][0] : undefined, sets });
+    } else {
+      cfState.wodItems.push({ kind: "mv", exercise: name, unit: measured ? MEASURED_EXERCISES[name][0] : undefined, reps: "", weight: "", extraReps: "" });
+    }
+    saveCfDraft();
+    renderCfItems();
+    cfClearBtn.hidden = Boolean(cfState.editingId) || isCfStatePristine(cfState);
+  },
+}));
 
 cfAddExerciseBtn.addEventListener("click", () => {
-  cfExercisesList.appendChild(createExerciseRow());
-});
-
-cfAddStructuredExerciseBtn.addEventListener("click", () => {
-  cfExercisesList.appendChild(createStructuredExerciseRow(null));
+  getCfItems().push({ kind: "text", text: "" });
+  saveCfDraft();
+  renderCfItems();
+  const inputs = cfExercisesList.querySelectorAll(".cf-exercise-input");
+  if (inputs.length) inputs[inputs.length - 1].focus();
 });
 
 // --------------------------------------------------------------------------
@@ -426,99 +652,121 @@ function formatSecondsToTime(totalSeconds) {
 }
 
 // --------------------------------------------------------------------------
-// SOUMISSION DU FORMULAIRE
+// ENREGISTREMENT
 // --------------------------------------------------------------------------
 
-cfForm.addEventListener("submit", (event) => {
-  event.preventDefault();
+/** Transforme le formulaire en séance prête à enregistrer : { sessionData } ou { error }. */
+function collectCfSession() {
+  const wodName = getCfWodName();
+  if (!wodName) return { error: "Merci d'indiquer un nom de WOD." };
+  const date = isValidDateString(cfState.date) ? cfState.date : todayLocalDateString();
+  const notes = cfState.notes.trim();
 
-  const wodName = cfWodSelect.value;
-
-  if (!wodName) {
-    showCfFeedback("Merci d'indiquer un nom de WOD.", true);
-    return;
-  }
-
-  const timeSeconds = parseTimeToSeconds(cfTimeInput.value);
-  const rounds = cfRoundsInput.value ? Number(cfRoundsInput.value) : null;
-  const extraReps = cfExtraRepsInput.value ? Number(cfExtraRepsInput.value) : null;
-
-  const isSpe = isSpeSession(wodName);
-
-  if (cfTimeInput.value.trim() && timeSeconds === null) {
-    showCfFeedback("Temps illisible : écris-le en minutes:secondes, par exemple 6:42 (ou 1:02:30 au-delà d'une heure).", true);
-    return;
-  }
-  if (!isSpe && isScoreRequired(cfTypeSelect.value) && timeSeconds === null && rounds === null) {
-    const message = cfTypeSelect.value === "AMRAP"
-      ? "Indique ton nombre de rounds complets (et les reps en plus s'il y en a)."
-      : "Indique ton temps (mm:ss), par exemple 6:42.";
-    showCfFeedback(message, true);
-    return;
-  }
-
-  // Ligne structurée à moitié remplie (charge ou "en plus" sans quantité) :
-  // on le signale au lieu de l'ignorer en silence.
-  for (const rowEl of cfExercisesList.querySelectorAll(".cf-structured-row")) {
-    const visibleValue = (selector) => {
-      const input = rowEl.querySelector(selector);
-      return input && input.style.display !== "none" ? input.value.trim() : "";
+  if (isSpeSession(wodName)) {
+    const exercises = [];
+    for (const item of cfState.speItems) {
+      if (item.kind === "text") {
+        if (item.text.trim()) exercises.push(item.text.trim());
+        continue;
+      }
+      const unit = getSetItemUnit(item);
+      const measured = unit !== "reps";
+      let number = 0;
+      for (const set of item.sets) {
+        if (!set.warmup) number += 1;
+        if (!isSetFilled(set)) continue;
+        const result = validateSetInput(item.exercise, set.reps, set.weight, setLabel(item.exercise, set, number), measured);
+        if (result.error) return { error: result.error };
+        const entry = { exercise: item.exercise, reps: result.reps, weight: result.weight, extraReps: 0 };
+        if (measured) entry.unit = unit;
+        if (set.warmup) entry.warmup = true;
+        exercises.push(entry);
+      }
+    }
+    return {
+      sessionData: { type: "crossfit", date, wodName, wodType: null, rxOrScaled: null, timeSeconds: null, rounds: null, extraReps: null, exercises, notes },
     };
-    const repsText = rowEl.querySelector(".cf-structured-reps").value.trim();
-    if (!repsText && (visibleValue(".cf-structured-weight") || visibleValue(".cf-structured-extra"))) {
-      const select = rowEl.querySelector(".cf-structured-select");
-      const name = select.value === "__custom__" ? rowEl.querySelector(".cf-structured-custom").value.trim() : select.value;
-      showCfFeedback(`${name || "Exercice structuré"} : il manque la quantité (reps, calories ou mètres).`, true);
-      return;
+  }
+
+  const time = readCfTime(cfState.timeMin, cfState.timeSec);
+  if (time.error) return { error: time.error };
+  const readCount = (text, label) => {
+    const clean = text.trim();
+    if (!clean) return { value: null };
+    return /^\d+$/.test(clean) ? { value: Number(clean) } : { error: `${label} : indique un nombre entier.` };
+  };
+  const rounds = readCount(cfState.rounds, "Rounds complets");
+  if (rounds.error) return { error: rounds.error };
+  const extra = readCount(cfState.extraReps, "Reps en plus");
+  if (extra.error) return { error: extra.error };
+  if (isScoreRequired(cfState.wodType) && time.seconds === null && rounds.value === null) {
+    return {
+      error: cfState.wodType === "AMRAP"
+        ? "Indique ton nombre de rounds complets (et les reps en plus s'il y en a)."
+        : "Indique ton temps (minutes et secondes), par exemple 6 min 42 s.",
+    };
+  }
+
+  const isAmrap = cfState.wodType === "AMRAP";
+  const exercises = [];
+  for (const item of cfState.wodItems) {
+    if (item.kind === "text") {
+      if (item.text.trim()) exercises.push(item.text.trim());
+      continue;
+    }
+    const measured = isMeasuredExercise(item.exercise);
+    const repsText = item.reps.trim();
+    const weightText = measured ? "" : item.weight.trim();
+    const extraText = isAmrap ? item.extraReps.trim() : "";
+    // Charge ou "en plus" sans quantité : on le signale au lieu de l'ignorer en silence
+    if (!repsText) {
+      if (weightText || extraText) return { error: `${item.exercise} : il manque la quantité (reps, calories ou mètres).` };
+      continue; // ligne vide : ignorée
+    }
+    const reps = rfParseNumber(repsText);
+    if (!(reps > 0)) return { error: `${item.exercise} : la quantité n'est pas valide.` };
+    const weight = weightText ? rfParseNumber(weightText) : 0;
+    if (!Number.isFinite(weight) || weight < 0) return { error: `${item.exercise} : la charge n'est pas valide.` };
+    const extraReps = extraText ? rfParseNumber(extraText) : 0;
+    if (!Number.isFinite(extraReps) || extraReps < 0) return { error: `${item.exercise} : les reps en plus ne sont pas valides.` };
+    if (measured) {
+      const units = MEASURED_EXERCISES[item.exercise];
+      exercises.push({ exercise: item.exercise, reps, weight: 0, extraReps, unit: units.includes(item.unit) ? item.unit : units[0] });
+    } else {
+      exercises.push({ exercise: item.exercise, reps, weight, extraReps });
     }
   }
 
-  // On parcourt les lignes dans l'ordre où elles apparaissent dans le
-  // formulaire, en gardant soit un texte libre, soit un objet structuré.
-  // Une ligne incomplète (pas d'exercice choisi, ou aucune répétition
-  // renseignée pour une ligne structurée) est simplement ignorée — elle
-  // ne bloque jamais l'enregistrement du WOD.
-  const exercises = [...cfExercisesList.children]
-    .map((rowEl) => {
-      if (rowEl.classList.contains("cf-structured-row")) {
-        const select = rowEl.querySelector(".cf-structured-select");
-        const customInput = rowEl.querySelector(".cf-structured-custom");
-        const isCustom = select.value === "__custom__";
-        const exerciseName = isCustom ? customInput.value.trim() : select.value;
-        const reps = Number(rowEl.querySelector(".cf-structured-reps").value) || 0;
-        const weight = Number(rowEl.querySelector(".cf-structured-weight").value) || 0;
-        const extraReps = Number(rowEl.querySelector(".cf-structured-extra").value) || 0;
-        if (!exerciseName || reps <= 0) return null;
-        if (isMeasuredExercise(exerciseName)) {
-          // Cardio / distance : une quantité et son unité, jamais de charge
-          const unitSelect = rowEl.querySelector(".cf-structured-unit");
-          const unit = unitSelect && unitSelect.value ? unitSelect.value : MEASURED_EXERCISES[exerciseName][0];
-          return { exercise: exerciseName, reps, weight: 0, extraReps, unit };
-        }
-        return { exercise: exerciseName, reps, weight, extraReps };
-      }
-      const input = rowEl.querySelector(".cf-exercise-input");
-      const text = input ? input.value.trim() : "";
-      return text || null;
-    })
-    .filter((entry) => entry !== null);
-
-  const sessionData = {
-    type: "crossfit",
-    date: cfDateInput.value || todayLocalDateString(),
-    wodName: wodName,
-    wodType: isSpe ? null : cfTypeSelect.value,
-    rxOrScaled: isSpe ? null : cfRxSelect.value,
-    timeSeconds: isSpe ? null : timeSeconds,
-    rounds: isSpe ? null : rounds,
-    extraReps: isSpe ? null : extraReps,
-    exercises: exercises,
-    notes: cfNotesInput.value.trim(),
+  return {
+    sessionData: {
+      type: "crossfit",
+      date,
+      wodName,
+      wodType: cfState.wodType,
+      rxOrScaled: cfState.level,
+      timeSeconds: time.seconds,
+      rounds: rounds.value,
+      extraReps: extra.value,
+      exercises,
+      notes,
+    },
   };
+}
 
-  if (cfEditingId) {
-    updateSession(cfEditingId, sessionData);
-    showCfFeedback("WOD mis à jour !", false);
+function submitCfForm() {
+  if (document.activeElement && typeof document.activeElement.blur === "function") document.activeElement.blur();
+  const result = collectCfSession();
+  if (result.error) {
+    showCfFeedback(result.error, true);
+    return;
+  }
+  const sessionData = result.sessionData;
+  const wodName = sessionData.wodName;
+  const isSpe = isSpeSession(wodName);
+
+  if (cfState.editingId) {
+    updateSession(cfState.editingId, sessionData);
+    showCfFeedback(isSpe ? "Séance mise à jour !" : "WOD mis à jour !", false);
   } else {
     const recordsBefore = typeof computeCfRecords === "function" ? computeCfRecords() : {};
     const muscuRecordsBefore = typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {};
@@ -529,11 +777,9 @@ cfForm.addEventListener("submit", (event) => {
       ? detectCfNewRecords(recordsBefore, wodName, sessionData.rxOrScaled || "RX", sessionData.date)
       : null;
 
-    // Les exercices structurés du WOD sont comparés à la charge maximale
-    // déjà connue pour cet exercice — pas au 1RM estimé, puisqu'on ne
-    // peut jamais garantir qu'ils ont été faits en une seule série
-    // continue (voir la note dans stats.js).
-    const structuredEntries = exercises.filter((entry) => typeof entry === "object" && entry !== null);
+    // Les exercices structurés sont comparés à la charge maximale déjà
+    // connue pour cet exercice (voir la note dans stats.js).
+    const structuredEntries = sessionData.exercises.filter((entry) => typeof entry === "object" && entry !== null);
     const newLiftRecords = (typeof detectStructuredWeightRecords === "function" && structuredEntries.length > 0)
       ? detectStructuredWeightRecords(muscuRecordsBefore, structuredEntries)
       : [];
@@ -541,129 +787,129 @@ cfForm.addEventListener("submit", (event) => {
     if (newRecord || newLiftRecords.length > 0) {
       showCfRecordBadge(wodName, newRecord, newLiftRecords);
     } else {
-      showCfFeedback("WOD enregistré !", false);
+      showCfFeedback(isSpe ? "Séance enregistrée !" : "WOD enregistré !", false);
     }
   }
 
-  cancelCfEdit();
+  cfState = defaultCfState();
+  saveCfDraft();
   populateWodSelects();
+  renderCfForm();
   renderCfHistory();
   if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
   if (typeof renderDashboard === "function") renderDashboard();
   if (typeof renderRecords === "function") renderRecords();
-});
+}
+
+cfSubmitBtn.addEventListener("click", submitCfForm);
+
+/** Le formulaire contient une saisie : on demande avant de la remplacer. */
+function confirmReplaceCfForm() {
+  if (!cfState || isCfStatePristine(cfState)) return true;
+  return confirm("Le formulaire contient une saisie en cours. La remplacer ?");
+}
+
+/** État du formulaire à partir d'une séance enregistrée (pour "Refaire" ou "Modifier"). */
+function cfStateFromSession(session, forEdit) {
+  const state = defaultCfState();
+  state.wod = session.wodName || DAILY_WOD_LABEL;
+  if (CF_WOD_TYPES.includes(session.wodType)) state.wodType = session.wodType;
+  if (CF_LEVELS.includes(session.rxOrScaled)) state.level = session.rxOrScaled;
+  const entries = (session.exercises || []).filter((e) => e !== null && e !== undefined);
+
+  if (isSpeSession(state.wod)) {
+    // Une ligne par série : les séries qui se suivent sur le même exercice forment une carte
+    entries.forEach((entry) => {
+      if (typeof entry !== "object") { state.speItems.push({ kind: "text", text: String(entry) }); return; }
+      const unit = getEntryUnit(entry) === "reps" ? undefined : getEntryUnit(entry);
+      const last = state.speItems[state.speItems.length - 1];
+      const set = forEdit
+        ? { reps: rfInputNumber(entry.reps), weight: entry.weight > 0 ? rfInputNumber(entry.weight) : "", done: true, warmup: entry.warmup === true }
+        : newEmptySet(entry.warmup === true);
+      if (last && last.kind === "sets" && last.exercise === entry.exercise && last.unit === unit) last.sets.push(set);
+      else state.speItems.push({ kind: "sets", exercise: entry.exercise, unit, sets: [set] });
+    });
+  } else {
+    state.wodItems = entries.map((entry) => (typeof entry === "object"
+      ? {
+        kind: "mv",
+        exercise: entry.exercise,
+        unit: getEntryUnit(entry) === "reps" ? undefined : getEntryUnit(entry),
+        reps: entry.reps ? rfInputNumber(entry.reps) : "",
+        weight: entry.weight > 0 ? rfInputNumber(entry.weight) : "",
+        extraReps: forEdit && entry.extraReps ? rfInputNumber(entry.extraReps) : "",
+      }
+      : { kind: "text", text: String(entry) }));
+  }
+
+  if (forEdit) {
+    state.editingId = session.id;
+    state.date = session.date;
+    state.dateTouched = true;
+    state.notes = session.notes || "";
+    if (session.timeSeconds > 0) {
+      state.timeMin = String(Math.floor(session.timeSeconds / 60));
+      state.timeSec = String(Math.round(session.timeSeconds % 60)).padStart(2, "0");
+    }
+    if (typeof session.rounds === "number") state.rounds = String(session.rounds);
+    if (typeof session.extraReps === "number" && session.extraReps > 0) state.extraReps = String(session.extraReps);
+  }
+  return state;
+}
+
+function scrollToCfForm() {
+  const panel = document.querySelector("#section-crossfit .form-panel");
+  if (panel && typeof panel.scrollIntoView === "function") panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 /**
- * Pré-remplit le formulaire avec les valeurs d'un WOD existant, mais SANS
- * passer en mode édition : la validation créera un tout nouveau WOD,
- * daté d'aujourd'hui.
+ * Pré-remplit le formulaire avec un WOD existant, SANS passer en mode
+ * édition : la validation créera un tout nouveau WOD, daté d'aujourd'hui.
  */
 function duplicateCfSession(session) {
-  cfEditingId = null;
-
-  cfDateInput.value = todayLocalDateString();
-
-  populateWodSelects();
-  cfWodSelect.value = session.wodName;
-  setScoreFieldsVisibility(session.wodName);
-
-  cfTypeSelect.value = session.wodType || "For Time";
-  updateScoreHint();
-  cfRxSelect.value = session.rxOrScaled || "RX";
-  cfTimeInput.value = "";
-  cfRoundsInput.value = "";
-  cfExtraRepsInput.value = "";
-
-  cfExercisesList.innerHTML = "";
-  (session.exercises && session.exercises.length ? session.exercises : []).forEach((ex) => {
-    if (typeof ex === "object" && ex !== null) {
-      cfExercisesList.appendChild(createStructuredExerciseRow(ex));
-    } else {
-      const row = createExerciseRow();
-      row.querySelector(".cf-exercise-input").value = ex;
-      cfExercisesList.appendChild(row);
-    }
-  });
-  if (cfExercisesList.children.length === 0) {
-    cfExercisesList.appendChild(createExerciseRow());
-    cfExercisesList.appendChild(createExerciseRow());
-  }
-
-  cfNotesInput.value = "";
-  updateScoreFields();
-
-  cfSubmitBtn.textContent = "Enregistrer le WOD";
-  cfCancelEditBtn.style.display = "none";
+  if (!confirmReplaceCfForm()) return false;
+  cfState = cfStateFromSession(session, false);
+  saveCfDraft();
+  renderCfForm();
+  scrollToCfForm();
+  return true;
 }
 
-/**
- * Remplit le formulaire avec les valeurs d'un WOD existant et bascule
- * en mode édition. Appelée depuis la page Historique.
- */
+/** Remplit le formulaire avec un WOD existant et bascule en mode édition. */
 function startEditCfSession(session) {
-  cfEditingId = session.id;
-
-  cfDateInput.value = session.date;
-
-  populateWodSelects();
-  cfWodSelect.value = session.wodName;
-  setScoreFieldsVisibility(session.wodName);
-
-  cfTypeSelect.value = session.wodType || "For Time";
-  updateScoreHint();
-  cfRxSelect.value = session.rxOrScaled || "RX";
-  cfTimeInput.value = session.timeSeconds !== null && session.timeSeconds !== undefined
-    ? formatSecondsToTime(session.timeSeconds) : "";
-  cfRoundsInput.value = session.rounds ?? "";
-  cfExtraRepsInput.value = session.extraReps ?? "";
-
-  cfExercisesList.innerHTML = "";
-  (session.exercises && session.exercises.length ? session.exercises : []).forEach((ex) => {
-    if (typeof ex === "object" && ex !== null) {
-      cfExercisesList.appendChild(createStructuredExerciseRow(ex));
-    } else {
-      const row = createExerciseRow();
-      row.querySelector(".cf-exercise-input").value = ex;
-      cfExercisesList.appendChild(row);
-    }
-  });
-  if (cfExercisesList.children.length === 0) {
-    cfExercisesList.appendChild(createExerciseRow());
-    cfExercisesList.appendChild(createExerciseRow());
-  }
-
-  cfNotesInput.value = session.notes || "";
-  // Après le remplissage : un score déjà noté reste toujours visible
-  updateScoreFields();
-
-  cfSubmitBtn.textContent = "Mettre à jour le WOD";
-  cfCancelEditBtn.style.display = "inline-block";
+  if (!confirmReplaceCfForm()) return false;
+  cfState = cfStateFromSession(session, true);
+  saveCfDraft();
+  renderCfForm();
+  scrollToCfForm();
+  return true;
 }
 
-/** Sort du mode édition et remet le formulaire à son état "ajout". */
+/** Sort du mode édition et remet le formulaire à zéro. */
 function cancelCfEdit() {
-  cfEditingId = null;
-  cfForm.reset();
-  resetExerciseRows();
-  cfTypeRow.style.display = "";
-  cfLevelRow.style.display = "";
-  cfDateInput.value = todayLocalDateString();
-  setScoreFieldsVisibility(cfWodSelect.value);
-  updateScoreHint();
-  cfSubmitBtn.textContent = "Enregistrer le WOD";
-  cfCancelEditBtn.style.display = "none";
+  cfState = defaultCfState();
+  saveCfDraft();
+  renderCfForm();
 }
 
 cfCancelEditBtn.addEventListener("click", cancelCfEdit);
+cfClearBtn.addEventListener("click", () => {
+  if (!confirm("Vider le formulaire ?")) return;
+  cancelCfEdit();
+});
+
+let cfFeedbackTimer = null;
 
 function showCfFeedback(message, isError) {
+  clearTimeout(cfFeedbackTimer);
   cfFeedback.textContent = message;
-  cfFeedback.className = "form-feedback " + (isError ? "form-feedback-error" : "form-feedback-success");
-  setTimeout(() => { cfFeedback.textContent = ""; }, 3000);
+  cfFeedback.className = "form-feedback rf-toast " + (isError ? "form-feedback-error" : "form-feedback-success");
+  cfFeedbackTimer = setTimeout(() => { cfFeedback.textContent = ""; }, isError ? 4500 : 3000);
 }
 
 /** Affiche un badge mis en avant quand le WOD (ou un exercice structuré qu'il contient) bat un record. */
 function showCfRecordBadge(wodName, wodRecord, liftRecords) {
+  clearTimeout(cfFeedbackTimer);
   const parts = [];
   if (wodRecord) {
     const label = wodRecord.type === "time" ? "meilleur temps" : "meilleure performance";
@@ -676,8 +922,8 @@ function showCfRecordBadge(wodName, wodRecord, liftRecords) {
       <svg viewBox="0 0 24 24" class="record-badge-icon"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>
       Nouveau record ! ${parts.join(" · ")}
     </span>`;
-  cfFeedback.className = "form-feedback";
-  setTimeout(() => { cfFeedback.innerHTML = ""; }, 5000);
+  cfFeedback.className = "form-feedback rf-toast rf-toast-record";
+  cfFeedbackTimer = setTimeout(() => { cfFeedback.innerHTML = ""; }, 6000);
 }
 
 // --------------------------------------------------------------------------
@@ -780,7 +1026,7 @@ function renderCfHistory() {
             ? computeCrossfitStructuredVolume(session, entry)
             : 0;
           const volumeText = volume > 0 ? ` · Volume : ${Math.round(volume).toLocaleString("fr-FR")} kg` : "";
-          return `<p class="history-card-notes"><strong>${escapeHtml(entry.exercise)}</strong> — ${escapeHtml(repsDetail)}${weightText}${volumeText}</p>`;
+          return `<p class="history-card-notes"><strong>${escapeHtml(entry.exercise)}</strong> — ${entry.warmup === true ? "échauff. " : ""}${escapeHtml(repsDetail)}${weightText}${volumeText}</p>`;
         }
         return null;
       })
@@ -798,7 +1044,7 @@ function renderCfHistory() {
           <span class="history-card-title">${escapeHtml(session.wodName)}</span>
           ${session.rxOrScaled ? `<span class="badge-rpe ${getLevelBadgeClass(session.rxOrScaled)}">${escapeHtml(session.rxOrScaled)}</span>` : ""}
         </span>
-        <span class="history-card-date">${new Date(session.date).toLocaleDateString("fr-FR")}</span>
+        <span class="history-card-date">${parseLocalDate(session.date).toLocaleDateString("fr-FR")}</span>
       </div>
       ${isSpeSession(session.wodName)
         ? `<p class="history-card-sets">Séance spécifique</p>`
@@ -812,18 +1058,13 @@ function renderCfHistory() {
         <button type="button" class="btn btn-secondary btn-small hist-delete-btn">Supprimer</button>
       </div>
     `;
-    card.querySelector(".hist-repeat-btn").addEventListener("click", () => {
-      duplicateCfSession(session);
-      document.querySelector("#section-crossfit .form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-    card.querySelector(".hist-edit-btn").addEventListener("click", () => {
-      startEditCfSession(session);
-      document.querySelector("#section-crossfit .form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    card.querySelector(".hist-repeat-btn").addEventListener("click", () => duplicateCfSession(session));
+    card.querySelector(".hist-edit-btn").addEventListener("click", () => startEditCfSession(session));
     card.querySelector(".hist-delete-btn").addEventListener("click", () => {
       const confirmed = confirm("Supprimer définitivement ce WOD ? Cette action est irréversible.");
       if (!confirmed) return;
       deleteSession(session.id);
+      if (cfState && cfState.editingId === session.id) cancelCfEdit(); // on modifiait justement ce WOD
       renderCfHistory();
       if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
       if (typeof renderDashboard === "function") renderDashboard();
@@ -840,12 +1081,11 @@ function renderCfHistory() {
 
 // --------------------------------------------------------------------------
 // INITIALISATION DE LA PAGE
+// Une saisie en cours (appli fermée au milieu d'un cours) est reprise telle quelle.
 // --------------------------------------------------------------------------
 
-cfDateInput.value = todayLocalDateString();
+cfState = loadCfDraft() || defaultCfState();
+saveCfDraft();
 populateWodSelects();
-resetExerciseRows();
-// Au départ ("For Time") : seul le champ Temps est affiché
-setScoreFieldsVisibility(cfWodSelect.value);
-updateScoreHint();
+renderCfForm();
 renderCfHistory();

@@ -248,7 +248,9 @@ function collectPerformances() {
           }
           return;
         }
-        (Array.isArray(entry.sets) ? entry.sets : []).forEach((set) => registerRealSet(entry.exercise, set.reps, set.weight || 0));
+        (Array.isArray(entry.sets) ? entry.sets : []).forEach((set) => {
+          if (set && set.warmup !== true) registerRealSet(entry.exercise, set.reps, set.weight || 0); // échauffement : ignoré
+        });
       });
     } else if (session.type === "crossfit") {
       const isSpe = typeof isSpeSession === "function" && isSpeSession(session.wodName);
@@ -256,7 +258,7 @@ function collectPerformances() {
         if (typeof entry !== "object" || entry === null) return; // mouvement libre : rien à mesurer
         if (typeof getEntryUnit === "function" && getEntryUnit(entry) !== "reps") return; // calories / mètres
         if (isSpe) {
-          registerRealSet(entry.exercise, entry.reps, entry.weight || 0);
+          if (entry.warmup !== true) registerRealSet(entry.exercise, entry.reps, entry.weight || 0);
         } else if (entry.reps > 0 && entry.weight > 0) {
           const p = get(entry.exercise);
           p.wodLoad = Math.max(p.wodLoad, entry.weight);

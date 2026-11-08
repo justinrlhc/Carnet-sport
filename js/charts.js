@@ -191,11 +191,11 @@ function getChartableExercises() {
       (session.exercises || []).forEach((entry) => {
         if (!entry) return;
         if (entry.kind === "cardio") { if (entry.timeSeconds > 0) cardio.add(entry.exercise); }
-        else if (Array.isArray(entry.sets) && entry.sets.some((set) => set.reps > 0)) lifts.add(entry.exercise);
+        else if (Array.isArray(entry.sets) && entry.sets.some((set) => set.reps > 0 && set.warmup !== true)) lifts.add(entry.exercise);
       });
     } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
       (session.exercises || []).forEach((entry) => {
-        if (typeof entry === "object" && entry !== null && entry.reps > 0 && getEntryUnit(entry) === "reps") lifts.add(entry.exercise);
+        if (typeof entry === "object" && entry !== null && entry.reps > 0 && getEntryUnit(entry) === "reps" && entry.warmup !== true) lifts.add(entry.exercise);
       });
     }
   });
@@ -250,12 +250,12 @@ function renderExerciseChart() {
           mode = "time";
           if (entry.timeSeconds > 0) points.push({ date: session.date, value: entry.timeSeconds });
         } else if (Array.isArray(entry.sets)) {
-          sets = sets.concat(entry.sets);
+          sets = sets.concat(entry.sets.filter((set) => set && set.warmup !== true)); // échauffement : hors courbe
         }
       });
     } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
       sets = (session.exercises || [])
-        .filter((ex) => typeof ex === "object" && ex !== null && ex.exercise === name && ex.reps > 0 && getEntryUnit(ex) === "reps")
+        .filter((ex) => typeof ex === "object" && ex !== null && ex.exercise === name && ex.reps > 0 && getEntryUnit(ex) === "reps" && ex.warmup !== true)
         .map((ex) => ({ reps: ex.reps, weight: ex.weight || 0 }));
     }
     if (sets.length === 0 || mode === "time") return;

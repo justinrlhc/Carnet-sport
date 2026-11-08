@@ -57,6 +57,8 @@ function goToSection(targetId) {
   }
   if (targetId === "records" && typeof renderRecords === "function") renderRecords();
   if (targetId === "statistiques" && typeof renderAllStatsCharts === "function") renderAllStatsCharts();
+  // Minuteur de repos : visible seulement sur la page Musculation
+  if (typeof renderRestTimer === "function") renderRestTimer();
 }
 
 /**
@@ -96,6 +98,8 @@ document.querySelectorAll(".modal-choice").forEach((button) => {
     const choice = button.dataset.choice; // "musculation" ou "crossfit"
     addSessionModal.classList.remove("is-visible");
     goToSection(choice);
+    // Musculation : la séance démarre tout de suite (ou la séance en cours se rouvre)
+    if (choice === "musculation" && typeof startNewMuscuSession === "function" && !muscuDraft) startNewMuscuSession(null);
   });
 });
 
