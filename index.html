@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 
@@ -155,34 +155,20 @@
 
       <!-- ---------- SECTION : MUSCULATION ---------- -->
       <section class="section" id="section-musculation">
-        <div class="muscu-layout">
+        <p class="form-feedback rf-toast" id="muscu-feedback" role="status" aria-live="polite"></p>
 
-          <div class="panel form-panel">
-            <h2 class="panel-title">Ajouter une séance</h2>
-            <form id="muscu-form">
-
-              <div class="form-row">
-                <label for="muscu-date">Date</label>
-                <input type="date" id="muscu-date" required>
-              </div>
-
-              <div id="muscu-exercises-list"></div>
-              <div class="muscu-add-buttons">
-                <button type="button" id="muscu-add-exercise-block" class="btn btn-secondary btn-small">+ Exercice</button>
-                <button type="button" id="muscu-add-cardio-block" class="btn btn-secondary btn-small">+ Test cardio</button>
-              </div>
-
-              <div class="form-row">
-                <label for="muscu-notes">Notes de la séance <span class="label-optional">(optionnel)</span></label>
-                <textarea id="muscu-notes" rows="2" placeholder="Sensations, ressenti général..."></textarea>
-              </div>
-
-              <div class="form-row-buttons">
-                <button type="submit" class="btn btn-primary" id="muscu-submit-btn">Enregistrer la séance</button>
-                <button type="button" class="btn btn-secondary" id="muscu-cancel-edit" style="display:none;">Annuler la modification</button>
-              </div>
-              <p class="form-feedback" id="muscu-feedback"></p>
-            </form>
+        <!-- Accueil de l'onglet : démarrer, refaire une séance, historique -->
+        <div class="muscu-layout" id="muscu-home">
+          <div class="rf rf-home">
+            <div class="rf-hero">
+              <h2>Prêt à t'entraîner ?</h2>
+              <p>Lance la séance et coche tes séries au fur et à mesure : tout est gardé, même si tu fermes l'appli.</p>
+              <button type="button" class="rf-btn rf-btn-gold rf-btn-wide rf-btn-icon" id="muscu-start-btn">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                Démarrer une séance
+              </button>
+            </div>
+            <div id="muscu-templates" class="rf-templates"></div>
           </div>
 
           <div class="panel history-panel">
@@ -194,7 +180,29 @@
             <div id="muscu-last-seen" class="history-last-seen" style="display:none;"></div>
             <div id="muscu-history-list" class="history-list"></div>
           </div>
+        </div>
 
+        <!-- Séance en cours (ou ancienne séance à modifier) : rempli par js/musculation.js -->
+        <div class="rf rf-live-view" id="muscu-live" hidden>
+          <div class="rf-live">
+            <div class="rf-live-info">
+              <span class="rf-live-title" id="muscu-live-title">Séance</span>
+              <span class="rf-chrono" id="muscu-chrono"><span class="dot"></span><span id="muscu-chrono-time">00:00:00</span></span>
+            </div>
+            <button type="button" class="rf-btn rf-btn-ghost" id="muscu-cancel-edit" hidden>Annuler</button>
+            <button type="button" class="rf-btn rf-btn-gold" id="muscu-submit-btn">Terminer</button>
+          </div>
+          <div class="rf-meta">
+            <input type="text" id="muscu-name" class="rf-text" maxlength="40" autocomplete="off" placeholder="Nom de la séance" aria-label="Nom de la séance (facultatif)">
+            <label class="rf-date"><span>Date</span><input type="date" id="muscu-date"></label>
+          </div>
+          <div id="muscu-exercises-list" class="rf-list"></div>
+          <div class="rf-adds">
+            <button type="button" class="rf-dashed" id="muscu-add-exercise-block">+ Exercice</button>
+            <button type="button" class="rf-dashed" id="muscu-add-cardio-block">+ Test cardio</button>
+          </div>
+          <textarea id="muscu-notes" class="rf-notes" rows="2" placeholder="Notes de séance (sensations, ressenti…)" aria-label="Notes de la séance (facultatif)"></textarea>
+          <button type="button" class="rf-link-danger" id="muscu-discard-btn">Abandonner la séance</button>
         </div>
       </section>
 
@@ -203,80 +211,66 @@
         <div class="muscu-layout">
 
           <div class="panel form-panel">
-            <h2 class="panel-title">Ajouter un WOD</h2>
-            <form id="cf-form">
+            <h2 class="panel-title" id="cf-form-title">Ajouter un WOD</h2>
+            <p class="form-feedback rf-toast" id="cf-feedback" role="status" aria-live="polite"></p>
+            <div class="rf rf-cf" id="cf-form">
+              <div class="rf-label">WOD</div>
+              <div class="rf-scroll" id="cf-wod-chips"></div>
+              <input type="text" id="cf-custom-name" class="rf-text" maxlength="40" autocomplete="off" placeholder="Nom du WOD (ex : DT, Karen…)" aria-label="Nom du WOD" hidden>
 
-              <div class="form-row">
-                <label for="cf-date">Date</label>
-                <input type="date" id="cf-date" required>
-              </div>
-
-              <div class="form-row">
-                <label for="cf-wod-select">Nom du WOD</label>
-                <select id="cf-wod-select"></select>
-              </div>
-
-              <div class="form-row" id="cf-type-row">
-                <label for="cf-type">Type de WOD</label>
-                <select id="cf-type">
-                  <option value="For Time">For Time</option>
-                  <option value="AMRAP">AMRAP</option>
-                  <option value="EMOM">EMOM</option>
-                  <option value="Chipper">Chipper</option>
-                  <option value="Tabata">Tabata</option>
-                  <option value="Autre">Autre</option>
-                </select>
-                <p class="form-hint" id="cf-score-hint" style="display:none;">Score facultatif pour ce format : tu peux enregistrer sans temps ni rounds.</p>
-              </div>
-
-              <div class="form-row" id="cf-level-row">
-                <label for="cf-rx">Niveau</label>
-                <select id="cf-rx">
-                  <option value="RX">RX</option>
-                  <option value="Inter">Inter</option>
-                  <option value="Scaled">Scaled</option>
-                </select>
-              </div>
-
-              <div class="form-row form-row-inline" id="cf-time-row">
-                <div>
-                  <label for="cf-time">Temps <span class="label-optional" id="cf-time-optional"></span></label>
-                  <input type="text" id="cf-time" inputmode="decimal" placeholder="ex : 6:42 ou 6,42">
+              <div id="cf-wod-fields" class="rf-stack">
+                <div class="rf-label">Format</div>
+                <div class="rf-seg rf-seg-3" id="cf-type-seg">
+                  <button type="button" data-value="For Time">For Time</button>
+                  <button type="button" data-value="AMRAP">AMRAP</button>
+                  <button type="button" data-value="EMOM">EMOM</button>
+                  <button type="button" data-value="Chipper">Chipper</button>
+                  <button type="button" data-value="Tabata">Tabata</button>
+                  <button type="button" data-value="Autre">Autre</button>
+                </div>
+                <p class="form-hint" id="cf-score-hint" hidden>Score facultatif pour ce format : tu peux enregistrer sans temps ni rounds.</p>
+                <div class="rf-label">Niveau</div>
+                <div class="rf-seg rf-seg-3 lvl" id="cf-level-seg">
+                  <button type="button" data-value="RX" class="rx">RX</button>
+                  <button type="button" data-value="Inter" class="inter">Inter</button>
+                  <button type="button" data-value="Scaled" class="sc">Scaled</button>
+                </div>
+                <div class="rf-score" id="cf-score">
+                  <div class="rf-score-block" id="cf-time-block">
+                    <span class="rf-score-lbl">TON TEMPS<span id="cf-time-optional"></span></span>
+                    <div class="rf-score-inputs">
+                      <label><input type="text" id="cf-time-min" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="Minutes"><small>min</small></label>
+                      <span class="u">:</span>
+                      <label><input type="text" id="cf-time-sec" inputmode="numeric" autocomplete="off" placeholder="00" maxlength="2" aria-label="Secondes"><small>s</small></label>
+                    </div>
+                  </div>
+                  <div class="rf-score-block" id="cf-rounds-block">
+                    <span class="rf-score-lbl">ROUNDS<span id="cf-rounds-optional"></span></span>
+                    <div class="rf-score-inputs">
+                      <label><input type="text" id="cf-rounds" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="Rounds complets"><small>rounds</small></label>
+                      <span class="u">+</span>
+                      <label><input type="text" id="cf-extra-reps" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="Reps en plus"><small>reps</small></label>
+                    </div>
+                  </div>
+                  <span class="rf-score-sub" id="cf-score-compare"></span>
                 </div>
               </div>
 
-              <div class="form-row form-row-inline" id="cf-rounds-row">
-                <div>
-                  <label for="cf-rounds">Rounds complets <span class="label-optional" id="cf-rounds-optional"></span></label>
-                  <input type="number" id="cf-rounds" min="0">
-                </div>
-                <div>
-                  <label for="cf-extra-reps">Reps en plus</label>
-                  <input type="number" id="cf-extra-reps" min="0">
-                </div>
+              <div class="rf-label" id="cf-items-label">Mouvements</div>
+              <div id="cf-exercises-list" class="rf-list"></div>
+              <div class="rf-adds">
+                <button type="button" class="rf-dashed" id="cf-add-structured-exercise">+ Exercice</button>
+                <button type="button" class="rf-dashed" id="cf-add-exercise">+ Texte libre</button>
               </div>
+              <p class="form-hint" id="cf-items-hint"></p>
 
-              <div class="form-row">
-                <label>Mouvements</label>
-                <div id="cf-exercises-list" class="sets-list"></div>
-                <div class="cf-add-buttons">
-                  <button type="button" id="cf-add-exercise" class="btn btn-secondary btn-small">+ Mouvement libre</button>
-                  <button type="button" id="cf-add-structured-exercise" class="btn btn-secondary btn-small">+ Exercice structuré</button>
-                </div>
-                <p class="form-hint">Un mouvement libre reste enregistré dans l'historique, mais un exercice structuré alimente en plus tes statistiques (volume et charge max utilisée).</p>
-              </div>
+              <label class="rf-date"><span>Date</span><input type="date" id="cf-date"></label>
+              <textarea id="cf-notes" class="rf-notes" rows="2" placeholder="Notes (sensations, stratégie…)" aria-label="Notes (facultatif)"></textarea>
 
-              <div class="form-row">
-                <label for="cf-notes">Notes</label>
-                <textarea id="cf-notes" rows="2" placeholder="Sensations, stratégie..."></textarea>
-              </div>
-
-              <div class="form-row-buttons">
-                <button type="submit" class="btn btn-primary" id="cf-submit-btn">Enregistrer le WOD</button>
-                <button type="button" class="btn btn-secondary" id="cf-cancel-edit" style="display:none;">Annuler la modification</button>
-              </div>
-              <p class="form-feedback" id="cf-feedback"></p>
-            </form>
+              <button type="button" class="rf-btn rf-btn-gold rf-btn-wide" id="cf-submit-btn">Enregistrer le WOD</button>
+              <button type="button" class="rf-btn rf-btn-ghost rf-btn-wide" id="cf-cancel-edit" hidden>Annuler la modification</button>
+              <button type="button" class="rf-link" id="cf-clear-btn" hidden>Vider le formulaire</button>
+            </div>
           </div>
 
           <div class="panel history-panel">
@@ -543,6 +537,26 @@
           <p class="form-hint">Change les seuils et les objectifs de la page Profil (force, haltéro, gym, endurance, succès). Ton poids et ton année de naissance se règlent dans Mensurations.</p>
         </div>
 
+        <!-- Séances de musculation : minuteur de repos (seance.js) -->
+        <div class="panel" style="margin-bottom: 16px;">
+          <h2 class="panel-title">Séances de musculation</h2>
+          <div class="ob-field">
+            <label for="settings-rest-select">Temps de repos entre les séries</label>
+            <select id="settings-rest-select">
+              <option value="0">Pas de minuteur</option>
+              <option value="60">1 min</option>
+              <option value="90">1 min 30</option>
+              <option value="120">2 min</option>
+              <option value="150">2 min 30</option>
+              <option value="180">3 min</option>
+              <option value="240">4 min</option>
+              <option value="300">5 min</option>
+            </select>
+          </div>
+          <p class="form-feedback" id="rest-feedback"></p>
+          <p class="form-hint">Le minuteur démarre chaque fois que tu coches une série (✓). Tu peux l'ajuster de 15 s ou le passer ; à la fin, il disparaît simplement.</p>
+        </div>
+
         <!-- Installation sur l'écran d'accueil : le contenu dépend de l'endroit
              où l'appli est ouverte (Safari ou appli installée), voir settings.js -->
         <div class="panel install-panel" id="install-panel">
@@ -669,15 +683,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=21"></script>
-  <script src="js/musculation.js?v=21"></script>
-  <script src="js/crossfit.js?v=21"></script>
-  <script src="js/mensurations.js?v=21"></script>
-  <script src="js/stats.js?v=21"></script>
-  <script src="js/charts.js?v=21"></script>
-  <script src="js/ranks.js?v=21"></script>
-  <script src="js/settings.js?v=21"></script>
-  <script src="js/app.js?v=21"></script>
+  <script src="js/data.js?v=22"></script>
+  <script src="js/seance.js?v=22"></script>
+  <script src="js/musculation.js?v=22"></script>
+  <script src="js/crossfit.js?v=22"></script>
+  <script src="js/mensurations.js?v=22"></script>
+  <script src="js/stats.js?v=22"></script>
+  <script src="js/charts.js?v=22"></script>
+  <script src="js/ranks.js?v=22"></script>
+  <script src="js/settings.js?v=22"></script>
+  <script src="js/app.js?v=22"></script>
 </body>
 </html>
 
