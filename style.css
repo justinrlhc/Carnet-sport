@@ -2113,9 +2113,11 @@ body.rf-live-on::before {
 .rf-grid { display: grid; grid-template-columns: 34px minmax(0, 1fr) 62px 52px 34px 42px; gap: 5px; align-items: center; padding: 0 10px; }
 .rf-thead { font-size: 11px; font-weight: 800; letter-spacing: .6px; color: var(--text-muted); padding-bottom: 6px; }
 .rf-thead span:nth-child(3), .rf-thead span:nth-child(4) { text-align: center; }
-.rf-row { padding-top: 6px; padding-bottom: 6px; transition: background .2s; }
-.rf-row + .rf-row { border-top: 1px solid rgba(255,255,255,.03); }
-.rf-row.done { background: rgba(76,175,125,.17); }
+.rf-row-wrap { position: relative; overflow: hidden; }
+.rf-row-wrap + .rf-row-wrap { border-top: 1px solid rgba(255,255,255,.03); }
+.rf-row { position: relative; padding-top: 6px; padding-bottom: 6px; background: var(--surface); transition: background .2s, transform .22s ease-out; touch-action: pan-y; }
+.rf-row.done { background: linear-gradient(rgba(76,175,125,.17), rgba(76,175,125,.17)), var(--surface); }
+.rf-swipe-del { position: absolute; top: 0; right: 0; bottom: 0; width: 92px; border: 0; background: var(--danger); color: #fff; font: inherit; font-weight: 800; font-size: 14px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .rf-set { width: 30px; height: 30px; border-radius: 8px; border: 0; background: var(--surface-raised); display: grid; place-items: center; font: inherit; font-weight: 800; font-size: 14px; color: var(--text-primary); cursor: pointer; padding: 0; }
 .rf-row.done .rf-set { background: transparent; }
 .rf-set.w { color: #F0A85A; }
