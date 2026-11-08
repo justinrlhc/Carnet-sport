@@ -445,7 +445,6 @@ function collectRecordData() {
     cardioBests: computeCardioTestBests(),
     cfRecords: computeCfRecords(),
     manualCf: getManualCfBests(),
-    chartable: typeof getChartableExercises === "function" ? getChartableExercises() : { lifts: [], cardio: [] },
   };
 }
 
@@ -462,8 +461,6 @@ const afterManualRecordChange = () => {
  */
 function buildExerciseRecord(exercise, data) {
   const kg = (v) => `${formatKgValue(v)} kg`;
-  const hasChart = data.chartable.lifts.includes(exercise) || data.chartable.cardio.includes(exercise);
-  const progressAction = hasChart ? [{ label: "Voir dans Stats", cls: "record-progress-link", style: "ghost", run: () => openProgressChart("exercise", exercise) }] : [];
 
   // ----- Test cardio (Row 2000 m, Run 5 km…) : meilleur temps -----
   if (data.cardioBests[exercise] || data.manualTimes[exercise]) {
@@ -490,7 +487,6 @@ function buildExerciseRecord(exercise, data) {
       notes: [],
       series: "time",
       actions: [
-        ...progressAction,
         ...(manualTime
           ? [{ label: "Modifier mon temps", cls: "edit-time-link", style: "gold", run: () => open1rmForm(exercise, manualTime, { mode: "time" }) },
             { label: "Supprimer mon temps noté", cls: "delete-time-link", style: "danger", run: () => {
@@ -582,7 +578,7 @@ function buildExerciseRecord(exercise, data) {
   }
   if (!sessionRec && !showReps) entry.notes.push("Aucune séance de musculation pour cet exercice : seulement ta valeur notée.");
 
-  entry.actions = [...progressAction];
+  entry.actions = [];
   if (isBW) {
     entry.actions.push(manualReps
       ? { label: "Modifier mes reps", cls: "edit-reps-link", style: "gold", run: () => open1rmForm(exercise, manualReps, { mode: "reps" }) }
@@ -641,7 +637,6 @@ function buildWodRecord(wodName, data) {
   const latest = getAllSessions().filter((s) => s.type === "crossfit" && s.wodName === wodName).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
 
   const actions = [];
-  if (data.cfRecords[wodName]) actions.push({ label: "Voir dans Stats", cls: "record-progress-link", style: "ghost", run: () => openProgressChart("wod", wodName) });
   if (latest && typeof duplicateCfSession === "function") {
     actions.push({ label: "Refaire ce WOD", cls: "repeat-wod-link", style: "ghost", run: () => {
       if (duplicateCfSession(latest) === false) return false;
@@ -1099,24 +1094,6 @@ function renderRecordFeed() {
     const event = shown[Number(card.dataset.i)];
     if (event && event.target) openRecordSheetByName(event.target.name, event.target.section === "wod" ? "wod" : "exercise");
   }));
-}
-
-// --------------------------------------------------------------------------
-// LIENS "VOIR LA PROGRESSION" (carte de record → graphique de Statistiques)
-// --------------------------------------------------------------------------
-
-/** Ouvre Statistiques sur le graphique d'un exercice (ou d'un WOD) précis. */
-function openProgressChart(kind, name) {
-  if (typeof goToSection !== "function") return;
-  goToSection("statistiques");
-  const selectId = kind === "wod" ? "stats-wod-select" : "stats-exercise-select";
-  const select = document.getElementById(selectId);
-  if (!select || ![...select.options].some((o) => o.value === name)) return;
-  select.value = name;
-  if (kind === "wod") { if (typeof renderWodChart === "function") renderWodChart(); }
-  else if (typeof renderExerciseChart === "function") renderExerciseChart();
-  const panel = select.closest(".panel");
-  if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /** 87.5 → "87,5" ; 60 → "60" (kilos à la française). */

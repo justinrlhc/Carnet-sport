@@ -1264,6 +1264,7 @@ function renderMuscuHistory() {
     const card = document.createElement("div");
     const records = recordsBySession[session.id] || new Set();
     card.className = "history-card" + (records.size > 0 ? " has-record" : "");
+    card.dataset.sessionId = session.id; // le calendrier de Statistiques retrouve la carte
     const volume = typeof computeSessionVolume === "function" ? Math.round(computeSessionVolume(session)) : 0;
     const chips = [];
     if (records.size > 0) chips.push(`<span class="hist-chip gold">🏆 ${records.size} record${records.size > 1 ? "s" : ""}</span>`);

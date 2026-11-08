@@ -1011,6 +1011,7 @@ function renderCfHistory() {
   sessions.slice(0, cfHistoryLimit).forEach((session) => {
     const card = document.createElement("div");
     card.className = "history-card";
+    card.dataset.sessionId = session.id; // le calendrier de Statistiques retrouve la carte
 
     const exercisesHtml = (session.exercises || [])
       .map((entry) => {

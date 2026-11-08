@@ -141,378 +141,406 @@ function renderDashboardChart() {
 }
 
 // --------------------------------------------------------------------------
-// GRAPHIQUE : POIDS DE CORPS
+// PAGE STATISTIQUES (refaite en version 27)
+//   - une période en haut (Semaine / Mois / 3 mois / Année, glissante) ;
+//   - 4 chiffres clés comparés à la période d'avant ;
+//   - le graphique « Activité » (séances, volume en kg ou séries) ;
+//   - le calendrier de régularité du mois (toucher un jour : ses séances) ;
+//   - des liens vers Records et Mensurations (les courbes y sont déjà).
 // --------------------------------------------------------------------------
 
-let bodyweightChartInstance = null;
+const STATS_PERIODS = {
+  week: { label: "Semaine", days: 7, sub: "7 derniers jours · comparé aux 7 jours d'avant" },
+  month: { label: "Mois", days: 30, sub: "30 derniers jours · comparé aux 30 jours d'avant" },
+  quarter: { label: "3 mois", days: 90, sub: "90 derniers jours · comparé aux 90 jours d'avant" },
+  year: { label: "Année", days: 365, sub: "365 derniers jours · comparé à l'année d'avant" },
+};
+const STATS_METRICS = {
+  sessions: { label: "Séances", unit: ["séance", "séances"] },
+  volume: { label: "Volume", unit: ["kg", "kg"] },
+  sets: { label: "Séries", unit: ["série", "séries"] },
+};
 
-function renderBodyweightChart() {
-  if (!chartsAvailable()) return;
-  const canvas = document.getElementById("chart-bodyweight");
-  if (!canvas) return;
+let statsPeriod = "month";
+let statsMetric = "sessions";
+let statsCalendarMonth = null; // { year, month } ; null = mois en cours
+let activityChartInstance = null;
 
-  const entries = getAllBodyweightEntries();
-
-  if (bodyweightChartInstance) bodyweightChartInstance.destroy();
-  bodyweightChartInstance = new Chart(canvas, {
-    type: "line",
-    data: {
-      labels: entries.map((e) => new Date(e.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })),
-      datasets: [{
-        label: "Poids (kg)",
-        data: entries.map((e) => e.weight),
-        borderColor: CHART_COLORS.accent,
-        backgroundColor: CHART_COLORS.accentFill,
-        fill: true,
-        tension: 0.3,
-      }],
-    },
-    options: { ...getBaseChartOptions(), plugins: { legend: { display: false } } },
-  });
-}
-
-// --------------------------------------------------------------------------
-// GRAPHIQUE : PROGRESSION D'UN EXERCICE (1RM estimé au fil du temps)
-// --------------------------------------------------------------------------
-
-let exerciseChartInstance = null;
-
-/**
- * Les exercices qui ont une vraie progression à montrer : ceux notés en
- * séries réelles (Musculation, cours de spé) et les tests cardio. Un
- * exercice vu seulement dans un WOD n'y figure pas : on ne sait pas s'il a
- * été fait d'une traite, aucune courbe fiable n'est possible.
- */
-function getChartableExercises() {
-  const lifts = new Set();
-  const cardio = new Set();
-  getAllSessions().forEach((session) => {
-    if (session.type === "musculation") {
-      (session.exercises || []).forEach((entry) => {
-        if (!entry) return;
-        if (entry.kind === "cardio") { if (entry.timeSeconds > 0) cardio.add(entry.exercise); }
-        else if (Array.isArray(entry.sets) && entry.sets.some((set) => set.reps > 0 && set.warmup !== true)) lifts.add(entry.exercise);
-      });
-    } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
-      (session.exercises || []).forEach((entry) => {
-        if (typeof entry === "object" && entry !== null && entry.reps > 0 && getEntryUnit(entry) === "reps" && entry.warmup !== true) lifts.add(entry.exercise);
-      });
-    }
-  });
-  return { lifts: [...lifts].sort(), cardio: [...cardio].sort() };
-}
-
-function populateStatsExerciseSelect() {
-  const select = document.getElementById("stats-exercise-select");
-  if (!select) return;
-
-  const { lifts, cardio } = getChartableExercises();
-  const previousValue = select.value;
-  select.innerHTML = "";
-  [...lifts, ...cardio].forEach((ex) => {
-    const opt = document.createElement("option");
-    opt.value = ex;
-    opt.textContent = cardio.includes(ex) ? `${ex} (test chrono)` : ex;
-    select.appendChild(opt);
-  });
-  if ([...lifts, ...cardio].includes(previousValue)) select.value = previousValue;
+/** "AAAA-MM-JJ" décalé de n jours (n négatif = dans le passé). */
+function shiftDateString(dateStr, days) {
+  const date = parseLocalDate(dateStr);
+  date.setDate(date.getDate() + days);
+  return toLocalDateString(date);
 }
 
 /**
- * Ce que mesure la courbe, selon l'exercice :
- *  - test cardio : le temps (plus bas = mieux) ;
- *  - exercice au poids du corps : les répétitions max en une série ;
- *  - exercice avec charge : le 1RM estimé (même règle que partout :
- *    Epley jusqu'à 10 reps, au-delà la charge soulevée).
- * Seules les vraies séries comptent (Musculation et cours de spé).
+ * Séries d'une séance : les vraies séries de musculation et chaque série
+ * d'un cours de spé (échauffements exclus). Un WOD n'a pas de séries.
  */
-function renderExerciseChart() {
-  if (!chartsAvailable()) return;
-  const canvas = document.getElementById("chart-exercise");
-  const select = document.getElementById("stats-exercise-select");
-  if (!canvas || !select) return;
-  if (!select.value) {
-    if (exerciseChartInstance) { exerciseChartInstance.destroy(); exerciseChartInstance = null; }
-    return;
+function countSessionSets(session) {
+  if (!session || !Array.isArray(session.exercises)) return 0;
+  if (session.type === "musculation") {
+    return session.exercises.reduce((total, entry) => {
+      if (!entry || entry.kind === "cardio" || !Array.isArray(entry.sets)) return total;
+      return total + entry.sets.filter((set) => set && set.warmup !== true && Number(set.reps) > 0).length;
+    }, 0);
   }
+  if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
+    return session.exercises.filter((entry) => typeof entry === "object" && entry !== null && entry.warmup !== true && Number(entry.reps) > 0).length;
+  }
+  return 0;
+}
 
-  const name = select.value;
-  const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(name);
-  const points = [];
-  let mode = isBW ? "reps" : "load";
+const statsSessionVolume = (session) => (typeof computeSessionVolume === "function" ? computeSessionVolume(session) : 0);
 
-  getAllSessions().forEach((session) => {
-    let sets = [];
-    if (session.type === "musculation") {
-      (session.exercises || []).forEach((entry) => {
-        if (!entry || entry.exercise !== name) return;
-        if (entry.kind === "cardio") {
-          mode = "time";
-          if (entry.timeSeconds > 0) points.push({ date: session.date, value: entry.timeSeconds });
-        } else if (Array.isArray(entry.sets)) {
-          sets = sets.concat(entry.sets.filter((set) => set && set.warmup !== true)); // échauffement : hors courbe
-        }
-      });
-    } else if (session.type === "crossfit" && typeof isSpeSession === "function" && isSpeSession(session.wodName)) {
-      sets = (session.exercises || [])
-        .filter((ex) => typeof ex === "object" && ex !== null && ex.exercise === name && ex.reps > 0 && getEntryUnit(ex) === "reps" && ex.warmup !== true)
-        .map((ex) => ({ reps: ex.reps, weight: ex.weight || 0 }));
-    }
-    if (sets.length === 0 || mode === "time") return;
-    const values = mode === "reps"
-      ? sets.map((set) => set.reps || 0)
-      : sets.filter((set) => set.weight > 0 && set.reps > 0).map((set) => estimateOneRepMax(set.weight, set.reps));
-    if (values.length > 0) points.push({ date: session.date, value: Math.max(...values) });
-  });
-
-  points.sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
-
-  const labels = points.map((p) => parseLocalDate(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }));
-  const data = points.map((p) => (mode === "load" ? Math.round(p.value * 10) / 10 : p.value));
-  const labelByMode = {
-    load: `1RM estimé — ${name} (kg)`,
-    reps: `Reps max en une série — ${name}`,
-    time: `Temps — ${name} (plus bas = mieux)`,
+/** Les chiffres d'une période [start ; end] (dates "AAAA-MM-JJ" incluses). */
+function computeStatsForRange(sessions, recordEvents, start, end) {
+  const list = sessions.filter((s) => s.date >= start && s.date <= end);
+  return {
+    sessions: list.length,
+    volume: Math.round(list.reduce((total, s) => total + statsSessionVolume(s), 0)),
+    sets: list.reduce((total, s) => total + countSessionSets(s), 0),
+    records: recordEvents.filter((e) => e.date >= start && e.date <= end).length,
   };
+}
 
-  const options = getBaseChartOptions();
-  if (mode === "time") options.scales.y.ticks.callback = (value) => formatDuration(value);
-  if (mode === "reps") options.scales.y.ticks.precision = 0;
+/** Écart avec la période d'avant : { text, cls }. */
+function describeStatsDelta(current, previous, asPercent) {
+  if (current === previous) return { text: "= pareil", cls: "" };
+  if (asPercent) {
+    if (previous === 0) return { text: "rien avant", cls: "" };
+    const pct = Math.round(((current - previous) / previous) * 100);
+    if (pct === 0) return { text: "= pareil", cls: "" };
+    return { text: `${pct > 0 ? "+" : "−"}${Math.abs(pct)} %`, cls: pct > 0 ? "up" : "dn" };
+  }
+  const diff = current - previous;
+  return { text: `${diff > 0 ? "+" : "−"}${formatNumberFr(Math.abs(diff))}`, cls: diff > 0 ? "up" : "dn" };
+}
 
-  if (exerciseChartInstance) exerciseChartInstance.destroy();
-  exerciseChartInstance = new Chart(canvas, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        label: labelByMode[mode],
-        data,
-        borderColor: CHART_COLORS.success,
-        backgroundColor: "rgba(76, 175, 125, 0.15)",
-        fill: mode !== "time",
-        tension: 0.3,
-      }],
-    },
-    options,
+function renderStatsPeriod() {
+  document.querySelectorAll("#stats-period [data-period]").forEach((button) => {
+    const on = button.dataset.period === statsPeriod;
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-pressed", String(on));
+  });
+  const sub = document.getElementById("stats-period-sub");
+  if (sub) sub.textContent = STATS_PERIODS[statsPeriod].sub;
+}
+
+function renderStatsTiles() {
+  const container = document.getElementById("stats-tiles");
+  if (!container) return;
+  const days = STATS_PERIODS[statsPeriod].days;
+  const today = todayLocalDateString();
+  const sessions = getAllSessions().filter((s) => isValidDateString(s.date));
+  const events = typeof computeRecordHistory === "function" ? computeRecordHistory() : [];
+  const current = computeStatsForRange(sessions, events, shiftDateString(today, -(days - 1)), today);
+  const previous = computeStatsForRange(sessions, events, shiftDateString(today, -(2 * days - 1)), shiftDateString(today, -days));
+  const tiles = [
+    { key: "sessions", label: "Séances", value: formatNumberFr(current.sessions) },
+    { key: "volume", label: "Volume soulevé", value: formatNumberFr(current.volume), unit: "kg", percent: true },
+    { key: "sets", label: "Séries", value: formatNumberFr(current.sets) },
+    { key: "records", label: "Records battus", value: formatNumberFr(current.records), gold: true },
+  ];
+  container.innerHTML = tiles.map((tile) => {
+    const delta = describeStatsDelta(current[tile.key], previous[tile.key], tile.percent);
+    // Un très grand nombre (volume sur un an) prend une taille plus petite
+    const length = tile.value.length + (tile.unit ? tile.unit.length + 1 : 0);
+    const size = length > 10 ? " xl" : length > 7 ? " l" : "";
+    return `<div class="st-t${tile.gold ? " gold" : ""}" data-tile="${tile.key}">
+      <span>${tile.label}</span>
+      <b class="${size.trim()}">${escapeHtml(tile.value)}${tile.unit ? ` <small>${tile.unit}</small>` : ""}</b>
+      <em class="${delta.cls}">${escapeHtml(delta.text)}</em>
+    </div>`;
+  }).join("");
+}
+
+/**
+ * Les barres du graphique Activité, selon la période :
+ * Semaine → 7 jours, Mois → 5 semaines, 3 mois → 13 semaines, Année → 12 mois.
+ */
+function buildActivityBuckets() {
+  const today = parseLocalDate(todayLocalDateString());
+  if (statsPeriod === "week") {
+    return Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(today);
+      day.setDate(day.getDate() - (6 - i));
+      const label = day.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+      return { start: toLocalDateString(day), end: toLocalDateString(day), label, step: "day" };
+    });
+  }
+  if (statsPeriod === "year") {
+    return Array.from({ length: 12 }, (_, i) => {
+      const first = new Date(today.getFullYear(), today.getMonth() - (11 - i), 1);
+      const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+      const label = first.toLocaleDateString("fr-FR", first.getMonth() === 0 ? { month: "short", year: "2-digit" } : { month: "short" });
+      return { start: toLocalDateString(first), end: toLocalDateString(last), label, step: "month" };
+    });
+  }
+  return buildWeeklyBuckets(statsPeriod === "quarter" ? 13 : 5).map((b) => ({
+    start: toLocalDateString(b.start), end: toLocalDateString(b.end), label: b.label, step: "week",
+  }));
+}
+
+function computeActivitySeries(buckets, metric) {
+  const sessions = getAllSessions().filter((s) => isValidDateString(s.date));
+  return buckets.map(({ start, end }) => {
+    const list = sessions.filter((s) => s.date >= start && s.date <= end);
+    if (metric === "volume") return Math.round(list.reduce((total, s) => total + statsSessionVolume(s), 0));
+    if (metric === "sets") return list.reduce((total, s) => total + countSessionSets(s), 0);
+    return list.length;
   });
 }
 
-document.addEventListener("change", (event) => {
-  if (event.target.id === "stats-exercise-select") renderExerciseChart();
-});
+function renderActivityChart() {
+  document.querySelectorAll("#stats-metric [data-metric]").forEach((button) => {
+    const on = button.dataset.metric === statsMetric;
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-pressed", String(on));
+  });
+  const buckets = buildActivityBuckets();
+  const values = computeActivitySeries(buckets, statsMetric);
+  const step = buckets[0].step;
 
-// --------------------------------------------------------------------------
-// GRAPHIQUES : VOLUME PAR SEMAINE / SÉANCES PAR SEMAINE
-// --------------------------------------------------------------------------
+  // Moyenne : sans la semaine / le mois en cours (pas encore terminé)
+  const counted = step === "day" ? values : values.slice(0, -1);
+  const average = counted.length ? counted.reduce((a, b) => a + b, 0) / counted.length : 0;
+  const unit = STATS_METRICS[statsMetric].unit;
+  const per = { day: "jour", week: "semaine", month: "mois" }[step];
+  const avgValue = statsMetric === "volume" ? Math.round(average) : Math.round(average * 10) / 10;
+  const span = { day: "7 derniers jours", week: `${buckets.length} dernières semaines`, month: "12 derniers mois" }[step];
+  const avgEl = document.getElementById("stats-activity-avg");
+  if (avgEl) avgEl.innerHTML = `<span>${span}</span><span>moyenne <b>${formatNumberFr(avgValue, 1)} ${avgValue > 1 ? unit[1] : unit[0]} / ${per}</b></span>`;
 
-let volumeChartInstance = null;
-let sessionsChartInstance = null;
-
-function renderVolumeChart() {
-  if (!chartsAvailable()) return;
-  const canvas = document.getElementById("chart-volume");
+  const canvas = document.getElementById("chart-activity");
+  const fallback = document.getElementById("stats-activity-offline");
   if (!canvas) return;
-
-  const buckets = buildWeeklyBuckets(10);
-  const volumes = computeWeeklyVolumeSeries(10);
-
-  if (volumeChartInstance) volumeChartInstance.destroy();
-  volumeChartInstance = new Chart(canvas, {
-    type: "bar",
-    data: { labels: buckets.map((b) => b.label), datasets: [{ label: "Volume (kg)", data: volumes, backgroundColor: CHART_COLORS.accent, borderRadius: 4 }] },
-    options: { ...getBaseChartOptions(), plugins: { legend: { display: false } } },
-  });
-}
-
-function renderSessionsChart() {
-  if (!chartsAvailable()) return;
-  const canvas = document.getElementById("chart-sessions");
-  if (!canvas) return;
-
-  const buckets = buildWeeklyBuckets(10);
-  const counts = computeWeeklySessionsSeries(10);
-
-  if (sessionsChartInstance) sessionsChartInstance.destroy();
-  sessionsChartInstance = new Chart(canvas, {
-    type: "bar",
-    data: { labels: buckets.map((b) => b.label), datasets: [{ label: "Séances", data: counts, backgroundColor: CHART_COLORS.success, borderRadius: 4 }] },
-    options: { ...getBaseChartOptions(), plugins: { legend: { display: false } }, scales: { ...getBaseChartOptions().scales, y: { ...getBaseChartOptions().scales.y, ticks: { color: CHART_COLORS.text, stepSize: 1 } } } },
-  });
-}
-
-// --------------------------------------------------------------------------
-// GRAPHIQUE : PROGRESSION SUR UN WOD (temps ou rounds selon le type de WOD)
-// --------------------------------------------------------------------------
-
-let wodChartInstance = null;
-
-function populateStatsWodSelect() {
-  const select = document.getElementById("stats-wod-select");
-  if (!select) return;
-
-  const wods = Object.keys(computeCfRecords()).sort();
-  const previousValue = select.value;
-  select.innerHTML = "";
-  wods.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    select.appendChild(opt);
-  });
-  if (wods.includes(previousValue)) select.value = previousValue;
-}
-
-function renderWodChart() {
-  if (!chartsAvailable()) return;
-  const canvas = document.getElementById("chart-wod");
-  const select = document.getElementById("stats-wod-select");
-  if (!canvas || !select) return;
-  if (!select.value) {
-    if (wodChartInstance) { wodChartInstance.destroy(); wodChartInstance = null; }
+  if (!chartsAvailable()) {
+    if (fallback) fallback.hidden = false;
     return;
   }
+  if (fallback) fallback.hidden = true;
 
-  const sessions = getAllSessions()
-    .filter((s) => s.type === "crossfit" && s.wodName === select.value)
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  // Une seule chronologie de dates, puis une courbe par niveau (RX, Inter,
-  // Scaled) : un Fran Scaled ne doit pas se mélanger à un Fran RX.
-  const labels = sessions.map((s) => parseLocalDate(s.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }));
-  const isTimeBased = sessions.some((s) => s.timeSeconds !== null && s.timeSeconds !== undefined);
-  const levelColors = { RX: "#E1584F", Inter: CHART_COLORS.accent, Scaled: "#5B9BD9" };
-
-  const datasets = CF_LEVEL_ORDER
-    .filter((level) => sessions.some((s) => getCfLevel(s) === level))
-    .map((level) => ({
-      label: level,
-      data: sessions.map((s) => {
-        if (getCfLevel(s) !== level) return null;
-        if (isTimeBased) return s.timeSeconds ?? null;
-        return s.rounds !== null && s.rounds !== undefined ? s.rounds + (s.extraReps ?? 0) / 100 : null;
-      }),
-      borderColor: levelColors[level],
-      backgroundColor: levelColors[level],
-      spanGaps: true, // relie les points d'un même niveau même s'il y a d'autres niveaux entre
-      tension: 0.3,
-    }));
-
-  const options = getBaseChartOptions();
-  if (isTimeBased) {
-    // Sur un graphique de temps, plus la courbe descend, mieux c'est !
-    options.scales.y.ticks.callback = (value) => (typeof formatSecondsToTime === "function" ? formatSecondsToTime(value) : value);
-  }
-
-  if (wodChartInstance) wodChartInstance.destroy();
-  wodChartInstance = new Chart(canvas, { type: "line", data: { labels, datasets }, options });
+  const base = getBaseChartOptions();
+  const yTicks = { color: CHART_COLORS.text };
+  if (statsMetric !== "volume") yTicks.precision = 0;
+  if (activityChartInstance) activityChartInstance.destroy();
+  activityChartInstance = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: buckets.map((b) => b.label),
+      datasets: [{
+        label: statsMetric === "volume" ? "Volume (kg)" : STATS_METRICS[statsMetric].label,
+        data: values,
+        backgroundColor: statsMetric === "sessions" ? CHART_COLORS.success : CHART_COLORS.accent,
+        borderRadius: 4,
+      }],
+    },
+    options: { ...base, plugins: { legend: { display: false } }, scales: { ...base.scales, y: { ...base.scales.y, beginAtZero: true, ticks: yTicks } } },
+  });
 }
 
-document.addEventListener("change", (event) => {
-  if (event.target.id === "stats-wod-select") renderWodChart();
-});
-
 // --------------------------------------------------------------------------
-// CALENDRIER D'ASSIDUITÉ (façon "heatmap" GitHub)
-// Une grille d'un petit carré par jour, plus foncé si une séance a eu lieu
-// ce jour-là (musculation ET CrossFit comptent). Les colonnes sont des
-// semaines (lundi en haut), avec le nom du mois affiché au-dessus dès
-// qu'on change de mois. Réutilisée en version compacte sur le Dashboard
-// et en version complète sur la page Statistiques.
+// CALENDRIER DE RÉGULARITÉ (un mois ; doré = musculation, vert = CrossFit)
 // --------------------------------------------------------------------------
 
-function buildAttendanceHeatmapHtml(nbWeeks) {
-  // On compte le nombre de séances par jour (tous types confondus)
-  const countByDate = {};
+function getCalendarMonth() {
+  const today = parseLocalDate(todayLocalDateString());
+  return statsCalendarMonth || { year: today.getFullYear(), month: today.getMonth() };
+}
+
+/** Le premier mois navigable : celui de la plus ancienne séance (au moins le mois en cours). */
+function getEarliestCalendarMonth() {
+  const today = parseLocalDate(todayLocalDateString());
+  const dates = getAllSessions().map((s) => s.date).filter(isValidDateString).sort();
+  const first = dates.length ? parseLocalDate(dates[0]) : today;
+  const earliest = first < today ? first : today;
+  return { year: earliest.getFullYear(), month: earliest.getMonth() };
+}
+
+const monthIndex = ({ year, month }) => year * 12 + month;
+
+function renderRegularityCalendar() {
+  const container = document.getElementById("stats-calendar");
+  if (!container) return;
+  const todayStr = todayLocalDateString();
+  const today = parseLocalDate(todayStr);
+  const current = { year: today.getFullYear(), month: today.getMonth() };
+  const earliest = getEarliestCalendarMonth();
+  let shown = getCalendarMonth();
+  if (monthIndex(shown) > monthIndex(current)) shown = current;
+  if (monthIndex(shown) < monthIndex(earliest)) shown = earliest;
+  statsCalendarMonth = shown;
+
+  const sessionsByDate = {};
   getAllSessions().forEach((s) => {
-    countByDate[s.date] = (countByDate[s.date] || 0) + 1;
+    if (!isValidDateString(s.date)) return;
+    (sessionsByDate[s.date] = sessionsByDate[s.date] || []).push(s);
   });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const currentWeekStart = getWeekStartDate(today);
-  const firstWeekStart = new Date(currentWeekStart);
-  firstWeekStart.setDate(firstWeekStart.getDate() - (nbWeeks - 1) * 7);
-
-  let monthsHtml = "";
-  let columnsHtml = "";
-  let lastMonthLabel = null;
-  let lastPrintedColumnIndex = -Infinity;
-  const MIN_GAP_BETWEEN_LABELS = 3; // en nombre de colonnes, pour éviter que deux mois se chevauchent visuellement
-
-  for (let w = 0; w < nbWeeks; w++) {
-    const weekStart = new Date(firstWeekStart);
-    weekStart.setDate(weekStart.getDate() + w * 7);
-
-    // Le nom d'un mois s'affiche au-dessus de la colonne qui contient son
-    // 1er jour (la toute première colonne porte le mois de son lundi). On ne
-    // l'affiche que s'il y a assez de place depuis la dernière étiquette,
-    // sinon le texte du mois précédent et celui du suivant se chevauchent.
-    let labelDate = w === 0 ? new Date(weekStart) : null;
-    for (let d = 0; d < 7 && !labelDate; d++) {
-      const day = new Date(weekStart);
-      day.setDate(day.getDate() + d);
-      if (day.getDate() === 1) labelDate = day;
-    }
-    const monthLabel = labelDate ? labelDate.toLocaleDateString("fr-FR", { month: "short" }) : lastMonthLabel;
-    const isNewMonth = monthLabel !== lastMonthLabel;
-    if (isNewMonth) lastMonthLabel = monthLabel;
-
-    if (isNewMonth && (w - lastPrintedColumnIndex) >= MIN_GAP_BETWEEN_LABELS && w <= nbWeeks - 3) {
-      monthsHtml += `<span class="hm-month-label">${monthLabel}</span>`;
-      lastPrintedColumnIndex = w;
-    } else if (isNewMonth && w > nbWeeks - 3 && (w - lastPrintedColumnIndex) >= MIN_GAP_BETWEEN_LABELS + 1) {
-      // Mois qui commence dans les 2 dernières colonnes (le mois en cours) :
-      // l'étiquette est calée à droite pour ne pas être coupée au bord
-      monthsHtml += `<span class="hm-month-label hm-month-label-end">${monthLabel}</span>`;
-      lastPrintedColumnIndex = w;
+  const first = new Date(shown.year, shown.month, 1);
+  const nbDays = new Date(shown.year, shown.month + 1, 0).getDate();
+  const shift = (first.getDay() + 6) % 7; // lundi en premier
+  let cells = ["L", "M", "M", "J", "V", "S", "D"].map((d) => `<div class="st-wd" aria-hidden="true">${d}</div>`).join("");
+  for (let i = 0; i < shift; i++) cells += `<div class="st-day out" aria-hidden="true"></div>`;
+  let monthCount = 0;
+  for (let day = 1; day <= nbDays; day++) {
+    const date = toLocalDateString(new Date(shown.year, shown.month, day));
+    const list = sessionsByDate[date] || [];
+    monthCount += list.length;
+    const muscu = list.some((s) => s.type === "musculation");
+    const cf = list.some((s) => s.type === "crossfit");
+    const kind = date > todayStr ? "future" : muscu && cf ? "mc" : muscu ? "m" : cf ? "c" : "";
+    const cls = `st-day ${kind}${date === todayStr ? " today" : ""}`.trim();
+    if (list.length) {
+      const what = list.map((s) => (s.type === "musculation" ? "musculation" : s.wodName || "CrossFit")).join(", ");
+      cells += `<button type="button" class="${cls}" data-date="${date}" aria-label="${escapeHtml(`${day} : ${what}`)}">${day}</button>`;
     } else {
-      monthsHtml += `<span class="hm-month-label"></span>`;
+      cells += `<div class="${cls}">${day}</div>`;
     }
-
-    let cellsHtml = "";
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(weekStart);
-      date.setDate(date.getDate() + d);
-
-      if (date > today) {
-        cellsHtml += `<div class="hm-cell hm-future"></div>`;
-        continue;
-      }
-
-      // ATTENTION : surtout pas toISOString() ici — il convertit en UTC, ce
-      // qui décale la date d'un jour en France (minuit le 13 en local = 22h
-      // le 12 en UTC) et chaque case afficherait les séances de la veille.
-      const dateStr = toLocalDateString(date);
-      const count = countByDate[dateStr] || 0;
-      const level = count === 0 ? 0 : count === 1 ? 1 : 2;
-      const label = `${date.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} — ${count} séance${count > 1 ? "s" : ""}`;
-
-      cellsHtml += `<div class="hm-cell hm-level-${level}" title="${label}"></div>`;
-    }
-    columnsHtml += `<div class="hm-column">${cellsHtml}</div>`;
   }
 
-  return `
-    <div class="hm-wrapper">
-      <div class="hm-months">${monthsHtml}</div>
-      <div class="hm-grid">${columnsHtml}</div>
-      <div class="hm-legend">
-        <span>Moins</span>
-        <div class="hm-cell hm-level-0"></div>
-        <div class="hm-cell hm-level-1"></div>
-        <div class="hm-cell hm-level-2"></div>
-        <span>Plus</span>
-      </div>
+  // Les 8 dernières semaines : allumée dès 2 séances (comme le compteur de série)
+  const weeks = buildWeeklyBuckets(8).map(({ start }, i, all) => {
+    const count = countSessionsInWeek(start);
+    const ok = count >= STREAK_MIN_SESSIONS_PER_WEEK;
+    const isCurrent = i === all.length - 1;
+    return `<i class="${ok ? "ok" : isCurrent ? "now" : ""}" title="${count} séance${count > 1 ? "s" : ""}"></i>`;
+  }).join("");
+
+  const streak = computeWeeklyStreak();
+  const monthName = first.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const canPrev = monthIndex(shown) > monthIndex(earliest);
+  const canNext = monthIndex(shown) < monthIndex(current);
+  container.innerHTML = `
+    <div class="st-h"><h3>Régularité</h3>${streak > 0 ? `<span class="st-streak" id="streak-badge">${streak} semaine${streak > 1 ? "s" : ""} d'affilée</span>` : ""}</div>
+    <div class="st-cal-h">
+      <button type="button" data-cal="-1" aria-label="Mois précédent"${canPrev ? "" : " disabled"}>‹</button>
+      <b>${escapeHtml(monthName)}</b>
+      <button type="button" data-cal="1" aria-label="Mois suivant"${canNext ? "" : " disabled"}>›</button>
     </div>
-  `;
+    <div class="st-cal">${cells}</div>
+    <div class="st-leg"><span class="m">Musculation</span><span class="c">CrossFit / spé</span><span class="n">${monthCount} séance${monthCount > 1 ? "s" : ""} ce mois-ci</span></div>
+    <div class="st-weeks" title="Allumée quand tu fais au moins ${STREAK_MIN_SESSIONS_PER_WEEK} séances dans la semaine"><span>8 dernières sem.</span>${weeks}</div>`;
+
+  container.querySelectorAll("[data-cal]").forEach((button) => button.addEventListener("click", () => {
+    const target = new Date(shown.year, shown.month + Number(button.dataset.cal), 1);
+    statsCalendarMonth = { year: target.getFullYear(), month: target.getMonth() };
+    renderRegularityCalendar();
+  }));
+  container.querySelectorAll(".st-day[data-date]").forEach((button) => button.addEventListener("click", () => openCalendarDaySheet(button.dataset.date)));
 }
 
-/** Version complète (≈5-6 mois), affichée sur la page Statistiques. */
-function renderAttendanceHeatmap() {
-  const container = document.getElementById("attendance-heatmap");
-  if (!container) return;
-  container.innerHTML = buildAttendanceHeatmapHtml(24);
+/** Une séance en quelques lignes, pour la fenêtre d'un jour du calendrier. */
+function describeSessionForDay(session) {
+  if (session.type === "musculation") {
+    const lines = (session.exercises || []).filter(Boolean).map((entry) => {
+      if (entry.kind === "cardio") return `${entry.exercise} : ${entry.timeSeconds > 0 ? formatDuration(entry.timeSeconds) : "—"}`;
+      const isBW = typeof isBodyweightExercise === "function" && isBodyweightExercise(entry.exercise);
+      return `${entry.exercise} : ${formatSetsCompact(entry.sets, isBW) || "—"}`;
+    });
+    return {
+      tag: `Musculation${session.durationSeconds > 0 ? ` · ${formatSessionDuration(session.durationSeconds)}` : ""}`,
+      cf: false,
+      title: session.name || "Séance",
+      lines,
+    };
+  }
+  const spe = typeof isSpeSession === "function" && isSpeSession(session.wodName);
+  const lines = (session.exercises || []).map((entry) => {
+    if (typeof entry === "string") return entry;
+    if (!entry || typeof entry !== "object") return null;
+    const amount = typeof formatAmount === "function" ? formatAmount(entry.reps, getEntryUnit(entry)) : `${entry.reps}`;
+    return `${entry.exercise} : ${entry.warmup === true ? "échauff. " : ""}${amount}${entry.weight > 0 ? ` à ${formatNumberFr(entry.weight)} kg` : ""}`;
+  }).filter(Boolean);
+  const score = !spe && typeof formatWodResult === "function" ? formatWodResult(session) : "—";
+  const tagParts = [spe ? "Cours de spé" : "CrossFit"];
+  if (!spe && session.wodType) tagParts.push(session.wodType);
+  if (!spe && session.rxOrScaled) tagParts.push(session.rxOrScaled);
+  return {
+    tag: tagParts.join(" · "),
+    cf: true,
+    title: `${session.wodName || "WOD"}${score !== "—" ? ` — ${score}` : ""}`,
+    lines,
+  };
 }
+
+function openCalendarDaySheet(date) {
+  const sessions = getAllSessions().filter((s) => s.date === date);
+  if (sessions.length === 0) return;
+  openSheet((sheet, close) => {
+    const title = parseLocalDate(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: date.slice(0, 4) === todayLocalDateString().slice(0, 4) ? undefined : "numeric" });
+    sheet.insertAdjacentHTML("beforeend", `<h2>${escapeHtml(title)}</h2>`);
+    sessions.forEach((session) => {
+      const info = describeSessionForDay(session);
+      // Une séance de musculation en cours cache l'historique : pas de lien dans ce cas
+      const canShow = session.type === "crossfit" || !(typeof muscuDraft !== "undefined" && muscuDraft);
+      const block = document.createElement("div");
+      block.className = "st-sess";
+      block.innerHTML = `
+        <span class="tag${info.cf ? " c" : ""}">${escapeHtml(info.tag)}</span>
+        <b>${escapeHtml(info.title)}</b>
+        ${info.lines.length ? `<span>${info.lines.map(escapeHtml).join("<br>")}</span>` : ""}
+        ${session.notes ? `<span class="notes">${escapeHtml(session.notes)}</span>` : ""}
+        ${canShow ? `<button type="button" class="rf-btn rf-btn-ghost st-sess-link">Voir dans l'historique ${session.type === "musculation" ? "de Musculation" : "de CrossFit"}</button>` : ""}`;
+      const link = block.querySelector(".st-sess-link");
+      if (link) link.addEventListener("click", () => { close(); showSessionInHistory(session); });
+      sheet.appendChild(block);
+    });
+  });
+}
+
+/** Ouvre l'onglet de la séance, filtres effacés, et la montre dans l'historique. */
+function showSessionInHistory(session) {
+  const isMuscu = session.type === "musculation";
+  if (isMuscu) {
+    if (typeof muscuFilterSelect !== "undefined") muscuFilterSelect.value = "all";
+    if (typeof muscuHistorySearch !== "undefined") muscuHistorySearch.value = "";
+  } else {
+    if (typeof cfFilterSelect !== "undefined") cfFilterSelect.value = "all";
+    if (typeof cfFilterLevelSelect !== "undefined") cfFilterLevelSelect.value = "all";
+    if (typeof cfHistorySearch !== "undefined") cfHistorySearch.value = "";
+  }
+  goToSection(isMuscu ? "musculation" : "crossfit");
+  const list = document.getElementById(isMuscu ? "muscu-history-list" : "cf-history-list");
+  const total = getAllSessions().filter((s) => s.type === session.type).length;
+  const find = () => (list ? [...list.querySelectorAll(".history-card")].find((card) => card.dataset.sessionId === String(session.id)) : null);
+  // Séance ancienne : on affiche assez de « Voir plus » pour l'atteindre
+  for (let guard = 0; !find() && guard < 100; guard++) {
+    if (isMuscu) {
+      if (muscuHistoryLimit >= total) break;
+      muscuHistoryLimit += HISTORY_PAGE_SIZE;
+      renderMuscuHistory();
+    } else {
+      if (cfHistoryLimit >= total) break;
+      cfHistoryLimit += HISTORY_PAGE_SIZE;
+      renderCfHistory();
+    }
+  }
+  const card = find();
+  if (!card) return;
+  if (typeof card.scrollIntoView === "function") card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.add("hist-flash");
+  setTimeout(() => card.classList.remove("hist-flash"), 2200);
+}
+
+// Boutons de période et de mesure (posés une fois, la page est redessinée ensuite)
+document.querySelectorAll("#stats-period [data-period]").forEach((button) => button.addEventListener("click", () => {
+  if (!STATS_PERIODS[button.dataset.period]) return;
+  statsPeriod = button.dataset.period;
+  renderStatsPeriod();
+  renderStatsTiles();
+  renderActivityChart();
+}));
+document.querySelectorAll("#stats-metric [data-metric]").forEach((button) => button.addEventListener("click", () => {
+  if (!STATS_METRICS[button.dataset.metric]) return;
+  statsMetric = button.dataset.metric;
+  renderActivityChart();
+}));
+document.querySelectorAll("#section-statistiques [data-go]").forEach((button) => button.addEventListener("click", () => {
+  goToSection(button.dataset.go);
+  window.scrollTo(0, 0);
+}));
 
 // --------------------------------------------------------------------------
 // COMPTEUR DE SÉRIE (STREAK) HEBDOMADAIRE
@@ -552,31 +580,13 @@ function computeWeeklyStreak() {
   return streak;
 }
 
-function renderStreakBadge() {
-  const badge = document.getElementById("streak-badge");
-  if (!badge) return;
-
-  const streak = computeWeeklyStreak();
-  if (streak === 0) {
-    badge.style.display = "none";
-    return;
-  }
-  badge.textContent = `${streak} semaine${streak > 1 ? "s" : ""} d'affilée`;
-  badge.style.display = "inline-block";
-}
-
 // --------------------------------------------------------------------------
 // FONCTION GLOBALE : tout redessiner d'un coup (appelée en arrivant sur la page)
 // --------------------------------------------------------------------------
 
 function renderAllStatsCharts() {
-  populateStatsExerciseSelect();
-  populateStatsWodSelect();
-  renderAttendanceHeatmap();
-  renderStreakBadge();
-  renderBodyweightChart();
-  renderExerciseChart();
-  renderVolumeChart();
-  renderSessionsChart();
-  renderWodChart();
+  renderStatsPeriod();
+  renderStatsTiles();
+  renderActivityChart();
+  renderRegularityCalendar();
 }
