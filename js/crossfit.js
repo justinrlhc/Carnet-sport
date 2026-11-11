@@ -40,46 +40,120 @@ function isScoreRequired(wodType) {
   return SCORED_WOD_TYPES.includes(wodType);
 }
 
-// Détail de chaque benchmark : son format, son type de score (temps ou
-// rounds), et ses mouvements avec le schéma de répétitions/charges. Sert à
-// préremplir automatiquement le formulaire dès qu'on sélectionne son nom.
+// Détail de chaque benchmark (v29 : prêt à l'emploi). Choisir son nom remplit
+// tout seul le format, le schéma (ligne de texte) et les mouvements en
+// exercices structurés : quantité TOTALE pour un For Time (Fran : 21+15+9 =
+// 45 thrusters), quantité PAR TOUR pour un AMRAP (Cindy).
+// rx : charge RX en kg, [homme, femme] (selon le sexe choisi dans Réglages).
+// {kg} dans le schéma est remplacé par la valeur de schemeRx (gilet de Murph).
 const BENCHMARK_WODS = {
-  Helen: {
+  Fran: {
     wodType: "For Time",
     scoreType: "time",
-    movements: ["3 rounds for time", "400 m run", "21 kettlebell swings (24/16 kg)", "12 pull-ups"],
-  },
-  Annie: {
-    wodType: "For Time",
-    scoreType: "time",
-    movements: ["50-40-30-20-10 reps, for time", "Double-unders", "Sit-ups"],
+    scheme: "21-15-9 reps, for time",
+    items: [{ exercise: "Barbell Thruster", reps: 45, rx: [43, 30] }, { exercise: "Pull-up", reps: 45 }],
   },
   Grace: {
     wodType: "For Time",
     scoreType: "time",
-    movements: ["30 reps, for time", "Clean & jerks (61/43 kg)"],
+    scheme: "30 reps, for time",
+    items: [{ exercise: "Clean & Jerk", reps: 30, rx: [61, 43] }],
   },
-  Fran: {
+  Helen: {
     wodType: "For Time",
     scoreType: "time",
-    movements: ["21-15-9 reps, for time", "Thrusters (43/30 kg)", "Pull-ups"],
+    scheme: "3 rounds for time : 400 m run, 21 KB swings, 12 pull-ups",
+    items: [{ exercise: "Run", reps: 1200, unit: "m" }, { exercise: "Kettlebell Swing", reps: 63, rx: [24, 16] }, { exercise: "Pull-up", reps: 36 }],
+  },
+  Annie: {
+    wodType: "For Time",
+    scoreType: "time",
+    scheme: "50-40-30-20-10 reps, for time",
+    items: [{ exercise: "Double Under", reps: 150 }, { exercise: "Sit-Up", reps: 150 }],
   },
   Cindy: {
     wodType: "AMRAP",
     scoreType: "rounds",
-    movements: ["AMRAP 20 minutes", "5 pull-ups", "10 push-ups", "15 air squats"],
+    scheme: "AMRAP 20 minutes",
+    items: [{ exercise: "Pull-up", reps: 5 }, { exercise: "Push-Up", reps: 10 }, { exercise: "Air Squat", reps: 15 }],
   },
   Diane: {
     wodType: "For Time",
     scoreType: "time",
-    movements: ["21-15-9 reps, for time", "Deadlifts (102/70 kg)", "Handstand push-ups"],
+    scheme: "21-15-9 reps, for time",
+    items: [{ exercise: "Deadlift", reps: 45, rx: [102, 70] }, { exercise: "Handstand Push-Up", reps: 45 }],
   },
   Murph: {
     wodType: "For Time",
     scoreType: "time",
-    movements: ["For time", "1 mile run", "100 pull-ups", "200 push-ups", "300 air squats", "1 mile run"],
+    scheme: "For time, gilet lesté {kg} kg",
+    schemeRx: [9, 6],
+    items: [
+      { exercise: "Run", reps: 1600, unit: "m" }, { exercise: "Pull-up", reps: 100 }, { exercise: "Push-Up", reps: 200 },
+      { exercise: "Air Squat", reps: 300 }, { exercise: "Run", reps: 1600, unit: "m" },
+    ],
   },
 };
+
+/** 0 pour les charges RX homme, 1 pour les charges RX femme. */
+function benchmarkSexIndex() {
+  return typeof getSex === "function" && getSex() === "female" ? 1 : 0;
+}
+
+/** Schéma du benchmark ("21-15-9 reps, for time"), gilet de Murph compris. */
+function benchmarkScheme(preset) {
+  return preset.schemeRx ? preset.scheme.replace("{kg}", rfInputNumber(preset.schemeRx[benchmarkSexIndex()])) : preset.scheme;
+}
+
+/** Charge RX d'un mouvement du benchmark, en texte de saisie ("43"), ou "". */
+function benchmarkRxWeight(item) {
+  return item.rx ? rfInputNumber(item.rx[benchmarkSexIndex()]) : "";
+}
+
+/**
+ * Lignes du formulaire pour un benchmark : le schéma en texte libre, puis
+ * chaque mouvement en exercice structuré. En RX, la charge RX est remplie ;
+ * en Inter ou Scaled, elle reste vide (ta charge à toi) mais reste rappelée.
+ */
+function buildBenchmarkItems(name, level) {
+  const preset = BENCHMARK_WODS[name];
+  if (!preset) return [];
+  return [
+    { kind: "text", text: benchmarkScheme(preset) },
+    ...preset.items.map((item) => {
+      const rxWeight = benchmarkRxWeight(item);
+      const row = { kind: "mv", exercise: item.exercise, unit: item.unit, reps: rfInputNumber(item.reps), weight: rxWeight && level === "RX" ? rxWeight : "", extraReps: "" };
+      if (rxWeight) row.rxWeight = rxWeight;
+      return row;
+    }),
+  ];
+}
+
+/** Description d'un benchmark (page Records) : "For Time · 21-15-9 reps, for time · 45 Barbell Thruster (43 kg) · …" */
+function describeBenchmark(name) {
+  const preset = BENCHMARK_WODS[name];
+  if (!preset) return "";
+  const parts = preset.items.map((item) => {
+    const qty = item.unit ? formatAmount(item.reps, item.unit) : formatNumberFr(item.reps);
+    const rx = benchmarkRxWeight(item);
+    return `${qty} ${item.exercise}${rx ? ` (${rx} kg)` : ""}`;
+  });
+  return [preset.wodType, benchmarkScheme(preset), ...parts].join(" · ");
+}
+
+/**
+ * Changement de niveau : la charge RX d'un mouvement de benchmark se vide en
+ * Inter / Scaled (si tu ne l'as pas changée) et revient en RX (si la case est vide).
+ */
+function applyBenchmarkLevel(items, level) {
+  let changed = false;
+  items.forEach((item) => {
+    if (item.kind !== "mv" || !item.rxWeight) return;
+    if (level === "RX" && item.weight.trim() === "") { item.weight = item.rxWeight; changed = true; }
+    if (level !== "RX" && item.weight.trim() === item.rxWeight) { item.weight = ""; changed = true; }
+  });
+  return changed;
+}
 
 // --------------------------------------------------------------------------
 // ÉLÉMENTS DE LA PAGE
@@ -202,7 +276,9 @@ function sanitizeCfItem(item, forSpe) {
       })),
     };
   }
-  return { kind: "mv", exercise: item.exercise, unit, reps: String(item.reps ?? ""), weight: String(item.weight ?? ""), extraReps: String(item.extraReps ?? "") };
+  const row = { kind: "mv", exercise: item.exercise, unit, reps: String(item.reps ?? ""), weight: String(item.weight ?? ""), extraReps: String(item.extraReps ?? "") };
+  if (typeof item.rxWeight === "string" && item.rxWeight) row.rxWeight = item.rxWeight; // charge RX d'un benchmark (v29)
+  return row;
 }
 
 function loadCfDraft() {
@@ -381,12 +457,13 @@ function createCfMovementRow(item, items) {
   const isBW = !measured && isBodyweightExercise(item.exercise);
   const isAmrap = cfState.wodType === "AMRAP";
   const word = { reps: "REPS", cal: "CAL", m: "MÈTRES" }[unit];
+  const rxHint = item.rxWeight && !measured ? ` · RX ${escapeHtml(item.rxWeight)} kg` : "";
   row.className = "rf-mv rf-mv-struct cf-structured-row";
   row.innerHTML = `
     <span class="rf-ex-ic">${exerciseIconSvg(item.exercise)}</span>
     <button type="button" class="rf-mv-main" aria-label="Changer d'exercice">
       <span class="rf-mv-name">${escapeHtml(item.exercise)}</span>
-      <span class="rf-mv-sub">${isAmrap ? "Quantité par tour" : "Quantité totale"}${isBW ? " · lest facultatif" : ""}</span>
+      <span class="rf-mv-sub">${isAmrap ? "Quantité par tour" : "Quantité totale"}${rxHint || (isBW ? " · lest facultatif" : "")}</span>
     </button>
     <button type="button" class="rf-x" aria-label="Retirer cet exercice">${RF_ICONS.close}</button>
     <div class="rf-qty">
@@ -414,6 +491,7 @@ function createCfMovementRow(item, items) {
     title: "Changer d'exercice",
     includeMeasured: true,
     onPick: (name) => {
+      if (name !== item.exercise) delete item.rxWeight; // la charge RX ne vaut que pour le mouvement prévu
       item.exercise = name;
       if (!isMeasuredExercise(name)) item.unit = undefined;
       saveCfDraft();
@@ -542,15 +620,17 @@ function renderCfForm() {
  * un cours de spé passe en mode "séries à cocher".
  */
 function selectCfWod(name) {
-  const previousPreset = BENCHMARK_WODS[getCfWodName()];
+  const previousName = getCfWodName();
+  if (name === cfState.wod && name !== CF_CUSTOM_WOD) return; // pastille déjà choisie : on ne réécrit pas ta saisie
   cfState.wod = name;
   const preset = BENCHMARK_WODS[name];
   if (name !== CF_CUSTOM_WOD && !isSpeSession(name)) {
     if (preset) {
+      // v29 : format, schéma, mouvements, reps et charges RX remplis tout seuls
       cfState.wodType = preset.wodType;
-      cfState.wodItems = preset.movements.map((text) => ({ kind: "text", text }));
+      cfState.wodItems = buildBenchmarkItems(name, cfState.level);
       if (preset.scoreType === "time") { cfState.rounds = ""; cfState.extraReps = ""; } else { cfState.timeMin = ""; cfState.timeSec = ""; }
-    } else if (previousPreset && JSON.stringify(cfState.wodItems) === JSON.stringify(previousPreset.movements.map((text) => ({ kind: "text", text })))) {
+    } else if (BENCHMARK_WODS[previousName] && JSON.stringify(cfState.wodItems) === JSON.stringify(buildBenchmarkItems(previousName, cfState.level))) {
       cfState.wodItems = []; // mouvements du benchmark précédent, pas retouchés : ils ne vont plus avec ce WOD
     }
   }
@@ -583,9 +663,11 @@ cfLevelSeg.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
   cfState.level = button.dataset.value;
+  const weightsChanged = applyBenchmarkLevel(cfState.wodItems, cfState.level); // charges RX d'un benchmark
   saveCfDraft();
   renderCfSegments();
   updateCfScoreCompare();
+  if (weightsChanged && !isCfSpeMode()) renderCfItems();
 });
 [[cfTimeMinInput, "timeMin"], [cfTimeSecInput, "timeSec"], [cfRoundsInput, "rounds"], [cfExtraRepsInput, "extraReps"]].forEach(([input, key]) => {
   input.addEventListener("input", () => {
@@ -855,6 +937,18 @@ function cfStateFromSession(session, forEdit) {
         extraReps: forEdit && entry.extraReps ? rfInputNumber(entry.extraReps) : "",
       }
       : { kind: "text", text: String(entry) }));
+    // Benchmark refait ou modifié : chaque mouvement prévu retrouve sa charge RX (rappel + changement de niveau)
+    const preset = BENCHMARK_WODS[state.wod];
+    if (preset) {
+      const pending = preset.items.filter((item) => item.rx);
+      state.wodItems.forEach((row) => {
+        if (row.kind !== "mv") return;
+        const index = pending.findIndex((item) => item.exercise === row.exercise);
+        if (index === -1) return;
+        row.rxWeight = benchmarkRxWeight(pending[index]);
+        pending.splice(index, 1);
+      });
+    }
   }
 
   if (forEdit) {

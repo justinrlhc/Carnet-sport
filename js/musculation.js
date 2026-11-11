@@ -1182,6 +1182,35 @@ function renderMuscuLastSeen(sessions, query) {
   muscuLastSeen.style.display = "flex";
 }
 
+// Séances dépliées dans l'historique (restent ouvertes après « Voir plus » ou un filtre)
+const muscuHistoryOpen = new Set();
+
+/** Déplie ou replie une carte de l'historique de musculation. */
+function setMuscuHistoryCardOpen(card, open) {
+  const body = card.querySelector(".hc-body");
+  const toggle = card.querySelector(".hc-toggle");
+  if (!body || !toggle) return;
+  body.hidden = !open;
+  card.classList.toggle("is-open", open);
+  toggle.setAttribute("aria-expanded", String(open));
+  toggle.setAttribute("aria-label", toggle.getAttribute("aria-label").replace(open ? "voir le détail" : "masquer le détail", open ? "masquer le détail" : "voir le détail"));
+  if (open) muscuHistoryOpen.add(card.dataset.sessionId);
+  else muscuHistoryOpen.delete(card.dataset.sessionId);
+}
+
+/** Menu « ··· » → Supprimer : demande confirmation, puis met toute l'appli à jour. */
+function deleteMuscuSessionFromHistory(session) {
+  const confirmed = confirm("Supprimer définitivement cette séance ? Cette action est irréversible.");
+  if (!confirmed) return;
+  deleteSession(session.id);
+  muscuHistoryOpen.delete(String(session.id));
+  renderMuscuHistory();
+  renderMuscuTemplates(); // "Refaire une séance" a peut-être changé
+  if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
+  if (typeof renderDashboard === "function") renderDashboard();
+  if (typeof renderRecords === "function") renderRecords();
+}
+
 function renderMuscuHistory() {
   const filter = muscuFilterSelect.value || "all";
   const query = normalizeSearchText(muscuHistorySearch.value);
@@ -1210,15 +1239,34 @@ function renderMuscuHistory() {
     });
   }
 
+  // v29 : une ligne par séance, rangée par mois ; toucher la ligne déplie le détail
+  let lastMonth = "";
   sessions.slice(0, muscuHistoryLimit).forEach((session) => {
+    const day = parseLocalDate(session.date);
+    const month = day.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    if (month !== lastMonth) {
+      lastMonth = month;
+      const heading = document.createElement("div");
+      heading.className = "hc-month";
+      heading.textContent = month;
+      muscuHistoryList.appendChild(heading);
+    }
+
     const card = document.createElement("div");
     const records = recordsBySession[session.id] || new Set();
-    card.className = "history-card" + (records.size > 0 ? " has-record" : "");
+    const open = muscuHistoryOpen.has(String(session.id));
+    card.className = "history-card hc-card" + (records.size > 0 ? " has-record" : "") + (open ? " is-open" : "");
     card.dataset.sessionId = session.id; // le calendrier de Statistiques retrouve la carte
     const volume = typeof computeSessionVolume === "function" ? Math.round(computeSessionVolume(session)) : 0;
     const chips = [];
-    if (records.size > 0) chips.push(`<span class="hist-chip gold">🏆 ${records.size} record${records.size > 1 ? "s" : ""}</span>`);
-    if (volume > 0) chips.push(`<span class="hist-chip">${volume.toLocaleString("fr-FR")} kg</span>`);
+    if (volume > 0) chips.push(`<span class="hist-chip">${volume.toLocaleString("fr-FR")} kg soulevés</span>`);
+
+    const names = (session.exercises || []).map((entry) => entry.exercise);
+    const summary = [];
+    if (session.durationSeconds > 0) summary.push(formatSessionDuration(session.durationSeconds));
+    summary.push(`${names.length} exercice${names.length > 1 ? "s" : ""}`);
+    if (names.length) summary.push(names.join(", "));
+    const weekday = day.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
 
     const exercisesHtml = (session.exercises || [])
       .map((entry) => {
@@ -1239,32 +1287,32 @@ function renderMuscuHistory() {
       })
       .join("");
 
+    const title = session.name || "Séance";
+    const fullDate = day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
     card.innerHTML = `
-      <div class="history-card-header">
-        <span class="history-card-title">${escapeHtml(session.name || "Séance")}</span>
-        <span class="history-card-date">${parseLocalDate(session.date).toLocaleDateString("fr-FR")}${session.durationSeconds > 0 ? ` · ${formatSessionDuration(session.durationSeconds)}` : ""}</span>
+      <div class="hc-head">
+        <button type="button" class="hc-toggle" aria-expanded="${open}" aria-label="${escapeHtml(`${title}, ${fullDate} : ${open ? "masquer" : "voir"} le détail`)}">
+          <span class="hc-day"><b>${day.getDate()}</b><small>${escapeHtml(weekday)}</small></span>
+          <span class="hc-main">
+            <span class="hc-title">${escapeHtml(title)}</span>
+            <span class="hc-sum">${escapeHtml(summary.join(" · "))}</span>
+          </span>
+          ${records.size > 0 ? `<span class="hc-pr" title="${records.size} record${records.size > 1 ? "s" : ""}">🏆 ${records.size}</span>` : ""}
+        </button>
+        <button type="button" class="hc-dots" aria-label="${escapeHtml(`Actions : ${title}, ${fullDate}`)}"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
       </div>
-      ${chips.length ? `<div class="hist-chips">${chips.join("")}</div>` : ""}
-      ${exercisesHtml}
-      ${session.notes ? `<p class="history-card-notes">${escapeHtml(session.notes)}</p>` : ""}
-      <div class="history-card-actions">
-        <button type="button" class="btn btn-secondary btn-small hist-repeat-btn">Refaire cette séance</button>
-        <button type="button" class="btn btn-secondary btn-small hist-edit-btn">Modifier</button>
-        <button type="button" class="btn btn-secondary btn-small hist-delete-btn">Supprimer</button>
+      <div class="hc-body"${open ? "" : " hidden"}>
+        ${exercisesHtml}
+        ${chips.length ? `<div class="hist-chips">${chips.join("")}</div>` : ""}
+        ${session.notes ? `<p class="history-card-notes">${escapeHtml(session.notes)}</p>` : ""}
       </div>
     `;
-    card.querySelector(".hist-repeat-btn").addEventListener("click", () => duplicateMuscuSession(session));
-    card.querySelector(".hist-edit-btn").addEventListener("click", () => startEditMuscuSession(session));
-    card.querySelector(".hist-delete-btn").addEventListener("click", () => {
-      const confirmed = confirm("Supprimer définitivement cette séance ? Cette action est irréversible.");
-      if (!confirmed) return;
-      deleteSession(session.id);
-      renderMuscuHistory();
-      renderMuscuTemplates(); // "Refaire une séance" a peut-être changé
-      if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
-      if (typeof renderDashboard === "function") renderDashboard();
-      if (typeof renderRecords === "function") renderRecords();
-    });
+    card.querySelector(".hc-toggle").addEventListener("click", () => setMuscuHistoryCardOpen(card, !card.classList.contains("is-open")));
+    card.querySelector(".hc-dots").addEventListener("click", () => openActionSheet(`${title} · ${day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`, [
+      { label: "Refaire cette séance", onClick: () => duplicateMuscuSession(session) },
+      { label: "Modifier", onClick: () => startEditMuscuSession(session) },
+      { label: "Supprimer", danger: true, onClick: () => deleteMuscuSessionFromHistory(session) },
+    ]));
     muscuHistoryList.appendChild(card);
   });
 

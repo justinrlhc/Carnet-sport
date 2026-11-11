@@ -668,7 +668,7 @@ function buildWodRecord(wodName, data) {
     value: formatLevelScore(mainRec),
     label: mainRec.bestTime ? `meilleur temps${mainRec.bestTime.source === "manual" ? " (noté)" : ""}` : `rounds + reps${mainRec.bestPerformance.source === "manual" ? " (noté)" : ""}`,
     sub: levels.length > 1 ? levels.slice(1).map((l) => `${l} ${formatLevelScore(byLevel[l])}`).join(" · ") : recordAgo(mainDate),
-    description: preset ? [preset.wodType, ...preset.movements].join(" · ") : "",
+    description: preset && typeof describeBenchmark === "function" ? describeBenchmark(wodName) : "",
     byLevel,
     manual,
     actions,
