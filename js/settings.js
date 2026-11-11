@@ -208,14 +208,65 @@ function isInstalledApp() {
   return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
 }
 
+/**
+ * v28 : sur quel appareil l'appli est ouverte, pour donner les bonnes
+ * étapes d'installation : "ios" (Safari), "samsung" (Samsung Internet),
+ * "android" (Chrome et les autres navigateurs Android) ou "desktop".
+ */
+function detectInstallPlatform() {
+  const ua = navigator.userAgent || "";
+  const isIos = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (isIos) return "ios";
+  if (/Android/i.test(ua)) return /SamsungBrowser/i.test(ua) ? "samsung" : "android";
+  return "desktop";
+}
+
+const INSTALL_STEPS = {
+  android: {
+    intro: "Installe Carnet comme une vraie appli : icône sur l'écran d'accueil, plein écran, et elle fonctionne sans réseau à la salle.",
+    steps: [
+      "Dans Chrome, touche le menu <strong>⋮</strong> en haut à droite",
+      "Choisis <strong>Installer l'application</strong> (ou <strong>Ajouter à l'écran d'accueil</strong>)",
+      "Confirme avec <strong>Installer</strong>",
+    ],
+    note: "Autre navigateur (Huawei, Firefox…) : cherche « Ajouter à l'écran d'accueil » dans son menu. Tes séances déjà notées ici se retrouvent dans l'appli installée.",
+  },
+  samsung: {
+    intro: "Installe Carnet comme une vraie appli : icône sur l'écran d'accueil, plein écran, et elle fonctionne sans réseau à la salle.",
+    steps: [
+      "Dans Samsung Internet, touche le menu <strong>☰</strong> en bas à droite",
+      "Choisis <strong>Ajouter la page à</strong>, puis <strong>Écran d'accueil</strong>",
+      "Confirme avec <strong>Ajouter</strong>",
+    ],
+    note: "Tes séances déjà notées ici se retrouvent dans l'appli installée.",
+  },
+  desktop: {
+    intro: "Sur ordinateur, tu peux aussi installer Carnet : il s'ouvre alors dans sa propre fenêtre, même sans réseau.",
+    steps: [
+      "Dans Chrome ou Edge, clique sur l'icône d'installation à droite de la barre d'adresse (ou menu <strong>⋮</strong> → <strong>Installer Carnet</strong>)",
+      "Sur Mac avec Safari : menu <strong>Fichier</strong> → <strong>Ajouter au Dock</strong>",
+    ],
+    note: "Les données de l'ordinateur et celles du téléphone sont séparées : passe par Exporter / Importer pour les copier de l'un à l'autre.",
+  },
+};
+
 function renderInstallPanel() {
   const container = document.getElementById("install-content");
   if (!container) return;
+  const platform = detectInstallPlatform();
   if (isInstalledApp()) {
     container.innerHTML = `
       <p class="install-status"><span class="install-check" aria-hidden="true">✓</span> Appli installée</p>
-      <p class="settings-text">Elle s'ouvre sans réseau et Safari n'efface pas ses données, même après plusieurs semaines sans l'ouvrir. Continue quand même d'exporter une sauvegarde de temps en temps : si tu supprimes l'icône ou changes de téléphone, les données partent avec.</p>
-      <p class="form-hint">Pour avoir une nouvelle version mise en ligne : ferme complètement l'appli (balaye-la vers le haut) puis rouvre-la.</p>`;
+      <p class="settings-text">Elle s'ouvre sans réseau et ses données ne sont pas effacées, même après plusieurs semaines sans l'ouvrir. Continue quand même d'exporter une sauvegarde de temps en temps : si tu supprimes l'icône ou changes de téléphone, les données partent avec.</p>
+      <p class="form-hint">Pour avoir une nouvelle version mise en ligne : ferme complètement l'appli (${platform === "ios" ? "balaye-la vers le haut" : "depuis la liste des applis ouvertes"}) puis rouvre-la.</p>`;
+    return;
+  }
+  const other = INSTALL_STEPS[platform];
+  if (other) {
+    container.innerHTML = `
+      <p class="settings-text">${other.intro}</p>
+      <ol class="install-steps">${other.steps.map((step) => `<li>${step}</li>`).join("")}</ol>
+      <p class="form-hint">${other.note}</p>`;
     return;
   }
   container.innerHTML = `
@@ -403,9 +454,15 @@ function saveOnboardingProfile() {
 
 function renderOnboardingInstallTip() {
   const tip = document.getElementById("ob-install-tip");
-  if (tip && isInstalledApp()) {
+  if (!tip) return;
+  if (isInstalledApp()) {
     tip.innerHTML = "<b>L'appli est installée</b> : elle s'ouvre en plein écran depuis ton écran d'accueil, même sans réseau à la salle.";
+    return;
   }
+  const platform = detectInstallPlatform();
+  if (platform === "android") tip.innerHTML = "<b>Installe l'appli</b> : dans Chrome, menu ⋮ puis « Installer l'application ». Elle s'ouvrira en plein écran, même sans réseau.";
+  else if (platform === "samsung") tip.innerHTML = "<b>Installe l'appli</b> : menu ☰ puis « Ajouter la page à » → « Écran d'accueil ». Elle s'ouvrira en plein écran, même sans réseau.";
+  else if (platform === "desktop") tip.innerHTML = "<b>Installe l'appli</b> : dans Chrome ou Edge, icône d'installation à droite de la barre d'adresse. Elle s'ouvrira dans sa propre fenêtre, même sans réseau.";
 }
 
 function setupOnboarding() {

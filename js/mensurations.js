@@ -36,6 +36,7 @@ const weightHistoryList = document.getElementById("weight-history-list");
 
 const DAY_MS = 86400000;
 let weightEditingId = null;
+let weightDateTouched = false; // date de la pesée changée à la main
 let weightChartPeriod = "3m";
 let weightHistoryMonths = 3;
 
@@ -114,6 +115,20 @@ function describeWeightRate(rate) {
   return { cls: "fast", value, text: "perte rapide : attention à ne pas perdre de muscle." };
 }
 
+/**
+ * Évolution du poids sur environ 30 jours : la dernière pesée comparée à la
+ * pesée la plus proche d'il y a 30 jours (ou la première). Même calcul pour
+ * Mensurations et le tableau de bord. { diff, span, last } ou null.
+ */
+function computeWeightTrend() {
+  const entries = sortedWeights();
+  if (entries.length < 2) return null;
+  const last = entries[entries.length - 1];
+  const before = entries.filter((e) => daysBetween(e.date, last.date) >= 30).pop() || entries[0];
+  if (before === last || before.date === last.date) return null;
+  return { diff: last.weight - before.weight, span: daysBetween(before.date, last.date), last };
+}
+
 // --------------------------------------------------------------------------
 // CARTE « POIDS ACTUEL » + IMC EN PETIT
 // --------------------------------------------------------------------------
@@ -142,12 +157,11 @@ function renderWeightHero() {
   }
   const last = entries[entries.length - 1];
   const today = todayLocalDateString();
-  // Écart sur 30 jours : avec la pesée la plus proche d'il y a 30 jours (ou la première)
-  const before = entries.filter((e) => daysBetween(e.date, last.date) >= 30).pop() || entries[0];
+  // Écart sur 30 jours (même calcul que le tableau de bord)
+  const weightTrend = computeWeightTrend();
   let trend = "";
-  if (before !== last && before.date !== last.date) {
-    const diff = last.weight - before.weight;
-    const span = daysBetween(before.date, last.date);
+  if (weightTrend) {
+    const { diff, span } = weightTrend;
     const arrow = Math.round(diff * 10) === 0 ? "=" : diff > 0 ? "↑" : "↓";
     const good = Math.round(diff * 10) === 0 ? "eq" : (diff * weightDirection() > 0 ? "up" : "down");
     trend = `<span class="mz-trend ${good}">${arrow} ${signedKg(diff)} kg en ${span} j</span>`;
@@ -208,6 +222,7 @@ function resetWeightEntry() {
   const entries = sortedWeights();
   weightValueInput.value = entries.length ? kgText(entries[entries.length - 1].weight) : "";
   weightDateInput.value = todayLocalDateString();
+  weightDateTouched = false;
   weightFormTitle.textContent = "Nouvelle pesée";
   weightSubmitBtn.textContent = "Enregistrer";
   weightCancelEditBtn.hidden = true;
@@ -235,8 +250,18 @@ weightFormCard.querySelectorAll("[data-step]").forEach((button) => {
 
 weightDateInput.addEventListener("change", () => {
   if (!isValidDateString(weightDateInput.value)) weightDateInput.value = todayLocalDateString();
+  weightDateTouched = weightDateInput.value !== todayLocalDateString();
   updateWeightDateLabel();
 });
+
+/** v28 : appli restée ouverte d'un jour à l'autre → « Aujourd'hui » reste vrai. */
+function refreshWeightDateIfStale() {
+  if (weightEditingId || weightDateTouched) return;
+  const today = todayLocalDateString();
+  if (weightDateInput.value === today) return;
+  weightDateInput.value = today;
+  updateWeightDateLabel();
+}
 // iPhone : l'étiquette suit la roue des dates pendant qu'on la tourne
 weightDateInput.addEventListener("input", () => {
   if (isValidDateString(weightDateInput.value)) updateWeightDateLabel();
@@ -258,6 +283,7 @@ function afterWeightChange() {
 }
 
 weightSubmitBtn.addEventListener("click", () => {
+  refreshWeightDateIfStale();
   const date = weightDateInput.value;
   const weight = readWeightInput();
   if (!isValidDateString(date) || weight === null || weight > 400) {
@@ -683,18 +709,14 @@ function renderWeightHistory() {
 // TOUTE LA PAGE
 // --------------------------------------------------------------------------
 
-function renderMensurations() {
+/** options.keepEntry : ne pas vider la carte « Nouvelle pesée » (changement de jour). */
+function renderMensurations(options) {
   renderWeightHero();
-  if (!weightEditingId) resetWeightEntry();
+  if (!weightEditingId && !(options && options.keepEntry)) resetWeightEntry();
   renderWeightChart();
   renderWeightGoal();
   renderMeasurements();
   renderWeightHistory();
-}
-
-/** Ancien nom, encore appelé ailleurs : la jauge d'IMC fait partie de la carte du poids. */
-function renderBmiGauge() {
-  renderWeightHero();
 }
 
 renderMensurations();

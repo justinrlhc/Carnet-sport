@@ -53,6 +53,7 @@ function goToSection(targetId) {
   if (targetId === "dashboard") renderDashboard();
   if (targetId === "profil" && typeof renderProfile === "function") renderProfile();
   if (targetId === "musculation" && typeof renderMuscuHistory === "function") renderMuscuHistory();
+  if (targetId === "crossfit" && typeof refreshCfDateIfStale === "function") refreshCfDateIfStale();
   if (targetId === "crossfit" && typeof renderCfHistory === "function") renderCfHistory();
   if (targetId === "mensurations" && typeof renderMensurations === "function") renderMensurations();
   if (targetId === "records" && typeof renderRecords === "function") renderRecords();
@@ -108,7 +109,7 @@ document.querySelectorAll(".modal-choice").forEach((button) => {
 // (des calculs plus avancés — 1RM, vrais records — arriveront à l'étape 6)
 // --------------------------------------------------------------------------
 
-// (computeSessionVolume et isWithinLastDays sont maintenant définies dans stats.js,
+// (computeSessionVolume est définie dans stats.js,
 // chargé avant ce fichier, pour pouvoir être réutilisées par les graphiques aussi)
 
 function renderDashboard() {
@@ -126,15 +127,17 @@ function renderDashboard() {
     const latest = bodyweightEntries[bodyweightEntries.length - 1];
     weightEl.innerHTML = `${formatNumberFr(latest.weight, 1)} <small>kg</small>`;
 
-    // On compare à la mesure la plus ancienne dont on dispose (approx. "récemment")
-    const oldest = bodyweightEntries[0];
-    const diff = Number((latest.weight - oldest.weight).toFixed(1));
-    if (diff !== 0) {
-      const sign = diff > 0 ? "+" : "";
-      weightTrendEl.textContent = `${sign}${diff.toString().replace(".", ",")} kg récemment`;
+    // v28 : même évolution sur 30 jours que dans Mensurations
+    const trend = typeof computeWeightTrend === "function" ? computeWeightTrend() : null;
+    const diff = trend ? Math.round(trend.diff * 10) / 10 : 0;
+    if (!trend) {
+      weightTrendEl.textContent = "Première pesée";
+      weightTrendEl.className = "stat-trend";
+    } else if (diff !== 0) {
+      weightTrendEl.textContent = `${diff > 0 ? "+" : "−"}${formatNumberFr(Math.abs(diff), 1)} kg en ${trend.span} j`;
       weightTrendEl.className = "stat-trend " + (diff > 0 ? "stat-trend-up" : "stat-trend-down");
     } else {
-      weightTrendEl.textContent = "Stable";
+      weightTrendEl.textContent = `Stable sur ${trend.span} j`;
       weightTrendEl.className = "stat-trend";
     }
   } else {
@@ -152,7 +155,7 @@ function renderDashboard() {
   });
   document.getElementById("stat-sessions").textContent = sessionsThisWeek.length;
   document.getElementById("stat-sessions-trend").textContent =
-    sessionsThisWeek.length > 0 ? "Continue comme ça" : "Aucune séance encore";
+    sessionsThisWeek.length > 0 ? "Continue comme ça" : sessions.length > 0 ? "Pas encore de séance cette semaine" : "Aucune séance encore";
 
   // ----- Volume d'entraînement (cette semaine) -----
   // Arrondi au kilo : le poids de corps (ex : 55,2 kg) donne sinon des décimales inutiles
@@ -326,6 +329,35 @@ if (APP_VERSION && IS_ONLINE_SITE) {
     if (document.visibilityState === "visible") checkForUpdate(false);
   });
 }
+
+// --------------------------------------------------------------------------
+// v28 : L'APPLI RESTE OUVERTE D'UN JOUR À L'AUTRE
+// L'iPhone garde l'appli en mémoire : au retour le lendemain, rien n'est
+// rechargé. Dès que le jour a changé, on remet les dates et la page à jour.
+// --------------------------------------------------------------------------
+
+let lastSeenDay = todayLocalDateString();
+
+function refreshIfNewDay() {
+  const today = todayLocalDateString();
+  if (today === lastSeenDay) return;
+  lastSeenDay = today;
+  if (typeof refreshCfDateIfStale === "function") refreshCfDateIfStale();
+  if (typeof refreshWeightDateIfStale === "function") refreshWeightDateIfStale();
+  const active = document.querySelector(".section.is-active");
+  if (!active) return;
+  const section = active.id.replace("section-", "");
+  // Mensurations : on garde ce qui est en cours de saisie dans « Nouvelle pesée »
+  if (section === "mensurations" && typeof renderMensurations === "function") renderMensurations({ keepEntry: true });
+  else goToSection(section);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshIfNewDay();
+});
+window.addEventListener("pageshow", refreshIfNewDay);
+window.addEventListener("focus", refreshIfNewDay);
+setInterval(refreshIfNewDay, 60 * 1000); // appli laissée à l'écran pendant minuit
 
 // On demande au navigateur de ne jamais effacer les données de l'appli
 // d'office (il peut refuser ; l'appli installée est de toute façon protégée).

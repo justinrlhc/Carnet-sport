@@ -602,6 +602,20 @@ cfDateInput.addEventListener("change", () => {
 });
 cfNotesInput.addEventListener("input", () => { cfState.notes = cfNotesInput.value; saveCfDraft(); });
 
+/**
+ * v28 : l'iPhone garde l'appli ouverte en arrière-plan. Une date jamais
+ * changée à la main suit donc le jour qui passe (sinon le WOD du lendemain
+ * serait enregistré à la date de la veille).
+ */
+function refreshCfDateIfStale() {
+  if (!cfState || cfState.dateTouched) return;
+  const today = todayLocalDateString();
+  if (cfState.date === today) return;
+  cfState.date = today;
+  cfDateInput.value = today;
+  saveCfDraft();
+}
+
 cfAddStructuredExerciseBtn.addEventListener("click", () => openExercisePicker({
   title: "Ajouter un exercice",
   includeMeasured: true,
@@ -659,6 +673,7 @@ function formatSecondsToTime(totalSeconds) {
 function collectCfSession() {
   const wodName = getCfWodName();
   if (!wodName) return { error: "Merci d'indiquer un nom de WOD." };
+  refreshCfDateIfStale();
   const date = isValidDateString(cfState.date) ? cfState.date : todayLocalDateString();
   const notes = cfState.notes.trim();
 

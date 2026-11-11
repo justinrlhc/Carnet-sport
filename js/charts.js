@@ -108,13 +108,6 @@ function computeWeeklyVolumeSeries(nbWeeks) {
   );
 }
 
-function computeWeeklySessionsSeries(nbWeeks) {
-  const sessions = getAllSessions();
-  return buildWeeklyBuckets(nbWeeks).map(({ start, end }) =>
-    sessions.filter((s) => { const d = parseLocalDate(s.date); return d >= start && d <= end; }).length
-  );
-}
-
 // --------------------------------------------------------------------------
 // GRAPHIQUE DU DASHBOARD (mini aperçu du volume des dernières semaines)
 // --------------------------------------------------------------------------
@@ -401,14 +394,15 @@ function renderRegularityCalendar() {
   }
 
   // Les 8 dernières semaines : allumée dès 2 séances (comme le compteur de série)
+  const weekCounts = countSessionsByWeek();
   const weeks = buildWeeklyBuckets(8).map(({ start }, i, all) => {
-    const count = countSessionsInWeek(start);
+    const count = countSessionsInWeek(start, weekCounts);
     const ok = count >= STREAK_MIN_SESSIONS_PER_WEEK;
     const isCurrent = i === all.length - 1;
     return `<i class="${ok ? "ok" : isCurrent ? "now" : ""}" title="${count} séance${count > 1 ? "s" : ""}"></i>`;
   }).join("");
 
-  const streak = computeWeeklyStreak();
+  const streak = computeWeeklyStreak(weekCounts);
   const monthName = first.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const canPrev = monthIndex(shown) > monthIndex(earliest);
   const canNext = monthIndex(shown) < monthIndex(current);
@@ -552,28 +546,39 @@ document.querySelectorAll("#section-statistiques [data-go]").forEach((button) =>
 
 const STREAK_MIN_SESSIONS_PER_WEEK = 2;
 
-function countSessionsInWeek(weekStart) {
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  return getAllSessions().filter((s) => {
-    const d = parseLocalDate(s.date);
-    return d >= weekStart && d <= weekEnd;
-  }).length;
+/**
+ * v28 : le nombre de séances de chaque semaine, calculé en UN SEUL passage
+ * sur toutes les séances ({ "AAAA-MM-JJ" du lundi → nombre }). Avant, chaque
+ * semaine relisait toutes les séances : la page ralentissait avec les années.
+ */
+function countSessionsByWeek(sessions) {
+  const counts = new Map();
+  (sessions || getAllSessions()).forEach((session) => {
+    if (!session || !isValidDateString(session.date)) return;
+    const monday = toLocalDateString(getWeekStartDate(parseLocalDate(session.date)));
+    counts.set(monday, (counts.get(monday) || 0) + 1);
+  });
+  return counts;
 }
 
-function computeWeeklyStreak() {
-  const currentWeekStart = getWeekStartDate(new Date());
-  let cursor = new Date(currentWeekStart);
+/** Séances de la semaine qui commence ce lundi (counts : le tableau ci-dessus, s'il est déjà calculé). */
+function countSessionsInWeek(weekStart, counts) {
+  return (counts || countSessionsByWeek()).get(toLocalDateString(getWeekStartDate(weekStart))) || 0;
+}
+
+function computeWeeklyStreak(counts) {
+  const byWeek = counts || countSessionsByWeek();
+  const cursor = getWeekStartDate(new Date());
 
   // La semaine en cours n'est pas terminée : si elle n'a pas encore
   // atteint le seuil, on ne la compte pas, mais elle ne casse rien non
   // plus — on démarre alors le décompte à la semaine précédente.
-  if (countSessionsInWeek(cursor) < STREAK_MIN_SESSIONS_PER_WEEK) {
+  if (countSessionsInWeek(cursor, byWeek) < STREAK_MIN_SESSIONS_PER_WEEK) {
     cursor.setDate(cursor.getDate() - 7);
   }
 
   let streak = 0;
-  while (countSessionsInWeek(cursor) >= STREAK_MIN_SESSIONS_PER_WEEK) {
+  while (countSessionsInWeek(cursor, byWeek) >= STREAK_MIN_SESSIONS_PER_WEEK) {
     streak++;
     cursor.setDate(cursor.getDate() - 7);
   }

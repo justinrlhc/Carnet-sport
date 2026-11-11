@@ -292,43 +292,6 @@ function createExerciseOption(name, label) {
   return opt;
 }
 
-/**
- * Remplit un <select> avec la liste des exercices connus + option "Autre"
- * (utilisée par la page Records). options.includeMeasured : ajoute aussi
- * le groupe "Cardio et distance" (row, bike, run...).
- */
-function populateExerciseSelectElement(selectEl, options) {
-  const includeMeasured = Boolean(options && options.includeMeasured);
-  const measuredLabel = (ex) => `${exerciseOptionLabel(ex)} (${MEASURED_EXERCISES[ex].map((u) => UNIT_LABELS[u]).join(" ou ")})`;
-  selectEl.innerHTML = "";
-
-  // "Récents" tout en haut : les 5 derniers exercices utilisés (ils restent
-  // aussi à leur place dans la liste complète, juste en dessous)
-  const recent = getRecentExercises(RECENT_EXERCISES_COUNT, includeMeasured);
-  let mainContainer = selectEl;
-  if (recent.length > 0) {
-    const recentGroup = document.createElement("optgroup");
-    recentGroup.label = "Récents";
-    recent.forEach((ex) => recentGroup.appendChild(createExerciseOption(ex, isMeasuredExercise(ex) ? measuredLabel(ex) : null)));
-    selectEl.appendChild(recentGroup);
-    mainContainer = document.createElement("optgroup");
-    mainContainer.label = "Tous les exercices";
-    selectEl.appendChild(mainContainer);
-  }
-
-  getAllKnownExercises().forEach((ex) => mainContainer.appendChild(createExerciseOption(ex)));
-  if (includeMeasured) {
-    const group = document.createElement("optgroup");
-    group.label = "Cardio et distance";
-    Object.keys(MEASURED_EXERCISES).sort().forEach((ex) => group.appendChild(createExerciseOption(ex, measuredLabel(ex))));
-    selectEl.appendChild(group);
-  }
-  const customOpt = document.createElement("option");
-  customOpt.value = "__custom__";
-  customOpt.textContent = "+ Autre exercice…";
-  selectEl.appendChild(customOpt);
-}
-
 function populateExerciseSelects() {
   populateExerciseFilterSelect();
 }
@@ -1180,19 +1143,6 @@ function showMuscuFeedback(message, isError) {
   muscuFeedback.textContent = message;
   muscuFeedback.className = "form-feedback rf-toast " + (isError ? "form-feedback-error" : "form-feedback-success");
   muscuFeedbackTimer = setTimeout(() => { muscuFeedback.textContent = ""; }, isError ? 4500 : 3500);
-}
-
-/** Affiche un badge mis en avant quand la séance qu'on vient d'enregistrer bat un record. */
-function showMuscuRecordBadge(newRecords) {
-  clearTimeout(muscuFeedbackTimer);
-  const list = newRecords.map((r) => `${escapeHtml(r.exercise)} : ${escapeHtml(r.text || `${formatNumberFr(r.value)} kg`)}`).join(" · ");
-  muscuFeedback.innerHTML = `
-    <span class="record-badge">
-      <svg viewBox="0 0 24 24" class="record-badge-icon"><path d="M6 2h12v6a6 6 0 0 1-5 5.92V17h3v2H8v-2h3v-3.08A6 6 0 0 1 6 8V2Zm2 2v4a4 4 0 0 0 8 0V4H8ZM3 4h2v3a3 3 0 0 1-2 2.83V4Zm16 0h2v5.83A3 3 0 0 1 19 7V4Z"/></svg>
-      Nouveau record ! ${list}
-    </span>`;
-  muscuFeedback.className = "form-feedback rf-toast rf-toast-record";
-  muscuFeedbackTimer = setTimeout(() => { muscuFeedback.innerHTML = ""; }, 6000);
 }
 
 // --------------------------------------------------------------------------

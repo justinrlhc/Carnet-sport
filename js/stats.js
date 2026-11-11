@@ -88,14 +88,6 @@ function computeCrossfitStructuredVolume(session, entry) {
   return totalReps * perRepWeight;
 }
 
-/** Renvoie true si une date (format "AAAA-MM-JJ") tombe dans les X derniers jours. */
-function isWithinLastDays(dateStr, nbDays) {
-  const date = new Date(dateStr);
-  const limit = new Date();
-  limit.setDate(limit.getDate() - nbDays);
-  return date >= limit;
-}
-
 /**
  * Estime le 1RM (la charge maximale que tu pourrais soulever une seule fois)
  * à partir d'une série réellement effectuée, grâce à la formule d'Epley,
@@ -373,7 +365,6 @@ const manual1rmExerciseCustom = document.getElementById("manual-1rm-exercise-cus
 const manual1rmWeightInput = document.getElementById("manual-1rm-weight");
 const manual1rmDateInput = document.getElementById("manual-1rm-date");
 const manual1rmNotesInput = document.getElementById("manual-1rm-notes");
-const btnToggle1rmForm = document.getElementById("btn-toggle-1rm-form");
 const btnCancel1rmForm = document.getElementById("btn-cancel-1rm-form");
 
 // ----- Éléments du formulaire "résultat connu" (CrossFit) -----
@@ -386,7 +377,6 @@ const manualCfExtraRepsInput = document.getElementById("manual-cf-extra-reps");
 const manualCfDateInput = document.getElementById("manual-cf-date");
 const manualCfNotesInput = document.getElementById("manual-cf-notes");
 const manualCfLevelSelect = document.getElementById("manual-cf-level");
-const btnToggleCfForm = document.getElementById("btn-toggle-cf-record-form");
 const btnCancelCfForm = document.getElementById("btn-cancel-cf-record-form");
 
 /** Meilleur temps de chaque test cardio dans les séances : { "Row 2000 m": { value, date } }. */
@@ -517,7 +507,10 @@ function buildExerciseRecord(exercise, data) {
     else if (estimate) headline = { value: estimate.value, source: "estimated", date: estimate.date, weight: estimate.weight, reps: estimate.reps };
   }
   // Exercice vu seulement dans un WOD : une charge max utilisée, jamais de 1RM
-  const weightOnly = !headline && !showReps && sessionRec && sessionRec.maxWeight ? sessionRec.maxWeight : null;
+  const weightOnly = !headline && !showReps && sessionRec && sessionRec.maxWeight && sessionRec.maxWeight.value > 0 ? sessionRec.maxWeight : null;
+  // v28 : exercice noté sans charge (abdos, gainage, mouvement de spé sans poids…) :
+  // pas de « 0 kg », on montre ses reps max en une série, comme au poids du corps
+  const repsOnly = !headline && !showReps && !weightOnly && sessionReps ? sessionReps : null;
 
   const entry = { group: isBW ? "bw" : "load", name: exercise, icon: exerciseIconSvg(exercise), tiles: [], notes: [], bigUnit: "", series: "load" };
   if (headline) {
@@ -545,6 +538,18 @@ function buildExerciseRecord(exercise, data) {
       origin: date ? `${manualRepsIsBest ? "noté le" : "le"} ${recordDay(date)}${lest}` : "",
       series: "reps",
     });
+  } else if (repsOnly) {
+    Object.assign(entry, {
+      group: "bw",
+      value: `${repsOnly.value} reps`,
+      big: String(repsOnly.value),
+      bigUnit: "reps",
+      label: "en une série",
+      bigLabel: "en une série, sans charge",
+      sub: recordAgo(repsOnly.date),
+      origin: repsOnly.date ? `le ${recordDay(repsOnly.date)}` : "",
+      series: "reps",
+    });
   } else if (weightOnly) {
     Object.assign(entry, {
       group: "load",
@@ -565,7 +570,7 @@ function buildExerciseRecord(exercise, data) {
     const fromWod = sessionRec.maxWeight.source === "crossfit" ? " (vu en WOD)" : "";
     entry.tiles.push({ v: `${kg(sessionRec.maxWeight.value)}${sessionRec.maxWeight.reps ? ` × ${sessionRec.maxWeight.reps}` : ""}`, l: `${isBW ? "Lest max" : "Charge max"}${fromWod}` });
   }
-  if (sessionRec && sessionRec.maxReps && !showReps) {
+  if (sessionRec && sessionRec.maxReps && !showReps && !repsOnly) {
     entry.tiles.push({ v: `${sessionRec.maxReps.value} reps`, l: sessionRec.maxReps.weight > 0 ? `Reps max (à ${kg(sessionRec.maxReps.weight)})` : "Reps max" });
   }
   if (showReps && manualRepsIsBest && sessionReps) entry.tiles.push({ v: `${sessionReps.value} reps`, l: "En séance" });
@@ -594,7 +599,7 @@ function buildExerciseRecord(exercise, data) {
       deleteManualOneRM(exercise);
       afterManualRecordChange();
     } });
-  } else {
+  } else if (!repsOnly) {
     entry.actions.push(manual
       ? { label: "Modifier mon 1RM noté", cls: "edit-1rm-link", style: "gold", run: () => open1rmForm(exercise, manual, { mode: "load" }) }
       : { label: "+ Noter mon 1RM connu", cls: "add-1rm-link", style: "gold", run: () => open1rmForm(exercise, null, { mode: "load" }) });
@@ -681,7 +686,8 @@ function buildAllRecordEntries(data) {
     ...Object.keys(data.manualCf).filter((name) => isRecordableWod(name)),
   ])).sort((a, b) => a.localeCompare(b, "fr"));
   return [
-    ...exerciseNames.map((name) => buildExerciseRecord(name, data)),
+    // v28 : un mouvement de WOD noté sans charge ni reps n'a rien à montrer
+    ...exerciseNames.map((name) => buildExerciseRecord(name, data)).filter((entry) => entry.value !== "—"),
     ...wodNames.map((name) => buildWodRecord(name, data)),
   ];
 }
@@ -1318,9 +1324,6 @@ if (manualPerfModeGroup) {
   });
 }
 
-if (btnToggle1rmForm) {
-  btnToggle1rmForm.addEventListener("click", () => open1rmForm(null, null));
-}
 if (btnCancel1rmForm) {
   btnCancel1rmForm.addEventListener("click", () => returnToProfileCard(closeManualPerfForm()));
 }
@@ -1426,9 +1429,6 @@ if (manualCfWodSelect) {
   });
 }
 
-if (btnToggleCfForm) {
-  btnToggleCfForm.addEventListener("click", () => openCfRecordForm(null, null));
-}
 if (btnCancelCfForm) {
   btnCancelCfForm.addEventListener("click", () => { manualCfForm.style.display = "none"; manualCfForm.reset(); });
 }
