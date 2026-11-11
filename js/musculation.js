@@ -16,7 +16,7 @@ const DEFAULT_EXERCISES = [
   "Bench Press", "Incline Bench Press",
   "Strict Press", "Push Press", "Push Jerk", "Split Jerk",
   "Barbell Row", "Dumbbell Row", "Shrugs", "Rear Delt Fly",
-  "Barbell Lunge", "Barbell Reverse Lunge", "Walking Lunge",
+  "Barbell Lunge", "Barbell Reverse Lunge", "Dumbbell Lunge", "Walking Lunge",
   "Snatch", "Power Snatch", "Squat Snatch", "Snatch Pull", "Snatch Balance",
   "Clean", "Power Clean", "Clean & Jerk", "Squat Clean", "Hang Power Clean", "Clean Pull",
   "Barbell Thruster", "Barbell Curl", "Dumbbell Curl", "Skull Crusher", "Lateral Raise",
@@ -113,6 +113,7 @@ const CARDIO_TESTS = ["Row 2000 m", "Run 5 km"];
 // Rappel affiché dans les listes déroulantes : "Skull Crusher · barre au front"
 const EXERCISE_FRENCH_HINTS = {
   "Bulgarian Split Squat": "fente bulgare",
+  "Dumbbell Lunge": "fentes haltères",
   "Barbell Row": "rowing barre",
   "Dumbbell Row": "rowing haltères",
   "Rear Delt Fly": "oiseau",
@@ -140,6 +141,7 @@ const SEARCH_KEYWORD_ALIASES = {
   "pull-up": "traction tractions",
   "push-up": "pompe pompes",
   "lunge": "fente fentes",
+  "dumbbell": "haltère haltères",
   "split squat": "fente fentes",
   "row": "rowing tirage",
   "run": "course courir",
@@ -923,6 +925,13 @@ function previewMuscuRecords(exercises) {
     }
     if (value > getRecordBestBefore(name, recordsBefore)) {
       hits.push({ exercise: name, text: mode === "reps" ? `${value} rep${value > 1 ? "s" : ""}` : `1RM estimé ${formatNumberFr(Math.round(value))} kg` });
+      return;
+    }
+    // v30 : plus de reps qu'avant à cette charge (40 kg × 12 après 40 kg × 10)
+    if (mode === "load") {
+      const sets = exercises.filter((e) => e.exercise === name && Array.isArray(e.sets)).flatMap((e) => e.sets);
+      const repsHit = findRepsAtWeightRecord(recordsBefore[name] ? recordsBefore[name].repsAtWeight : null, sets);
+      if (repsHit) hits.push({ exercise: name, text: formatRepsAtWeight(repsHit) });
     }
   });
   return hits;

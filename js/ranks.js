@@ -129,7 +129,7 @@ const RANK_CATEGORIES = [
 ];
 
 // Au-delà de 10 répétitions (MAX_REPS_FOR_1RM_ESTIMATE, défini dans stats.js),
-// estimateOneRepMax renvoie simplement la charge réellement soulevée.
+// estimateOneRepMax compte la série comme une série de 10 (v30).
 
 // --------------------------------------------------------------------------
 // OUTILS DE CALCUL
@@ -231,8 +231,8 @@ function collectPerformances() {
       const estimate = estimateOneRepMax(weight, reps);
       if (estimate > p.load) {
         p.load = estimate;
-        // D'où vient la charge : vraie série d'1 rep, estimation, ou simple charge soulevée (> 10 reps)
-        p.loadSource = reps === 1 ? "single" : reps <= MAX_REPS_FOR_1RM_ESTIMATE ? "estimate" : "lifted";
+        // D'où vient la charge : vraie série d'1 rep, ou estimation (plafonnée à 10 reps depuis la v30)
+        p.loadSource = reps === 1 ? "single" : "estimate";
       }
     }
   };
@@ -837,7 +837,7 @@ function renderProfile() {
       <div class="profile-category-header"><h3>Succès</h3><span class="profile-category-basis profile-accent-text">${unlockedCount} débloqués sur ${ACHIEVEMENTS.length}</span></div>
       <div class="achievement-grid">${achievementsHtml}</div>
     </section>
-    <p class="records-footnote">Barèmes : standards ${profile.sex === "female" ? "féminins" : "masculins"} StrengthLog (squat, bench, deadlift, strict press) et Strength Level (front squat, haltéro, gym), ajustés à ton poids de corps. Row 2000 m et Run 5 km : standards Rowing Level et Running Level, ajustés à ton âge. 1RM estimés avec la formule d’Epley sur les séries de 10 répétitions maximum.</p>
+    <p class="records-footnote">Barèmes : standards ${profile.sex === "female" ? "féminins" : "masculins"} StrengthLog (squat, bench, deadlift, strict press) et Strength Level (front squat, haltéro, gym), ajustés à ton poids de corps. Row 2000 m et Run 5 km : standards Rowing Level et Running Level, ajustés à ton âge. 1RM estimés avec la formule d’Epley (au-delà de 10 répétitions, une série compte comme 10).</p>
   `;
 }
 

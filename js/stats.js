@@ -97,14 +97,16 @@ function computeCrossfitStructuredVolume(session, entry) {
  *
  * RÈGLE UNIQUE pour toute l'appli (Records, Statistiques, Profil) : au-delà
  * de 10 répétitions l'estimation n'est plus fiable, la série compte alors
- * simplement pour la charge réellement soulevée.
+ * comme une série de 10 (plafond de 1,33 × la charge).
  */
 const MAX_REPS_FOR_1RM_ESTIMATE = 10;
 
 function estimateOneRepMax(weight, reps) {
   if (reps <= 1) return weight; // à 1 répétition, le "1RM" est simplement le poids soulevé
-  if (reps > MAX_REPS_FOR_1RM_ESTIMATE) return weight; // série trop longue : charge soulevée
-  return weight * (1 + reps / 30);
+  // v30 : au-delà de 10 reps, la série compte comme une série de 10 (plafond).
+  // Avant, elle retombait à la seule charge soulevée : 40 kg × 12 valait
+  // moins que 40 kg × 10, et une rep de plus faisait baisser le 1RM.
+  return weight * (1 + Math.min(reps, MAX_REPS_FOR_1RM_ESTIMATE) / 30);
 }
 
 /**
@@ -130,7 +132,8 @@ function computeMuscuRecords(options) {
 
   function ensureRecord(exercise) {
     if (!records[exercise]) {
-      records[exercise] = { oneRM: null, maxWeight: null, maxReps: null };
+      // repsAtWeight (v30) : reps max par charge, pour le record « plus de reps à cette charge »
+      records[exercise] = { oneRM: null, maxWeight: null, maxReps: null, repsAtWeight: {} };
     }
     return records[exercise];
   }
@@ -150,6 +153,7 @@ function computeMuscuRecords(options) {
     if (!rec.maxReps || set.reps > rec.maxReps.value) {
       rec.maxReps = { value: set.reps, weight: set.weight, date };
     }
+    addRepsAtWeight(rec.repsAtWeight, set.weight, set.reps);
   }
 
   /** Un exercice structuré vu dans un WOD : alimente uniquement la charge max utilisée. */
@@ -269,7 +273,7 @@ function computeCfRecords(options) {
  * pour détecter les records battus par cette séance. Utilisée juste après
  * addSession() pour afficher le badge "Nouveau record !". Mêmes règles que
  * la page Records :
- *  - exercice avec charge : 1RM estimé (Epley jusqu'à 10 reps) ;
+ *  - exercice avec charge : 1RM estimé (Epley, plafonné à 10 reps), ou plus de reps qu'avant à la même charge ;
  *  - exercice au poids du corps : reps max en une série ;
  *  - test cardio : meilleur temps (cardioBestsBefore = computeCardioTestBests()
  *    calculé AVANT l'enregistrement).
@@ -317,12 +321,16 @@ function detectMuscuNewRecords(recordsBeforeSave, newExercises, sessionDate, car
       return;
     }
 
-    if (!after.oneRM || after.oneRM.value <= 0 || after.oneRM.date !== sessionDate) return;
     const previousLoad = Math.max(before && before.oneRM ? before.oneRM.value : 0, manualLoads[entry.exercise] ? Number(manualLoads[entry.exercise].weight) || 0 : 0);
-    if (after.oneRM.value > previousLoad) {
+    if (after.oneRM && after.oneRM.value > 0 && after.oneRM.date === sessionDate && after.oneRM.value > previousLoad) {
       const value = Math.round(after.oneRM.value);
       hits.push({ exercise: entry.exercise, value, text: `${formatNumberFr(value)} kg` });
+      return;
     }
+    // v30 : plus de reps qu'avant à cette charge (40 kg × 12 après 40 kg × 10)
+    const sets = newExercises.filter((e) => e && e.exercise === entry.exercise && Array.isArray(e.sets)).flatMap((e) => e.sets);
+    const repsHit = findRepsAtWeightRecord(before ? before.repsAtWeight : null, sets);
+    if (repsHit) hits.push({ exercise: entry.exercise, value: repsHit.reps, text: formatRepsAtWeight(repsHit) });
   });
 
   return hits;
@@ -928,7 +936,7 @@ if (recordsInfoBtn) {
   recordsInfoBtn.addEventListener("click", () => openSheet((sheet, close) => {
     sheet.insertAdjacentHTML("beforeend", `
       <h2>Comment sont calculés tes records ?</h2>
-      <p class="rc-info-p"><b>1RM estimé</b> : calculé à partir de tes séries avec la formule d'Epley, seulement avec les séries de 10 reps maximum. Au-delà, c'est la charge soulevée qui compte. Une estimation n'est jamais une valeur mesurée.</p>
+      <p class="rc-info-p"><b>1RM estimé</b> : calculé à partir de tes séries avec la formule d'Epley, au-delà de 10 reps, une série compte comme une série de 10. Une estimation n'est jamais une valeur mesurée.</p>
       <p class="rc-info-p"><b>1RM noté</b> : une charge que tu as vraiment testée et notée à la main. Elle est affichée si elle est plus haute que l'estimation.</p>
       <p class="rc-info-p"><b>Poids du corps</b> : le plus de reps d'affilée en une série. <b>Cardio</b> : ton meilleur temps. <b>WOD</b> : ton meilleur score, niveau par niveau (RX, Inter, Scaled) ; le « WOD du jour » n'a pas de record.</p>
       <p class="rc-info-p">Les séries d'échauffement ne comptent jamais.</p>
@@ -955,8 +963,8 @@ if (recordsFiltersEl) {
  * On rejoue toutes les séances dans l'ordre chronologique et on note chaque
  * fois qu'un record est BATTU (la toute première fois ne compte pas : il n'y
  * avait rien à battre). Mêmes règles que le reste de l'appli :
- *  - exercice avec charge : 1RM estimé (Epley jusqu'à 10 reps) — Musculation
- *    et cours de spé ;
+ *  - exercice avec charge : 1RM estimé (Epley, plafonné à 10 reps), ou à
+ *    défaut plus de reps qu'avant à la même charge (v30) — Musculation et cours de spé ;
  *  - exercice au poids du corps : reps max en une série ;
  *  - test cardio (rameur, course) : meilleur temps ;
  *  - WOD avec un nom : meilleur temps ou meilleure performance, à niveau égal.
@@ -970,6 +978,7 @@ function computeRecordHistory() {
     .map((item) => item.session);
 
   const best = {};
+  const repsTables = {}; // v30 : exercice → { charge: reps max }
   const events = [];
   const kg = (v) => `${formatNumberFr(Math.round(v * 10) / 10)} kg`;
 
@@ -1007,9 +1016,11 @@ function computeRecordHistory() {
       });
     });
 
+    const loadBeaten = new Set();
     Object.entries(top).forEach(([key, t]) => {
       const previous = best[key];
       const better = previous === undefined ? false : t.mode === "time" ? t.value < previous : t.value > previous + 1e-9;
+      if (better && t.mode === "load") loadBeaten.add(t.name);
       if (better) {
         let value, gain, detail = "";
         if (t.mode === "time") {
@@ -1028,6 +1039,21 @@ function computeRecordHistory() {
         events.push({ date: session.date, sessionId: session.id, title: t.name, value, gain, detail, target: { section: "exercise", name: t.name } });
       }
       if (previous === undefined || better) best[key] = t.value;
+    });
+
+    // v30 : plus de reps qu'avant à la même charge (si le 1RM n'a pas déjà été battu)
+    const setsByName = {};
+    entries.forEach((entry) => {
+      if (entry.time || (typeof isBodyweightExercise === "function" && isBodyweightExercise(entry.name))) return;
+      (setsByName[entry.name] = setsByName[entry.name] || []).push(...entry.sets);
+    });
+    Object.entries(setsByName).forEach(([name, sets]) => {
+      const table = (repsTables[name] = repsTables[name] || {});
+      const hit = loadBeaten.has(name) ? null : findRepsAtWeightRecord(table, sets);
+      if (hit) {
+        events.push({ date: session.date, sessionId: session.id, title: name, value: formatRepsAtWeight(hit), gain: `+${hit.gain} rep${hit.gain > 1 ? "s" : ""}`, detail: "à cette charge", target: { section: "exercise", name } });
+      }
+      sets.forEach((set) => addRepsAtWeight(table, Number(set.weight) || 0, Number(set.reps) || 0));
     });
 
     // ---- WOD avec un nom, par niveau ----

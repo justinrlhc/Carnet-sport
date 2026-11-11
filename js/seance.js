@@ -217,6 +217,58 @@ function getRecordBestBefore(name, recordsBefore) {
   return Math.max(record && record.oneRM ? record.oneRM.value : 0, manual ? Number(manual.weight) || 0 : 0);
 }
 
+// --------------------------------------------------------------------------
+// v30 — RECORD « PLUS DE REPS À CETTE CHARGE »
+// 40 kg × 12 après 40 kg × 10 est un record, même si le 1RM estimé ne bouge
+// pas. On compare aux séries faites à cette charge OU PLUS LOURD : 30 kg × 15
+// n'est pas un record si tu as déjà fait 40 kg × 15. Il faut avoir déjà fait
+// cette charge (ou plus lourd) au moins une fois : sinon c'est le 1RM qui juge.
+// Table : { "40": 10, "42.5": 8 } (charge → reps max), hors échauffements.
+// --------------------------------------------------------------------------
+
+/** Ajoute une série à une table charge → reps max. */
+function addRepsAtWeight(table, weight, reps) {
+  if (!(weight > 0) || !(reps > 0)) return;
+  const key = String(weight);
+  if (!(table[key] >= reps)) table[key] = reps;
+}
+
+/** Reps max faites à cette charge ou plus lourd, ou null si jamais fait. */
+function bestRepsAtOrAbove(table, weight) {
+  let best = null;
+  Object.keys(table || {}).forEach((key) => {
+    if (Number(key) >= weight - 1e-9 && (best === null || table[key] > best)) best = table[key];
+  });
+  return best;
+}
+
+/** Vrai si la série bat le record de reps à sa charge. */
+function isRepsAtWeightRecord(table, weight, reps) {
+  if (!(weight > 0) || !(reps > 0)) return false;
+  const best = bestRepsAtOrAbove(table, weight);
+  return best !== null && reps > best;
+}
+
+/** Parmi des séries, celle qui bat le record de reps à sa charge (la plus lourde, puis la plus longue), ou null. */
+function findRepsAtWeightRecord(table, sets) {
+  let hit = null;
+  (sets || []).forEach((set) => {
+    if (!set || set.warmup === true) return;
+    const weight = Number(set.weight) || 0;
+    const reps = Number(set.reps) || 0;
+    if (!isRepsAtWeightRecord(table, weight, reps)) return;
+    if (!hit || weight > hit.weight || (weight === hit.weight && reps > hit.reps)) {
+      hit = { weight, reps, gain: reps - bestRepsAtOrAbove(table, weight) };
+    }
+  });
+  return hit;
+}
+
+/** "40 kg × 12" */
+function formatRepsAtWeight(hit) {
+  return `${formatNumberFr(hit.weight)} kg × ${hit.reps}`;
+}
+
 /** Valeur d'une série pour les records : reps (poids du corps) ou 1RM estimé (charge). */
 function setRecordValue(name, reps, weight) {
   if (!(reps > 0) || typeof estimateOneRepMax !== "function") return 0; // stats.js pas encore chargé
@@ -297,6 +349,9 @@ function createSetCard(item, ctx) {
     let number = 0;
     let bestInSession = 0;
     const list = [];
+    // v30 : reps max par charge (avant la séance, puis séries cochées au-dessus)
+    const beforeRecord = ctx.recordsBefore ? ctx.recordsBefore[item.exercise] : null;
+    const repsTable = ctx.showPR && !measured && !isBW ? { ...((beforeRecord && beforeRecord.repsAtWeight) || {}) } : null;
     item.sets.forEach((set, index) => {
       if (!set.warmup) number += 1;
       const prev = previous[index] || null;
@@ -319,6 +374,10 @@ function createSetCard(item, ctx) {
         const value = setRecordValue(item.exercise, typedReps || 0, typedWeight || 0);
         if (value > recordBest && value > bestInSession) info.pr = true;
         bestInSession = Math.max(bestInSession, value);
+        if (repsTable) {
+          if (isRepsAtWeightRecord(repsTable, typedWeight || 0, typedReps || 0)) info.pr = true;
+          addRepsAtWeight(repsTable, typedWeight || 0, typedReps || 0);
+        }
       }
       list.push(info);
     });
