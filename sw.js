@@ -5,8 +5,8 @@
 //
 // Stratégie :
 //  - La page (index.html) : on essaie d'abord le réseau, pour avoir toujours
-//    la dernière version ; si ça ne répond pas en 3 secondes ou s'il n'y a pas
-//    de réseau, on sert la copie enregistrée.
+//    la dernière version ; si ça ne répond pas en 3 secondes, s'il n'y a pas
+//    de réseau ou si le site est en panne, on sert la copie enregistrée.
 //  - Les fichiers versionnés (style.css?v=10, js/app.js?v=10...) : la copie
 //    enregistrée suffit, puisqu'une nouvelle version change leur adresse (?v=11).
 //  - Chart.js et les polices (sites externes) : copie enregistrée en priorité.
@@ -116,9 +116,16 @@ async function handlePage(event) {
   const cached = await cache.match(pageKey);
   if (!cached) return fromNetwork; // première visite : il faut le réseau
 
+  // v28 : un site en panne répond quand même (erreur 503, 404…) : dans ce
+  // cas aussi, on ouvre la copie enregistrée plutôt que la page d'erreur.
+  const networkOk = fromNetwork.then((response) => {
+    if (!response.ok) throw new Error(`page en erreur (${response.status})`);
+    return response;
+  });
+
   // Réseau d'abord, mais sans attendre plus de 3 s : sinon la copie enregistrée
   const timeout = new Promise((resolve) => setTimeout(() => resolve(cached), NETWORK_TIMEOUT_MS));
-  return Promise.race([fromNetwork.catch(() => cached), timeout]);
+  return Promise.race([networkOk.catch(() => cached), timeout]);
 }
 
 async function handleAsset(request) {
@@ -157,7 +164,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (sameOrigin) {
-    // Autres fichiers du site (icônes, manifeste) : réseau d'abord, copie si hors ligne
-    event.respondWith(fetch(request).catch(async () => (await caches.match(request)) || Response.error()));
+    // Autres fichiers du site (icônes, manifeste) : réseau d'abord, copie si
+    // hors ligne ou si le site répond par une erreur
+    event.respondWith(fetch(request)
+      .then(async (response) => (response.ok ? response : (await caches.match(request)) || response))
+      .catch(async () => (await caches.match(request)) || Response.error()));
   }
 });
