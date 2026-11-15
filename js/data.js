@@ -687,6 +687,7 @@ function clearAllData() {
   localStorage.removeItem("carnet_muscu_draft");
   localStorage.removeItem("carnet_cf_draft");
   localStorage.removeItem("carnet_rest_seconds");
+  localStorage.removeItem("carnet_keep_awake");
 }
 
 // --------------------------------------------------------------------------
@@ -771,6 +772,8 @@ function exportAllData() {
     weightGoal: getWeightGoal(),
     // v31 : réglage du temps de repos (0 = minuteur désactivé)
     restSeconds: typeof getRestSeconds === "function" ? getRestSeconds() : null,
+    // v32 : réglage « écran allumé pendant la séance »
+    keepAwake: typeof getKeepAwake === "function" ? getKeepAwake() : true,
     // Succès débloqués (avec leur date) : ils restent acquis même après un import
     achievements: JSON.parse(localStorage.getItem("carnet_achievements") || "{}"),
   };
@@ -811,6 +814,7 @@ function importAllData(jsonString) {
   if (payload.sex === "female" || payload.sex === "male") setSex(payload.sex);
   else if ("sex" in payload) localStorage.removeItem(STORAGE_KEY_SEX);
   if (typeof setRestSeconds === "function" && typeof REST_CHOICES !== "undefined" && REST_CHOICES.includes(payload.restSeconds)) setRestSeconds(payload.restSeconds);
+  if (typeof setKeepAwake === "function" && typeof payload.keepAwake === "boolean") setKeepAwake(payload.keepAwake);
   // Mensurations et objectif (absents des sauvegardes d'avant la version 26)
   storageWrite(STORAGE_KEY_MEASUREMENTS, JSON.stringify(Array.isArray(payload.measurements) ? payload.measurements : []));
   if (payload.weightGoal && typeof payload.weightGoal === "object") storageWrite(STORAGE_KEY_WEIGHT_GOAL, JSON.stringify(payload.weightGoal));

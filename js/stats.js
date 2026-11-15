@@ -1067,7 +1067,7 @@ function computeRecordHistory() {
         const key = `wodtime:${session.wodName}:${level}`;
         const previous = best[key];
         if (previous !== undefined && session.timeSeconds < previous) {
-          events.push({ date: session.date, title, value: formatSecondsToTime(session.timeSeconds), gain: `−${formatSecondsToTime(previous - session.timeSeconds)}`, detail: "", target: { section: "wod", name: session.wodName } });
+          events.push({ date: session.date, sessionId: session.id, title, value: formatSecondsToTime(session.timeSeconds), gain: `−${formatSecondsToTime(previous - session.timeSeconds)}`, detail: "", target: { section: "wod", name: session.wodName } });
         }
         if (previous === undefined || session.timeSeconds < previous) best[key] = session.timeSeconds;
       }
@@ -1078,7 +1078,7 @@ function computeRecordHistory() {
         if (previous !== undefined && isBetterPerformance(perf, previous)) {
           const roundGain = perf.rounds - previous.rounds;
           const gain = roundGain > 0 ? `+${roundGain} round${roundGain > 1 ? "s" : ""}` : `+${repsText(perf.extraReps - previous.extraReps)}`;
-          events.push({ date: session.date, title, value: roundsScoreText(perf.rounds, perf.extraReps), gain, detail: "", target: { section: "wod", name: session.wodName } });
+          events.push({ date: session.date, sessionId: session.id, title, value: roundsScoreText(perf.rounds, perf.extraReps), gain, detail: "", target: { section: "wod", name: session.wodName } });
         }
         if (previous === undefined || isBetterPerformance(perf, previous)) best[key] = perf;
       }

@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=31">
+  <link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
 
@@ -565,6 +565,15 @@
           </div>
           <p class="form-feedback" id="rest-feedback"></p>
           <p class="form-hint">Le minuteur démarre chaque fois que tu coches une série (✓). Tu peux l'ajuster de 15 s ou le passer ; à la fin, il disparaît simplement.</p>
+          <div class="ob-field settings-field-next">
+            <label id="keep-awake-label">Écran allumé pendant la séance</label>
+            <div class="ob-seg" role="radiogroup" aria-labelledby="keep-awake-label" id="settings-keep-awake">
+              <button type="button" data-awake="1" role="radio">Oui</button>
+              <button type="button" data-awake="0" role="radio">Non</button>
+            </div>
+          </div>
+          <p class="form-feedback" id="keep-awake-feedback"></p>
+          <p class="form-hint" id="keep-awake-hint"></p>
         </div>
 
         <!-- Installation sur l'écran d'accueil : le contenu dépend de l'endroit
@@ -693,16 +702,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=31"></script>
-  <script src="js/seance.js?v=31"></script>
-  <script src="js/musculation.js?v=31"></script>
-  <script src="js/crossfit.js?v=31"></script>
-  <script src="js/mensurations.js?v=31"></script>
-  <script src="js/stats.js?v=31"></script>
-  <script src="js/charts.js?v=31"></script>
-  <script src="js/ranks.js?v=31"></script>
-  <script src="js/settings.js?v=31"></script>
-  <script src="js/app.js?v=31"></script>
+  <script src="js/data.js?v=32"></script>
+  <script src="js/seance.js?v=32"></script>
+  <script src="js/musculation.js?v=32"></script>
+  <script src="js/crossfit.js?v=32"></script>
+  <script src="js/mensurations.js?v=32"></script>
+  <script src="js/stats.js?v=32"></script>
+  <script src="js/charts.js?v=32"></script>
+  <script src="js/ranks.js?v=32"></script>
+  <script src="js/settings.js?v=32"></script>
+  <script src="js/app.js?v=32"></script>
 </body>
 </html>
 

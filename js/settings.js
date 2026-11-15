@@ -31,6 +31,7 @@ function refreshEntireApp() {
   if (typeof renderCfForm === "function") renderCfForm();
   if (typeof renderCfHistory === "function") renderCfHistory();
   renderRestSetting();
+  renderKeepAwakeSetting();
 
   if (typeof renderMensurations === "function") renderMensurations();
   const heightInputEl = document.getElementById("height-input");
@@ -533,3 +534,44 @@ if (restSelect) {
   });
 }
 renderRestSetting();
+
+// --------------------------------------------------------------------------
+// v32 — SÉANCES DE MUSCULATION : ÉCRAN ALLUMÉ (verrou de seance.js)
+// --------------------------------------------------------------------------
+
+const keepAwakeChoice = document.getElementById("settings-keep-awake");
+
+function renderKeepAwakeSetting() {
+  if (!keepAwakeChoice) return;
+  const enabled = getKeepAwake();
+  keepAwakeChoice.querySelectorAll("button[data-awake]").forEach((button) => {
+    const selected = (button.dataset.awake === "1") === enabled;
+    button.classList.toggle("on", selected);
+    button.setAttribute("aria-checked", selected ? "true" : "false");
+  });
+  const hint = document.getElementById("keep-awake-hint");
+  if (hint) {
+    hint.textContent = isKeepAwakeSupported()
+      ? "Pendant une séance de musculation en cours, l'écran ne se met plus en veille : plus besoin de déverrouiller le téléphone entre deux séries. Il se rendort tout seul après 15 min sans y toucher, quand tu quittes l'appli, ou dès que la séance est terminée."
+      : "Ce navigateur ne permet pas à l'appli de garder l'écran allumé : ce réglage n'aura pas d'effet ici.";
+  }
+}
+
+if (keepAwakeChoice) {
+  keepAwakeChoice.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-awake]");
+    if (!button) return;
+    const enabled = button.dataset.awake === "1";
+    if (enabled === getKeepAwake()) return;
+    setKeepAwake(enabled);
+    renderKeepAwakeSetting();
+    const feedback = document.getElementById("keep-awake-feedback");
+    if (!feedback) return;
+    feedback.textContent = enabled
+      ? "L'écran restera allumé pendant tes séances."
+      : "L'écran se mettra en veille comme d'habitude.";
+    feedback.className = "form-feedback form-feedback-success";
+    setTimeout(() => { feedback.textContent = ""; }, 3500);
+  });
+}
+renderKeepAwakeSetting();

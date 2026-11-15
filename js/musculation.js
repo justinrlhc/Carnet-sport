@@ -675,8 +675,14 @@ function renderMuscuList() {
 }
 
 /** Affiche l'accueil, ou la séance en cours s'il y en a une. */
+/** Vrai pendant une séance en cours (pas pendant la modification d'une ancienne séance). */
+function isMuscuSessionLive() {
+  return Boolean(muscuDraft) && muscuDraft.mode !== "edit";
+}
+
 function renderMuscuView() {
   document.body.classList.toggle("rf-live-on", Boolean(muscuDraft));
+  if (typeof syncScreenWakeLock === "function") syncScreenWakeLock(); // v32 : écran allumé pendant la séance
   if (!muscuDraft) {
     muscuHome.hidden = false;
     muscuLive.hidden = true;

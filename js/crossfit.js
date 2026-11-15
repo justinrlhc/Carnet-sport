@@ -1118,6 +1118,58 @@ function formatWodResult(session) {
   return "—";
 }
 
+// v32 : cartes dépliées par l'utilisateur (gardées ouvertes quand la liste est redessinée)
+const cfHistoryOpen = new Set();
+
+/** Déplie ou replie le détail d'une carte de l'historique CrossFit. */
+function setCfHistoryCardOpen(card, open) {
+  const body = card.querySelector(".hc-body");
+  const toggle = card.querySelector(".hc-toggle");
+  if (!body || !toggle) return;
+  body.hidden = !open;
+  card.classList.toggle("is-open", open);
+  toggle.setAttribute("aria-expanded", String(open));
+  toggle.setAttribute("aria-label", toggle.getAttribute("aria-label").replace(open ? "voir le détail" : "masquer le détail", open ? "masquer le détail" : "voir le détail"));
+  if (open) cfHistoryOpen.add(card.dataset.sessionId);
+  else cfHistoryOpen.delete(card.dataset.sessionId);
+}
+
+/** Menu « ··· » → Supprimer : demande confirmation, puis met toute l'appli à jour. */
+function deleteCfSessionFromHistory(session) {
+  const isSpe = isSpeSession(session.wodName);
+  const confirmed = confirm(`Supprimer définitivement ${isSpe ? "cette séance" : "ce WOD"} ? Cette action est irréversible.`);
+  if (!confirmed) return;
+  deleteSession(session.id);
+  cfHistoryOpen.delete(String(session.id));
+  if (cfState && cfState.editingId === session.id) cancelCfEdit(); // on modifiait justement ce WOD
+  renderCfHistory();
+  if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
+  if (typeof renderDashboard === "function") renderDashboard();
+  if (typeof renderRecords === "function") renderRecords();
+}
+
+/** Résumé d'une ligne de l'historique : "6:42 · For Time · Barbell Thruster, Pull-up". */
+function summarizeCfSession(session) {
+  const entries = session.exercises || [];
+  const names = [];
+  entries.forEach((entry) => {
+    if (typeof entry === "object" && entry !== null && entry.exercise && !names.includes(entry.exercise)) names.push(entry.exercise);
+  });
+  const freeText = entries.filter((entry) => typeof entry === "string" && entry.trim() !== "");
+  const parts = [];
+  if (isSpeSession(session.wodName)) {
+    parts.push("Séance spécifique");
+    if (names.length) parts.push(`${names.length} exercice${names.length > 1 ? "s" : ""}`);
+  } else {
+    const result = formatWodResult(session);
+    parts.push(result !== "—" ? result : "sans score");
+    if (session.wodType) parts.push(session.wodType);
+  }
+  if (names.length) parts.push(names.join(", "));
+  else if (freeText.length) parts.push(freeText[0]);
+  return parts.join(" · ");
+}
+
 function renderCfHistory() {
   const filter = cfFilterSelect.value || "all";
   const levelFilter = cfFilterLevelSelect.value || "all";
@@ -1137,9 +1189,35 @@ function renderCfHistory() {
     return;
   }
 
+  // Records battus par séance : mêmes règles que la page Records (un tout
+  // premier résultat ne compte pas, il n'y avait rien à battre)
+  const recordsBySession = {};
+  if (typeof computeRecordHistory === "function") {
+    computeRecordHistory().forEach((event) => {
+      if (!event.sessionId) return;
+      (recordsBySession[event.sessionId] = recordsBySession[event.sessionId] || new Set()).add(event.title);
+    });
+  }
+
+  // v32 : une ligne par WOD, rangée par mois ; toucher la ligne déplie le détail
+  // (même présentation que l'historique de musculation)
+  let lastMonth = "";
   sessions.slice(0, cfHistoryLimit).forEach((session) => {
+    const day = parseLocalDate(session.date);
+    const month = day.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    if (month !== lastMonth) {
+      lastMonth = month;
+      const heading = document.createElement("div");
+      heading.className = "hc-month";
+      heading.textContent = month;
+      cfHistoryList.appendChild(heading);
+    }
+
     const card = document.createElement("div");
-    card.className = "history-card";
+    const records = recordsBySession[session.id] || new Set();
+    const open = cfHistoryOpen.has(String(session.id));
+    const isSpe = isSpeSession(session.wodName);
+    card.className = "history-card hc-card" + (records.size > 0 ? " has-record" : "") + (open ? " is-open" : "");
     card.dataset.sessionId = session.id; // le calendrier de Statistiques retrouve la carte
 
     const exercisesHtml = (session.exercises || [])
@@ -1156,7 +1234,8 @@ function renderCfHistory() {
             ? computeCrossfitStructuredVolume(session, entry)
             : 0;
           const volumeText = volume > 0 ? ` · Volume : ${Math.round(volume).toLocaleString("fr-FR")} kg` : "";
-          return `<p class="history-card-notes"><strong>${escapeHtml(entry.exercise)}</strong> — ${entry.warmup === true ? "échauff. " : ""}${escapeHtml(repsDetail)}${weightText}${volumeText}</p>`;
+          const pr = records.has(entry.exercise) ? ` <span class="hist-pr">PR</span>` : "";
+          return `<p class="history-card-notes"><strong>${escapeHtml(entry.exercise)}</strong>${pr} — ${entry.warmup === true ? "échauff. " : ""}${escapeHtml(repsDetail)}${weightText}${volumeText}</p>`;
         }
         return null;
       })
@@ -1168,38 +1247,40 @@ function renderCfHistory() {
       .map((movement) => `<p class="history-card-notes">${escapeHtml(movement)}</p>`)
       .join("");
 
+    const title = session.wodName || "WOD";
+    const weekday = day.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
+    const fullDate = day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    const label = `${title}${session.rxOrScaled ? ` ${session.rxOrScaled}` : ""}, ${fullDate}`;
     card.innerHTML = `
-      <div class="history-card-header">
-        <span class="history-card-title-group">
-          <span class="history-card-title">${escapeHtml(session.wodName)}</span>
-          ${session.rxOrScaled ? `<span class="badge-rpe ${getLevelBadgeClass(session.rxOrScaled)}">${escapeHtml(session.rxOrScaled)}</span>` : ""}
-        </span>
-        <span class="history-card-date">${parseLocalDate(session.date).toLocaleDateString("fr-FR")}</span>
+      <div class="hc-head">
+        <button type="button" class="hc-toggle" aria-expanded="${open}" aria-label="${escapeHtml(`${label} : ${open ? "masquer" : "voir"} le détail`)}">
+          <span class="hc-day"><b>${day.getDate()}</b><small>${escapeHtml(weekday)}</small></span>
+          <span class="hc-main">
+            <span class="hc-title-row">
+              <span class="hc-title">${escapeHtml(title)}</span>
+              ${session.rxOrScaled ? `<span class="badge-rpe ${getLevelBadgeClass(session.rxOrScaled)}">${escapeHtml(session.rxOrScaled)}</span>` : ""}
+            </span>
+            <span class="hc-sum">${escapeHtml(summarizeCfSession(session))}</span>
+          </span>
+          ${records.size > 0 ? `<span class="hc-pr" title="${records.size} record${records.size > 1 ? "s" : ""}">🏆 ${records.size}</span>` : ""}
+        </button>
+        <button type="button" class="hc-dots" aria-label="${escapeHtml(`Actions : ${label}`)}"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
       </div>
-      ${isSpeSession(session.wodName)
-        ? `<p class="history-card-sets">Séance spécifique</p>`
-        : `<p class="history-card-sets">${escapeHtml(session.wodType || "")}${formatWodResult(session) !== "—" ? ` — <strong>${escapeHtml(formatWodResult(session))}</strong>` : " — sans score"}</p>`}
-      ${exercisesHtml}
-      ${freeTextHtml}
-      ${session.notes ? `<p class="history-card-notes">${escapeHtml(session.notes)}</p>` : ""}
-      <div class="history-card-actions">
-        <button type="button" class="btn btn-secondary btn-small hist-repeat-btn">Refaire ce WOD</button>
-        <button type="button" class="btn btn-secondary btn-small hist-edit-btn">Modifier</button>
-        <button type="button" class="btn btn-secondary btn-small hist-delete-btn">Supprimer</button>
+      <div class="hc-body hc-body-cf"${open ? "" : " hidden"}>
+        ${isSpe
+          ? `<p class="history-card-sets">Séance spécifique</p>`
+          : `<p class="history-card-sets">${escapeHtml(session.wodType || "")}${formatWodResult(session) !== "—" ? ` — <strong>${escapeHtml(formatWodResult(session))}</strong>` : " — sans score"}</p>`}
+        ${exercisesHtml}
+        ${freeTextHtml}
+        ${session.notes ? `<p class="history-card-notes">${escapeHtml(session.notes)}</p>` : ""}
       </div>
     `;
-    card.querySelector(".hist-repeat-btn").addEventListener("click", () => duplicateCfSession(session));
-    card.querySelector(".hist-edit-btn").addEventListener("click", () => startEditCfSession(session));
-    card.querySelector(".hist-delete-btn").addEventListener("click", () => {
-      const confirmed = confirm("Supprimer définitivement ce WOD ? Cette action est irréversible.");
-      if (!confirmed) return;
-      deleteSession(session.id);
-      if (cfState && cfState.editingId === session.id) cancelCfEdit(); // on modifiait justement ce WOD
-      renderCfHistory();
-      if (typeof notifyRankProgress === "function") notifyRankProgress(); // rangs et succès
-      if (typeof renderDashboard === "function") renderDashboard();
-      if (typeof renderRecords === "function") renderRecords();
-    });
+    card.querySelector(".hc-toggle").addEventListener("click", () => setCfHistoryCardOpen(card, !card.classList.contains("is-open")));
+    card.querySelector(".hc-dots").addEventListener("click", () => openActionSheet(`${title} · ${day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`, [
+      { label: isSpe ? "Refaire cette séance" : "Refaire ce WOD", onClick: () => duplicateCfSession(session) },
+      { label: "Modifier", onClick: () => startEditCfSession(session) },
+      { label: "Supprimer", danger: true, onClick: () => deleteCfSessionFromHistory(session) },
+    ]));
     cfHistoryList.appendChild(card);
   });
 

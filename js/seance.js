@@ -743,6 +743,91 @@ function formatClock(totalSeconds) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+// --------------------------------------------------------------------------
+// v32 — ÉCRAN ALLUMÉ PENDANT LA SÉANCE
+// Tant qu'une séance de musculation est en cours, on demande au téléphone de
+// ne pas mettre l'écran en veille : plus besoin de le déverrouiller entre
+// deux séries. Le téléphone reprend la main tout seul dans trois cas :
+//  - la séance est terminée ou abandonnée ;
+//  - l'appli n'est plus à l'écran (le système relâche lui-même le verrou) ;
+//  - personne n'a touché l'écran depuis 15 min (téléphone oublié sur un banc).
+// Réglable dans Réglages (allumé par défaut). Sans effet si le navigateur ne
+// connaît pas cette fonction ou la refuse (mode économie d'énergie).
+// --------------------------------------------------------------------------
+
+const STORAGE_KEY_KEEP_AWAKE = "carnet_keep_awake";
+const KEEP_AWAKE_IDLE_MS = 15 * 60 * 1000;
+
+function isKeepAwakeSupported() {
+  return typeof navigator !== "undefined" && Boolean(navigator.wakeLock) && typeof navigator.wakeLock.request === "function";
+}
+
+/** Réglage « Écran allumé pendant la séance » (oui par défaut). */
+function getKeepAwake() {
+  return localStorage.getItem(STORAGE_KEY_KEEP_AWAKE) !== "0";
+}
+
+function setKeepAwake(enabled) {
+  storageWrite(STORAGE_KEY_KEEP_AWAKE, enabled ? "1" : "0");
+  syncScreenWakeLock();
+}
+
+const screenWake = {
+  lock: null, // verrou obtenu du navigateur
+  pending: false, // demande en cours
+  lastTouch: Date.now(), // dernier geste sur l'écran
+};
+
+/** Faut-il garder l'écran allumé maintenant ? */
+function shouldKeepScreenAwake() {
+  if (!isKeepAwakeSupported() || !getKeepAwake()) return false;
+  if (document.visibilityState !== "visible") return false;
+  if (typeof isMuscuSessionLive !== "function" || !isMuscuSessionLive()) return false;
+  return Date.now() - screenWake.lastTouch < KEEP_AWAKE_IDLE_MS;
+}
+
+/** Prend ou relâche le verrou selon la situation. À appeler dès que quelque chose change. */
+function syncScreenWakeLock() {
+  if (!shouldKeepScreenAwake()) {
+    if (screenWake.lock) {
+      const lock = screenWake.lock;
+      screenWake.lock = null;
+      Promise.resolve(lock.release()).catch(() => {});
+    }
+    return;
+  }
+  if (screenWake.lock || screenWake.pending) return;
+  screenWake.pending = true;
+  Promise.resolve()
+    .then(() => navigator.wakeLock.request("screen"))
+    .then((lock) => {
+      screenWake.pending = false;
+      if (!shouldKeepScreenAwake()) { // la séance s'est terminée pendant la demande
+        Promise.resolve(lock.release()).catch(() => {});
+        return;
+      }
+      screenWake.lock = lock;
+      // Le système le relâche quand l'appli passe en arrière-plan : on le note
+      if (typeof lock.addEventListener === "function") {
+        lock.addEventListener("release", () => { if (screenWake.lock === lock) screenWake.lock = null; });
+      }
+    })
+    .catch(() => { screenWake.pending = false; }); // refusé (économie d'énergie…) : on n'insiste pas
+}
+
+/** Un geste sur l'écran : la séance est bien en cours. */
+function noteScreenTouch() {
+  screenWake.lastTouch = Date.now();
+  if (!screenWake.lock) syncScreenWakeLock();
+}
+
+["pointerdown", "keydown", "input"].forEach((type) => document.addEventListener(type, noteScreenTouch, { passive: true, capture: true }));
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") screenWake.lastTouch = Date.now(); // revenir sur l'appli compte comme un geste
+  syncScreenWakeLock();
+});
+setInterval(syncScreenWakeLock, 30 * 1000); // relâche le verrou après 15 min sans geste
+
 const restTimer = {
   state: null, // { endsAt, total, label }
   interval: null,

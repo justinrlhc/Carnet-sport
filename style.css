@@ -2665,3 +2665,17 @@ button.st-day:active { filter: brightness(1.3); }
    ========================================================================== */
 /* Deux champs côte à côte : alignés par le bas même si un libellé passe sur 2 lignes */
 .form-row-inline-end { align-items: end; }
+
+/* ==========================================================================
+   v32 — HISTORIQUE CROSSFIT COMPACT (même présentation que la musculation)
+   Une ligne par WOD : jour, nom + niveau, score et mouvements ; rangée par mois.
+   ========================================================================== */
+.hc-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hc-title-row .hc-title { min-width: 0; }
+.hc-title-row .badge-rpe { flex-shrink: 0; margin: 0; }
+.hc-body-cf .history-card-sets { margin: 0 0 2px; }
+.hc-body-cf .history-card-notes { margin: 6px 0 0; }
+.hc-body-cf .history-card-notes strong { color: var(--text-secondary); font-style: normal; }
+
+/* v32 — Réglages : deuxième réglage dans le même bloc */
+.settings-field-next { margin-top: 18px; }

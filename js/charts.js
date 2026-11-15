@@ -513,8 +513,9 @@ function showSessionInHistory(session) {
   }
   const card = find();
   if (!card) return;
-  // v29 : l'historique de musculation est replié par défaut, la séance retrouvée s'ouvre
+  // v29 / v32 : les historiques sont repliés par défaut, la séance retrouvée s'ouvre
   if (isMuscu && typeof setMuscuHistoryCardOpen === "function") setMuscuHistoryCardOpen(card, true);
+  if (!isMuscu && typeof setCfHistoryCardOpen === "function") setCfHistoryCardOpen(card, true);
   if (typeof card.scrollIntoView === "function") card.scrollIntoView({ behavior: "smooth", block: "center" });
   card.classList.add("hist-flash");
   setTimeout(() => card.classList.remove("hist-flash"), 2200);
