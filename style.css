@@ -2587,13 +2587,14 @@ button.st-day { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 button.st-day:active { filter: brightness(1.3); }
 .st-day.out { background: transparent; }
 .st-day.future { background: transparent; color: var(--text-muted); }
-.st-day.today { box-shadow: inset 0 0 0 2px var(--accent); }
-.st-day.m { background: rgba(211,162,78,.22); color: var(--text-primary); }
-.st-day.c { background: rgba(76,175,125,.2); color: var(--text-primary); }
-.st-day.mc { background: linear-gradient(135deg, rgba(211,162,78,.28) 50%, rgba(76,175,125,.24) 50%); color: var(--text-primary); }
+/* v33 : couleurs pleines (musculation dorée, CrossFit verte), chiffre foncé ; aujourd'hui entouré de blanc pour rester visible sur une case colorée */
+.st-day.today { box-shadow: inset 0 0 0 2px var(--text-primary); }
+.st-day.m { background: var(--accent); color: #17130a; font-weight: 800; }
+.st-day.c { background: var(--success); color: #0b1a12; font-weight: 800; }
+.st-day.mc { background: linear-gradient(135deg, var(--accent) 50%, var(--success) 50%); color: #17130a; font-weight: 800; }
 .st-leg { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11px; color: var(--text-muted); margin-top: 10px; }
-.st-leg span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; background: rgba(211,162,78,.5); }
-.st-leg span.c::before { background: rgba(76,175,125,.5); }
+.st-leg span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; background: var(--accent); }
+.st-leg span.c::before { background: var(--success); }
 .st-leg span.n { margin-left: auto; }
 .st-leg span.n::before { display: none; }
 .st-weeks { display: flex; gap: 4px; margin-top: 12px; align-items: center; }
