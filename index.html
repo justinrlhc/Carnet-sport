@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=30">
+  <link rel="stylesheet" href="style.css?v=31">
 </head>
 <body>
 
@@ -400,7 +400,7 @@
           </div>
           <p class="form-feedback form-feedback-error" id="manual-1rm-feedback"></p>
         </form>
-        <form id="manual-cf-record-form" class="manual-record-form rc-form" style="display:none;">
+        <form id="manual-cf-record-form" class="manual-record-form rc-form" style="display:none;" novalidate>
           <h2 class="rc-form-title">Noter un résultat de WOD</h2>
           <div class="form-row">
             <label for="manual-cf-wod-select">Nom du WOD</label>
@@ -416,25 +416,28 @@
               <option value="Scaled">Scaled</option>
             </select>
           </div>
-          <div class="form-row form-row-inline">
-            <div>
-              <label for="manual-cf-time">Temps</label>
-              <input type="text" id="manual-cf-time" inputmode="decimal" placeholder="ex : 5:48 ou 5,48">
-            </div>
-            <div>
-              <label for="manual-cf-date">Date <span class="label-optional">(optionnel)</span></label>
-              <input type="date" id="manual-cf-date">
+          <div class="form-row">
+            <label for="manual-cf-time-min">Temps <span class="label-optional">(WOD chronométré)</span></label>
+            <div class="cardio-time-row">
+              <input type="text" id="manual-cf-time-min" inputmode="numeric" pattern="[0-9]*" placeholder="5" aria-label="Minutes" autocomplete="off">
+              <span class="cardio-time-unit">min</span>
+              <input type="text" id="manual-cf-time-sec" inputmode="numeric" pattern="[0-9]*" placeholder="48" aria-label="Secondes" autocomplete="off">
+              <span class="cardio-time-unit">s</span>
             </div>
           </div>
-          <div class="form-row form-row-inline">
+          <div class="form-row form-row-inline form-row-inline-end">
             <div>
-              <label for="manual-cf-rounds">Rounds <span class="label-optional">(si pas de temps)</span></label>
-              <input type="number" id="manual-cf-rounds" min="0">
+              <label for="manual-cf-rounds">Rounds <span class="label-optional">(AMRAP)</span></label>
+              <input type="number" id="manual-cf-rounds" min="0" step="1" inputmode="numeric">
             </div>
             <div>
               <label for="manual-cf-extra-reps">Reps en plus</label>
-              <input type="number" id="manual-cf-extra-reps" min="0">
+              <input type="number" id="manual-cf-extra-reps" min="0" step="1" inputmode="numeric">
             </div>
+          </div>
+          <div class="form-row">
+            <label for="manual-cf-date">Date <span class="label-optional">(optionnel)</span></label>
+            <input type="date" id="manual-cf-date">
           </div>
           <div class="form-row">
             <label for="manual-cf-notes">Notes <span class="label-optional">(optionnel)</span></label>
@@ -444,6 +447,7 @@
             <button type="submit" class="btn btn-primary btn-small">Enregistrer ce résultat</button>
             <button type="button" class="btn btn-secondary btn-small" id="btn-cancel-cf-record-form">Annuler</button>
           </div>
+          <p class="form-feedback form-feedback-error" id="manual-cf-feedback"></p>
         </form>
 
         <!-- Fil des derniers records battus (rempli par js/stats.js) -->
@@ -689,16 +693,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script src="js/data.js?v=30"></script>
-  <script src="js/seance.js?v=30"></script>
-  <script src="js/musculation.js?v=30"></script>
-  <script src="js/crossfit.js?v=30"></script>
-  <script src="js/mensurations.js?v=30"></script>
-  <script src="js/stats.js?v=30"></script>
-  <script src="js/charts.js?v=30"></script>
-  <script src="js/ranks.js?v=30"></script>
-  <script src="js/settings.js?v=30"></script>
-  <script src="js/app.js?v=30"></script>
+  <script src="js/data.js?v=31"></script>
+  <script src="js/seance.js?v=31"></script>
+  <script src="js/musculation.js?v=31"></script>
+  <script src="js/crossfit.js?v=31"></script>
+  <script src="js/mensurations.js?v=31"></script>
+  <script src="js/stats.js?v=31"></script>
+  <script src="js/charts.js?v=31"></script>
+  <script src="js/ranks.js?v=31"></script>
+  <script src="js/settings.js?v=31"></script>
+  <script src="js/app.js?v=31"></script>
 </body>
 </html>
 

@@ -178,7 +178,7 @@ function renderDashboard() {
   const recentList = document.getElementById("recent-sessions-list");
   recentList.innerHTML = "";
 
-  const sorted = [...sessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const sorted = sortSessionsNewestFirst(sessions); // v31 : le même jour, la dernière enregistrée d'abord
   const recent = sorted.slice(0, 5);
 
   if (recent.length === 0) {
@@ -222,9 +222,10 @@ if (statPrCard) {
 
 // Transforme "2026-09-10" en "Aujourd'hui", "Hier", ou "Il y a X jours"
 function formatRelativeDate(dateStr) {
-  const date = new Date(dateStr);
+  // v31 : date lue en heure LOCALE. Avec new Date("2026-11-14") (minuit UTC),
+  // la séance du jour s'affichait « Hier » à l'ouest de la France (Antilles, Amériques).
+  const date = parseLocalDate(dateStr);
   const today = new Date();
-  date.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
 
   const diffDays = Math.round((today - date) / (1000 * 60 * 60 * 24));
@@ -338,10 +339,21 @@ if (APP_VERSION && IS_ONLINE_SITE) {
 
 let lastSeenDay = todayLocalDateString();
 
+/** v31 : aucun champ date ne propose un jour après aujourd'hui. */
+function capAllDateInputs() {
+  document.querySelectorAll('input[type="date"]').forEach(capDateInput);
+}
+capAllDateInputs();
+// Champs créés plus tard (fenêtres) ou appli restée ouverte après minuit
+document.addEventListener("focusin", (event) => {
+  if (event.target && event.target.type === "date") capDateInput(event.target);
+});
+
 function refreshIfNewDay() {
   const today = todayLocalDateString();
   if (today === lastSeenDay) return;
   lastSeenDay = today;
+  capAllDateInputs();
   if (typeof refreshCfDateIfStale === "function") refreshCfDateIfStale();
   if (typeof refreshWeightDateIfStale === "function") refreshWeightDateIfStale();
   const active = document.querySelector(".section.is-active");

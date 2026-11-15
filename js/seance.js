@@ -220,9 +220,13 @@ function getRecordBestBefore(name, recordsBefore) {
 // --------------------------------------------------------------------------
 // v30 — RECORD « PLUS DE REPS À CETTE CHARGE »
 // 40 kg × 12 après 40 kg × 10 est un record, même si le 1RM estimé ne bouge
-// pas. On compare aux séries faites à cette charge OU PLUS LOURD : 30 kg × 15
-// n'est pas un record si tu as déjà fait 40 kg × 15. Il faut avoir déjà fait
-// cette charge (ou plus lourd) au moins une fois : sinon c'est le 1RM qui juge.
+// pas. Deux conditions (resserrées en v31) :
+//   1. tu as DÉJÀ fait cette charge exacte (une séance précédente, ou une
+//      série plus haut dans la séance en cours) ;
+//   2. tu fais plus de reps que ton maximum à cette charge OU PLUS LOURD
+//      (30 kg × 15 n'est pas un record si tu as déjà fait 40 kg × 15).
+// La première série à une charge jamais faite (montée de charge, série
+// légère) n'est donc jamais un record de reps : c'est le 1RM estimé qui juge.
 // Table : { "40": 10, "42.5": 8 } (charge → reps max), hors échauffements.
 // --------------------------------------------------------------------------
 
@@ -231,6 +235,11 @@ function addRepsAtWeight(table, weight, reps) {
   if (!(weight > 0) || !(reps > 0)) return;
   const key = String(weight);
   if (!(table[key] >= reps)) table[key] = reps;
+}
+
+/** Vrai si cette charge exacte figure dans la table. */
+function hasRepsAtWeight(table, weight) {
+  return Object.keys(table || {}).some((key) => Math.abs(Number(key) - weight) < 1e-9);
 }
 
 /** Reps max faites à cette charge ou plus lourd, ou null si jamais fait. */
@@ -242,24 +251,37 @@ function bestRepsAtOrAbove(table, weight) {
   return best;
 }
 
-/** Vrai si la série bat le record de reps à sa charge. */
+/** Vrai si la série bat le record de reps à sa charge (charge déjà faite + plus de reps qu'à cette charge ou plus lourd). */
 function isRepsAtWeightRecord(table, weight, reps) {
   if (!(weight > 0) || !(reps > 0)) return false;
+  if (!hasRepsAtWeight(table, weight)) return false;
   const best = bestRepsAtOrAbove(table, weight);
   return best !== null && reps > best;
 }
 
-/** Parmi des séries, celle qui bat le record de reps à sa charge (la plus lourde, puis la plus longue), ou null. */
+/**
+ * Parmi les séries d'une séance (dans l'ordre), celle qui bat le record de
+ * reps à sa charge : la plus lourde, puis la plus longue. Null s'il n'y en a pas.
+ * Les séries sont jugées une par une, comme le badge PR pendant la séance :
+ * chaque série faite compte pour les suivantes. `gain` = reps gagnées sur le
+ * maximum d'avant (à cette charge ou plus lourd).
+ */
 function findRepsAtWeightRecord(table, sets) {
+  const working = { ...(table || {}) };
+  const baseline = {}; // charge → reps max à battre avant le premier record de la séance
   let hit = null;
   (sets || []).forEach((set) => {
     if (!set || set.warmup === true) return;
     const weight = Number(set.weight) || 0;
     const reps = Number(set.reps) || 0;
-    if (!isRepsAtWeightRecord(table, weight, reps)) return;
-    if (!hit || weight > hit.weight || (weight === hit.weight && reps > hit.reps)) {
-      hit = { weight, reps, gain: reps - bestRepsAtOrAbove(table, weight) };
+    if (isRepsAtWeightRecord(working, weight, reps)) {
+      const key = String(weight);
+      if (!(key in baseline)) baseline[key] = bestRepsAtOrAbove(working, weight);
+      if (!hit || weight > hit.weight || (weight === hit.weight && reps > hit.reps)) {
+        hit = { weight, reps, gain: reps - baseline[key] };
+      }
     }
+    addRepsAtWeight(working, weight, reps);
   });
   return hit;
 }
@@ -712,7 +734,7 @@ function getRestSeconds() {
 }
 
 function setRestSeconds(seconds) {
-  localStorage.setItem(STORAGE_KEY_REST_SECONDS, String(seconds));
+  storageWrite(STORAGE_KEY_REST_SECONDS, String(seconds));
 }
 
 /** 90 → "1:30" */

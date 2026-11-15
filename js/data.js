@@ -88,6 +88,76 @@ function todayLocalDateString() {
 // rend le code beaucoup plus facile à modifier.
 // ==========================================================================
 
+// --------------------------------------------------------------------------
+// v31 — ÉCRITURE DANS LE STOCKAGE
+// Toutes les écritures passent par ici. Si le stockage du téléphone est plein
+// (ou refusé), on le DIT au lieu d'échouer en silence : avant, « Enregistrer »
+// semblait ne rien faire. L'erreur est relancée pour que l'action en cours
+// s'arrête là (la séance en cours reste à l'écran, rien n'est effacé).
+// --------------------------------------------------------------------------
+let storageWarnedAt = 0;
+
+function storageWrite(key, value, options) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    const now = Date.now();
+    // Brouillons (écrits à chaque touche) : pas de message, pour ne pas couper la saisie
+    const silent = Boolean(options && options.silent);
+    if (!silent && now - storageWarnedAt > 60000) { // un seul message par minute
+      storageWarnedAt = now;
+      const message = "Enregistrement impossible : le stockage de l'appli est plein ou indisponible.\n\n" +
+        "Ta saisie reste à l'écran. Va dans Réglages → « Exporter mes données » pour mettre tes séances à l'abri, " +
+        "puis supprime d'anciennes séances et réessaie.";
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        try { window.alert(message); } catch (alertError) { console.error(message); }
+      }
+    }
+    throw error;
+  }
+}
+
+/** v31 : vrai si la date ("AAAA-MM-JJ") est APRÈS aujourd'hui. */
+function isFutureDate(dateStr) {
+  return typeof dateStr === "string" && dateStr > todayLocalDateString();
+}
+
+const FUTURE_DATE_MESSAGE = "La date ne peut pas être dans le futur.";
+
+/** Accords : "1 rep" / "12 reps", "1 round" / "3 rounds" (v31). */
+function repsText(count) {
+  return `${count} rep${count > 1 ? "s" : ""}`;
+}
+function roundsText(count) {
+  return `${count} round${count > 1 ? "s" : ""}`;
+}
+/** Score d'AMRAP en version courte : "5 rounds", "1 round", "5 + 3 rounds". */
+function roundsScoreText(rounds, extraReps) {
+  return extraReps ? `${rounds} + ${extraReps} rounds` : roundsText(rounds);
+}
+
+/** Champ date : le calendrier ne propose plus de jour après aujourd'hui. */
+function capDateInput(input) {
+  if (input) input.max = todayLocalDateString();
+}
+
+/**
+ * v31 : séances de la plus récente à la plus ancienne. Le même jour, c'est
+ * la dernière enregistrée qui passe en premier (avant : la plus ancienne).
+ */
+function sortSessionsNewestFirst(sessions) {
+  return sessions
+    .map((session, index) => ({ session, index }))
+    .sort((a, b) => {
+      if (a.session.date !== b.session.date) return a.session.date < b.session.date ? 1 : -1;
+      const createdA = typeof a.session.createdAt === "string" ? a.session.createdAt : "";
+      const createdB = typeof b.session.createdAt === "string" ? b.session.createdAt : "";
+      if (createdA !== createdB) return createdA < createdB ? 1 : -1;
+      return b.index - a.index; // à défaut : l'ordre d'enregistrement
+    })
+    .map((item) => item.session);
+}
+
 // Les "clés" sous lesquelles on range nos données dans la boîte localStorage
 const STORAGE_KEY_SESSIONS = "carnet_sessions";
 const STORAGE_KEY_BODYWEIGHT = "carnet_bodyweight";
@@ -146,7 +216,7 @@ function getAllSessions() {
  * updateSession ou deleteSession ci-dessous.
  */
 function saveAllSessions(sessions) {
-  localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
+  storageWrite(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
 }
 
 /**
@@ -204,7 +274,7 @@ function getAllBodyweightEntries() {
 
 function saveAllBodyweightEntries(entries) {
   entries.sort((a, b) => new Date(a.date) - new Date(b.date));
-  localStorage.setItem(STORAGE_KEY_BODYWEIGHT, JSON.stringify(entries));
+  storageWrite(STORAGE_KEY_BODYWEIGHT, JSON.stringify(entries));
 }
 
 function addBodyweightEntry(date, weight) {
@@ -255,7 +325,11 @@ function getCurrentBodyweight() {
   const entries = getAllBodyweightEntries();
   if (entries.length === 0) return null;
   const sorted = [...entries].sort((a, b) => new Date(a.date) - new Date(b.date));
-  return sorted[sorted.length - 1].weight;
+  // v31 : une pesée datée dans le futur (ancienne faute de frappe, import)
+  // n'est pas ton poids actuel tant que sa date n'est pas arrivée
+  const upToToday = sorted.filter((entry) => !isFutureDate(entry.date));
+  const list = upToToday.length > 0 ? upToToday : sorted;
+  return list[list.length - 1].weight;
 }
 
 // Pesées triées par date, gardées en mémoire tant qu'elles ne changent pas
@@ -306,7 +380,7 @@ function getHeight() {
 }
 
 function setHeight(heightCm) {
-  localStorage.setItem(STORAGE_KEY_HEIGHT, String(heightCm));
+  storageWrite(STORAGE_KEY_HEIGHT, String(heightCm));
 }
 
 /**
@@ -346,7 +420,7 @@ function getAllMeasurements() {
 }
 
 function saveAllMeasurements(list) {
-  localStorage.setItem(STORAGE_KEY_MEASUREMENTS, JSON.stringify(list));
+  storageWrite(STORAGE_KEY_MEASUREMENTS, JSON.stringify(list));
 }
 
 /** Enregistre les tours d'une date (remplace ceux déjà notés ce jour-là). Renvoie "added" ou "updated". */
@@ -376,7 +450,7 @@ function getWeightGoal() {
 }
 
 function setWeightGoal(goal) {
-  localStorage.setItem(STORAGE_KEY_WEIGHT_GOAL, JSON.stringify(goal));
+  storageWrite(STORAGE_KEY_WEIGHT_GOAL, JSON.stringify(goal));
 }
 
 function clearWeightGoal() {
@@ -401,7 +475,7 @@ function getSex() {
 }
 
 function setSex(sex) {
-  localStorage.setItem(STORAGE_KEY_SEX, sex === "female" ? "female" : "male");
+  storageWrite(STORAGE_KEY_SEX, sex === "female" ? "female" : "male");
 }
 
 /** Année de naissance enregistrée, ou null. */
@@ -411,7 +485,7 @@ function getBirthYear() {
 }
 
 function setBirthYear(year) {
-  localStorage.setItem(STORAGE_KEY_BIRTH_YEAR, String(year));
+  storageWrite(STORAGE_KEY_BIRTH_YEAR, String(year));
 }
 
 /**
@@ -444,13 +518,13 @@ function getManualOneRMs() {
 function setManualOneRM(exercise, data) {
   const all = getManualOneRMs();
   all[exercise] = data;
-  localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(all));
+  storageWrite(STORAGE_KEY_MANUAL_1RM, JSON.stringify(all));
 }
 
 function deleteManualOneRM(exercise) {
   const all = getManualOneRMs();
   delete all[exercise];
-  localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(all));
+  storageWrite(STORAGE_KEY_MANUAL_1RM, JSON.stringify(all));
 }
 
 // Perfs notées à la main pour les exercices au poids du corps (reps max
@@ -471,13 +545,13 @@ function getManualReps() { return readJsonObject(STORAGE_KEY_MANUAL_REPS); }
 function setManualReps(exercise, data) {
   const all = getManualReps();
   all[exercise] = data;
-  localStorage.setItem(STORAGE_KEY_MANUAL_REPS, JSON.stringify(all));
+  storageWrite(STORAGE_KEY_MANUAL_REPS, JSON.stringify(all));
 }
 
 function deleteManualReps(exercise) {
   const all = getManualReps();
   delete all[exercise];
-  localStorage.setItem(STORAGE_KEY_MANUAL_REPS, JSON.stringify(all));
+  storageWrite(STORAGE_KEY_MANUAL_REPS, JSON.stringify(all));
 }
 
 function getManualTimes() { return readJsonObject(STORAGE_KEY_MANUAL_TIMES); }
@@ -486,13 +560,13 @@ function getManualTimes() { return readJsonObject(STORAGE_KEY_MANUAL_TIMES); }
 function setManualTime(exercise, data) {
   const all = getManualTimes();
   all[exercise] = data;
-  localStorage.setItem(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(all));
+  storageWrite(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(all));
 }
 
 function deleteManualTime(exercise) {
   const all = getManualTimes();
   delete all[exercise];
-  localStorage.setItem(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(all));
+  storageWrite(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(all));
 }
 
 function getManualCfBests() {
@@ -505,13 +579,13 @@ function getManualCfBests() {
 function setManualCfBest(wodName, data) {
   const all = getManualCfBests();
   all[wodName] = data;
-  localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(all));
+  storageWrite(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(all));
 }
 
 function deleteManualCfBest(wodName) {
   const all = getManualCfBests();
   delete all[wodName];
-  localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(all));
+  storageWrite(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(all));
 }
 
 // --------------------------------------------------------------------------
@@ -526,7 +600,7 @@ const STORAGE_KEY_INITIALIZED = "carnet_initialized";
 
 function ensureInitialized() {
   if (localStorage.getItem(STORAGE_KEY_INITIALIZED)) return;
-  localStorage.setItem(STORAGE_KEY_INITIALIZED, "1");
+  storageWrite(STORAGE_KEY_INITIALIZED, "1");
 }
 
 // --------------------------------------------------------------------------
@@ -554,7 +628,7 @@ function isOnboardingDone() {
 }
 
 function markOnboardingDone() {
-  localStorage.setItem(STORAGE_KEY_ONBOARDED, "1");
+  storageWrite(STORAGE_KEY_ONBOARDED, "1");
 }
 
 function ensureOnboardingFlag() {
@@ -629,7 +703,7 @@ function getLastExportDate() {
 }
 
 function markBackupExported(dateStr) {
-  localStorage.setItem(STORAGE_KEY_LAST_EXPORT, dateStr || todayLocalDateString());
+  storageWrite(STORAGE_KEY_LAST_EXPORT, dateStr || todayLocalDateString());
   localStorage.removeItem(STORAGE_KEY_BACKUP_SNOOZE);
 }
 
@@ -668,7 +742,7 @@ function getBackupReminderState() {
 function snoozeBackupReminder(nbDays) {
   const until = parseLocalDate(todayLocalDateString());
   until.setDate(until.getDate() + nbDays);
-  localStorage.setItem(STORAGE_KEY_BACKUP_SNOOZE, toLocalDateString(until));
+  storageWrite(STORAGE_KEY_BACKUP_SNOOZE, toLocalDateString(until));
 }
 
 // --------------------------------------------------------------------------
@@ -695,6 +769,8 @@ function exportAllData() {
     sex: getSex(),
     measurements: getAllMeasurements(),
     weightGoal: getWeightGoal(),
+    // v31 : réglage du temps de repos (0 = minuteur désactivé)
+    restSeconds: typeof getRestSeconds === "function" ? getRestSeconds() : null,
     // Succès débloqués (avec leur date) : ils restent acquis même après un import
     achievements: JSON.parse(localStorage.getItem("carnet_achievements") || "{}"),
   };
@@ -718,24 +794,31 @@ function importAllData(jsonString) {
   }
 
   // Écrits tels quels : ensureDataSanitized() les répare juste après
-  localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(payload.sessions));
-  localStorage.setItem(STORAGE_KEY_BODYWEIGHT, JSON.stringify(Array.isArray(payload.bodyweight) ? payload.bodyweight : []));
+  storageWrite(STORAGE_KEY_SESSIONS, JSON.stringify(payload.sessions));
+  storageWrite(STORAGE_KEY_BODYWEIGHT, JSON.stringify(Array.isArray(payload.bodyweight) ? payload.bodyweight : []));
   const asObject = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
-  localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(asObject(payload.manualOneRMs)));
-  localStorage.setItem(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(asObject(payload.manualCfBests)));
-  localStorage.setItem(STORAGE_KEY_MANUAL_REPS, JSON.stringify(asObject(payload.manualReps)));
-  localStorage.setItem(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(asObject(payload.manualTimes)));
-  if (payload.heightCm) setHeight(payload.heightCm);
+  storageWrite(STORAGE_KEY_MANUAL_1RM, JSON.stringify(asObject(payload.manualOneRMs)));
+  storageWrite(STORAGE_KEY_MANUAL_CF_BEST, JSON.stringify(asObject(payload.manualCfBests)));
+  storageWrite(STORAGE_KEY_MANUAL_REPS, JSON.stringify(asObject(payload.manualReps)));
+  storageWrite(STORAGE_KEY_MANUAL_TIMES, JSON.stringify(asObject(payload.manualTimes)));
+  // v31 : l'import REMPLACE tout. Une sauvegarde sans taille ni année de
+  // naissance les efface donc (avant, les anciennes valeurs restaient). Les
+  // très vieilles sauvegardes, qui n'ont pas ces rubriques, ne touchent à rien.
+  if (Number(payload.heightCm) > 0) setHeight(Number(payload.heightCm));
+  else if ("heightCm" in payload) localStorage.removeItem(STORAGE_KEY_HEIGHT);
   if (Number.isInteger(payload.birthYear) && payload.birthYear > 1900) setBirthYear(payload.birthYear);
+  else if ("birthYear" in payload) localStorage.removeItem(STORAGE_KEY_BIRTH_YEAR);
   if (payload.sex === "female" || payload.sex === "male") setSex(payload.sex);
+  else if ("sex" in payload) localStorage.removeItem(STORAGE_KEY_SEX);
+  if (typeof setRestSeconds === "function" && typeof REST_CHOICES !== "undefined" && REST_CHOICES.includes(payload.restSeconds)) setRestSeconds(payload.restSeconds);
   // Mensurations et objectif (absents des sauvegardes d'avant la version 26)
-  localStorage.setItem(STORAGE_KEY_MEASUREMENTS, JSON.stringify(Array.isArray(payload.measurements) ? payload.measurements : []));
-  if (payload.weightGoal && typeof payload.weightGoal === "object") localStorage.setItem(STORAGE_KEY_WEIGHT_GOAL, JSON.stringify(payload.weightGoal));
+  storageWrite(STORAGE_KEY_MEASUREMENTS, JSON.stringify(Array.isArray(payload.measurements) ? payload.measurements : []));
+  if (payload.weightGoal && typeof payload.weightGoal === "object") storageWrite(STORAGE_KEY_WEIGHT_GOAL, JSON.stringify(payload.weightGoal));
   else localStorage.removeItem(STORAGE_KEY_WEIGHT_GOAL);
 
   // Succès : on restaure ceux de la sauvegarde (une ancienne sauvegarde n'en a pas)
   const achievements = payload.achievements && typeof payload.achievements === "object" ? payload.achievements : {};
-  localStorage.setItem("carnet_achievements", JSON.stringify(achievements));
+  storageWrite("carnet_achievements", JSON.stringify(achievements));
   // La "photo" des rangs est recalculée sans annonce au prochain calcul
   localStorage.removeItem("carnet_rank_snapshot");
   // Le fichier importé EST une sauvegarde : ses données sont à l'abri depuis
@@ -744,7 +827,7 @@ function importAllData(jsonString) {
   if (exportedAt && !isNaN(exportedAt.getTime())) {
     const exportedDay = toLocalDateString(exportedAt);
     const last = getLastExportDate();
-    if (!last || exportedDay > last) localStorage.setItem(STORAGE_KEY_LAST_EXPORT, exportedDay);
+    if (!last || exportedDay > last) storageWrite(STORAGE_KEY_LAST_EXPORT, exportedDay);
   }
 
   // Réparation des données importées (une sauvegarde peut être abîmée),
@@ -813,7 +896,7 @@ function ensureExerciseRenames() {
     delete manual[oldName];
     manualChanged = true;
   });
-  if (manualChanged) localStorage.setItem(STORAGE_KEY_MANUAL_1RM, JSON.stringify(manual));
+  if (manualChanged) storageWrite(STORAGE_KEY_MANUAL_1RM, JSON.stringify(manual));
 
   // Reps et temps notés à la main : en cas de doublon, on garde le nouveau nom
   [STORAGE_KEY_MANUAL_REPS, STORAGE_KEY_MANUAL_TIMES].forEach((key) => {
@@ -826,7 +909,7 @@ function ensureExerciseRenames() {
       delete store[oldName];
       changed = true;
     });
-    if (changed) localStorage.setItem(key, JSON.stringify(store));
+    if (changed) storageWrite(key, JSON.stringify(store));
   });
 }
 
@@ -945,7 +1028,7 @@ function keepRejectedItems(kind, items) {
   try { store = JSON.parse(localStorage.getItem(STORAGE_KEY_REJECTED)) || []; } catch { store = []; }
   if (!Array.isArray(store)) store = [];
   items.forEach((item) => store.push({ kind, at: new Date().toISOString(), item }));
-  localStorage.setItem(STORAGE_KEY_REJECTED, JSON.stringify(store.slice(-200)));
+  storageWrite(STORAGE_KEY_REJECTED, JSON.stringify(store.slice(-200)));
 }
 
 /** Filtre un carnet de records notés à la main : { "Nom": { ...valeur } }. */
@@ -968,7 +1051,7 @@ function sanitizeManualStore(key, isValidEntry) {
   });
   if (rejected.length > 0) {
     keepRejectedItems(key, rejected);
-    localStorage.setItem(key, JSON.stringify(store));
+    storageWrite(key, JSON.stringify(store));
   }
   return rejected.length;
 }
@@ -994,11 +1077,11 @@ function ensureDataSanitized() {
       keepRejectedItems("session", rejected);
       rejectedCount += rejected.length;
       const serialized = JSON.stringify(kept);
-      if (serialized !== rawSessions) localStorage.setItem(STORAGE_KEY_SESSIONS, serialized);
+      if (serialized !== rawSessions) storageWrite(STORAGE_KEY_SESSIONS, serialized);
     } else {
       // Fichier illisible : on le garde de côté plutôt que de l'écraser plus tard
       keepRejectedItems("sessions-file", [rawSessions]);
-      localStorage.setItem(STORAGE_KEY_SESSIONS, "[]");
+      storageWrite(STORAGE_KEY_SESSIONS, "[]");
       rejectedCount += 1;
     }
   }
@@ -1019,10 +1102,10 @@ function ensureDataSanitized() {
       // Toujours rangées par date (la dernière pesée = le poids actuel)
       kept.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
       const serialized = JSON.stringify(kept);
-      if (serialized !== rawWeights) localStorage.setItem(STORAGE_KEY_BODYWEIGHT, serialized);
+      if (serialized !== rawWeights) storageWrite(STORAGE_KEY_BODYWEIGHT, serialized);
     } else {
       keepRejectedItems("bodyweight-file", [rawWeights]);
-      localStorage.setItem(STORAGE_KEY_BODYWEIGHT, "[]");
+      storageWrite(STORAGE_KEY_BODYWEIGHT, "[]");
       rejectedCount += 1;
     }
   }
@@ -1053,16 +1136,19 @@ function ensureDataSanitized() {
     rejectedCount += rejected.length;
     kept.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     const serialized = JSON.stringify(kept);
-    if (serialized !== rawMeasures) localStorage.setItem(STORAGE_KEY_MEASUREMENTS, serialized);
+    if (serialized !== rawMeasures) storageWrite(STORAGE_KEY_MEASUREMENTS, serialized);
   }
   // Objectif de poids illisible : retiré
   if (localStorage.getItem(STORAGE_KEY_WEIGHT_GOAL) !== null && getWeightGoal() === null) localStorage.removeItem(STORAGE_KEY_WEIGHT_GOAL);
   return rejectedCount;
 }
 
-ensureInitialized();
-ensureDataSanitized();
-ensureBodyweightIds();
-ensureMuscuSessionsMigrated();
-ensureExerciseRenames();
-ensureOnboardingFlag();
+// v31 : une étape qui échoue (stockage plein, par exemple) n'empêche plus
+// l'appli de s'ouvrir et de lire ce qui est déjà enregistré.
+[ensureInitialized, ensureDataSanitized, ensureBodyweightIds, ensureMuscuSessionsMigrated, ensureExerciseRenames, ensureOnboardingFlag].forEach((step) => {
+  try {
+    step();
+  } catch (error) {
+    console.error("Démarrage : étape ignorée —", error);
+  }
+});

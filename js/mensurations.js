@@ -155,8 +155,10 @@ function renderWeightHero() {
       <div class="mz-meta">Note ta première pesée juste en dessous : elle sert à ton IMC, au volume des exercices au poids du corps et aux barèmes de tes rangs.</div>`;
     return;
   }
-  const last = entries[entries.length - 1];
   const today = todayLocalDateString();
+  // v31 : une ancienne pesée datée dans le futur n'est pas le « poids actuel » (même règle que getCurrentBodyweight)
+  const notFuture = entries.filter((e) => e.date <= today);
+  const last = notFuture.length ? notFuture[notFuture.length - 1] : entries[entries.length - 1];
   // Écart sur 30 jours (même calcul que le tableau de bord)
   const weightTrend = computeWeightTrend();
   let trend = "";
@@ -250,6 +252,10 @@ weightFormCard.querySelectorAll("[data-step]").forEach((button) => {
 
 weightDateInput.addEventListener("change", () => {
   if (!isValidDateString(weightDateInput.value)) weightDateInput.value = todayLocalDateString();
+  if (isFutureDate(weightDateInput.value)) { // v31 : pas de pesée datée de demain
+    weightDateInput.value = todayLocalDateString();
+    showWeightFeedback(FUTURE_DATE_MESSAGE, true);
+  }
   weightDateTouched = weightDateInput.value !== todayLocalDateString();
   updateWeightDateLabel();
 });
@@ -282,18 +288,68 @@ function afterWeightChange() {
   if (typeof renderDashboard === "function") renderDashboard();
 }
 
+// v31 : garde-fous de la pesée
+const WEIGHT_MIN_KG = 20;
+const WEIGHT_MAX_KG = 400;
+const WEIGHT_JUMP_RATIO = 0.10; // au-delà de 10 % d'écart avec la pesée voisine, on demande confirmation
+
+/** Pesée la plus proche en date (hors celles qu'on est en train de remplacer), ou null. */
+function nearestWeightEntry(date, excludedIds) {
+  let nearest = null;
+  let nearestGap = Infinity;
+  sortedWeights().forEach((entry) => {
+    if (excludedIds.includes(entry.id)) return;
+    const gap = Math.abs(daysBetween(entry.date, date));
+    if (gap <= nearestGap) { nearest = entry; nearestGap = gap; } // à égalité : la plus récente
+  });
+  return nearest;
+}
+
 weightSubmitBtn.addEventListener("click", () => {
   refreshWeightDateIfStale();
   const date = weightDateInput.value;
   const weight = readWeightInput();
-  if (!isValidDateString(date) || weight === null || weight > 400) {
+  if (!isValidDateString(date) || weight === null) {
     showWeightFeedback("Merci d'indiquer une date et un poids valides.", true);
     return;
   }
+  if (isFutureDate(date)) {
+    showWeightFeedback(FUTURE_DATE_MESSAGE, true);
+    return;
+  }
   const rounded = Math.round(weight * 10) / 10;
+  if (rounded < WEIGHT_MIN_KG || rounded > WEIGHT_MAX_KG) {
+    showWeightFeedback(`Indique un poids entre ${WEIGHT_MIN_KG} et ${WEIGHT_MAX_KG} kg.`, true);
+    return;
+  }
+
+  // Une seule pesée par jour : s'il y en a déjà une à cette date, elle est remplacée
+  const sameDay = getAllBodyweightEntries().filter((e) => e && e.date === date && e.id !== weightEditingId);
+  const excluded = sameDay.map((e) => e.id).concat(weightEditingId ? [weightEditingId] : []);
+
+  // Écart inhabituel avec la pesée la plus proche : sans doute une faute de frappe
+  const reference = nearestWeightEntry(date, excluded);
+  if (reference && Number(reference.weight) > 0) {
+    const diff = rounded - Number(reference.weight);
+    if (Math.abs(diff) / Number(reference.weight) > WEIGHT_JUMP_RATIO) {
+      const question = `${kgText(rounded)} kg, c'est ${kgText(Math.abs(Math.round(diff * 10) / 10))} kg de ${diff > 0 ? "plus" : "moins"} que ta pesée du ${dayMonth(reference.date)} (${kgText(reference.weight)} kg).\n\nEnregistrer quand même ?`;
+      if (!confirm(question)) return;
+    }
+  }
+
+  const isToday = date === todayLocalDateString();
   if (weightEditingId) {
+    if (sameDay.length > 0) {
+      if (!confirm(`Il y a déjà une pesée le ${dayMonth(date)} (${kgText(sameDay[sameDay.length - 1].weight)} kg). La remplacer ?`)) return;
+      sameDay.forEach((e) => deleteBodyweightEntry(e.id));
+    }
     updateBodyweightEntry(weightEditingId, { date, weight: rounded });
     showWeightFeedback("Pesée mise à jour !", false);
+  } else if (sameDay.length > 0) {
+    const kept = sameDay[sameDay.length - 1];
+    sameDay.slice(0, -1).forEach((e) => deleteBodyweightEntry(e.id));
+    updateBodyweightEntry(kept.id, { date, weight: rounded });
+    showWeightFeedback(isToday ? "Pesée du jour mise à jour !" : `Pesée du ${dayMonth(date)} mise à jour !`, false);
   } else {
     addBodyweightEntry(date, rounded);
     showWeightFeedback("Pesée enregistrée !", false);
@@ -570,6 +626,7 @@ function openMeasureEntrySheet() {
       <button type="button" class="rf-btn rf-btn-gold rf-btn-wide" data-act="save">Enregistrer</button>`);
     const dateInput = sheet.querySelector("#mz-measure-date");
     dateInput.value = todayLocalDateString();
+    dateInput.max = todayLocalDateString(); // v31 : pas de date future
     sheet.querySelectorAll("[data-key]").forEach((input) => {
       const s = summary[input.dataset.key];
       input.value = s ? cmText(s.value) : "";
@@ -596,6 +653,11 @@ function openMeasureEntrySheet() {
       }
       if (!isValidDateString(dateInput.value)) {
         fb.textContent = "Merci d'indiquer une date valide.";
+        fb.className = "form-feedback form-feedback-error";
+        return;
+      }
+      if (isFutureDate(dateInput.value)) { // v31
+        fb.textContent = FUTURE_DATE_MESSAGE;
         fb.className = "form-feedback form-feedback-error";
         return;
       }

@@ -256,9 +256,17 @@ function normalizeSearchText(text) {
  * "personnalisés" ajoutés une fois de réapparaître dans les listes.
  */
 function getAllKnownExercises() {
-  const used = getAllSessions()
-    .filter((s) => s.type === "musculation")
-    .flatMap((s) => (s.exercises || []).filter((ex) => ex && !isCardioEntry(ex)).map((ex) => ex.exercise));
+  // v31 : les exercices saisis dans un cours de spé ou un WOD comptent aussi
+  // (un exercice créé là-bas était oublié à la séance suivante).
+  const used = getAllSessions().flatMap((s) => {
+    if (s.type === "musculation") {
+      return (s.exercises || []).filter((ex) => ex && !isCardioEntry(ex)).map((ex) => ex.exercise);
+    }
+    if (s.type === "crossfit") {
+      return (s.exercises || []).filter((ex) => typeof ex === "object" && ex !== null).map((ex) => ex.exercise);
+    }
+    return [];
+  }).filter((name) => typeof name === "string" && name.trim() !== "");
   return Array.from(new Set([...DEFAULT_EXERCISES, ...used])).filter((name) => !isMeasuredExercise(name)).sort();
 }
 
@@ -486,7 +494,7 @@ function loadMuscuDraft() {
 
 function saveMuscuDraft() {
   try {
-    if (muscuDraft) localStorage.setItem(STORAGE_KEY_MUSCU_DRAFT, JSON.stringify(muscuDraft));
+    if (muscuDraft) storageWrite(STORAGE_KEY_MUSCU_DRAFT, JSON.stringify(muscuDraft), { silent: true });
     else localStorage.removeItem(STORAGE_KEY_MUSCU_DRAFT);
   } catch (error) {
     console.warn("Brouillon de séance non enregistré :", error);
@@ -754,6 +762,14 @@ muscuNameInput.addEventListener("input", () => {
 muscuDateInput.addEventListener("change", () => {
   if (!muscuDraft) return;
   if (!isValidDateString(muscuDateInput.value)) { muscuDateInput.value = muscuDraft.date; return; }
+  if (isFutureDate(muscuDateInput.value)) { // v31 : pas de séance datée de demain
+    muscuDateInput.value = isFutureDate(muscuDraft.date) ? todayLocalDateString() : muscuDraft.date;
+    muscuDraft.date = muscuDateInput.value;
+    saveMuscuDraft();
+    updateMuscuLiveTitle();
+    showMuscuFeedback(FUTURE_DATE_MESSAGE, true);
+    return;
+  }
   muscuDraft.date = muscuDateInput.value;
   saveMuscuDraft();
   updateMuscuLiveTitle();
@@ -882,6 +898,7 @@ function collectMuscuSession(draft) {
   if (exercises.length === 0) {
     return { error: "Remplis au moins une série (ou un test cardio) pour enregistrer ta séance." };
   }
+  if (isFutureDate(draft.date)) return { error: FUTURE_DATE_MESSAGE };
   const sessionData = {
     type: "musculation",
     date: isValidDateString(draft.date) ? draft.date : todayLocalDateString(),
@@ -944,9 +961,14 @@ function describeNameCounts(names) {
   return Object.keys(counts).map((name) => (counts[name] > 1 ? `${name} (${counts[name]})` : name)).join(", ");
 }
 
+/** Durée maximale crédible d'une séance : au-delà, elle est restée ouverte par oubli. */
+const MUSCU_MAX_DURATION_SECONDS = 6 * 3600;
+
 function openMuscuFinishSheet(result) {
   const { sessionData, doneCount, totalCount, unchecked, dropped } = result;
   const duration = muscuDraft.startedAt ? (Date.now() - muscuDraft.startedAt) / 1000 : 0;
+  // v31 : au-delà de 6 h la durée n'est pas enregistrée (séance restée ouverte), donc on ne l'affiche pas non plus
+  const durationKept = duration > 0 && duration <= MUSCU_MAX_DURATION_SECONDS;
   const volume = sessionData.exercises.reduce((total, entry) => total + (isCardioEntry(entry) || typeof computeExerciseVolume !== "function" ? 0 : computeExerciseVolume(entry, sessionData.date)), 0);
   const records = previewMuscuRecords(sessionData.exercises);
 
@@ -958,10 +980,13 @@ function openMuscuFinishSheet(result) {
     if (dropped.length > 0) {
       infos.push(`Rien de rempli pour ${escapeHtml(describeNameCounts(dropped))} : ${dropped.length > 1 ? "ils ne seront pas enregistrés" : "il ne sera pas enregistré"}.`);
     }
+    if (duration > MUSCU_MAX_DURATION_SECONDS) {
+      infos.push("Séance ouverte depuis plus de 6 h : la durée ne sera pas enregistrée (le reste, si).");
+    }
     sheet.insertAdjacentHTML("beforeend", `
       <h2>Terminer la séance ?</h2>
       <div class="rf-stats">
-        <div class="rf-stat"><b>${duration > 0 ? formatSessionDuration(duration) : "—"}</b><span>Durée</span></div>
+        <div class="rf-stat"><b>${durationKept ? formatSessionDuration(duration) : "—"}</b><span>Durée</span></div>
         <div class="rf-stat"><b>${doneCount} / ${totalCount}</b><span>Séries cochées</span></div>
         <div class="rf-stat"><b>${volume > 0 ? `${Math.round(volume).toLocaleString("fr-FR")} kg` : "—"}</b><span>Volume</span></div>
         <div class="rf-stat"><b>${records.length}</b><span>Record${records.length > 1 ? "s" : ""} battu${records.length > 1 ? "s" : ""}</span></div>
@@ -986,7 +1011,7 @@ function saveMuscuSession(result) {
   } else {
     if (muscuDraft.startedAt) {
       const duration = Math.round((Date.now() - muscuDraft.startedAt) / 1000);
-      if (duration > 0 && duration <= 6 * 3600) sessionData.durationSeconds = duration; // au-delà : séance oubliée ouverte
+      if (duration > 0 && duration <= MUSCU_MAX_DURATION_SECONDS) sessionData.durationSeconds = duration; // au-delà : séance oubliée ouverte
     }
     const recordsBefore = typeof computeMuscuRecords === "function" ? computeMuscuRecords() : {};
     const cardioBestsBefore = typeof computeCardioTestBests === "function" ? computeCardioTestBests() : {};
@@ -1224,11 +1249,10 @@ function renderMuscuHistory() {
   const filter = muscuFilterSelect.value || "all";
   const query = normalizeSearchText(muscuHistorySearch.value);
 
-  const sessions = getAllSessions()
+  const sessions = sortSessionsNewestFirst(getAllSessions()
     .filter((s) => s.type === "musculation")
     .filter((s) => filter === "all" || (s.exercises || []).some((ex) => ex.exercise === filter))
-    .filter((s) => !query || (s.exercises || []).some((ex) => exerciseMatchesSearch(ex.exercise, query)))
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+    .filter((s) => !query || (s.exercises || []).some((ex) => exerciseMatchesSearch(ex.exercise, query))));
 
   renderMuscuLastSeen(sessions, query);
   muscuHistoryList.innerHTML = "";

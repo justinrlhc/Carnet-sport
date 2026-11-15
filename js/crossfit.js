@@ -305,7 +305,7 @@ function loadCfDraft() {
 function saveCfDraft() {
   try {
     if (!cfState || isCfStatePristine(cfState)) localStorage.removeItem(STORAGE_KEY_CF_DRAFT);
-    else localStorage.setItem(STORAGE_KEY_CF_DRAFT, JSON.stringify(cfState));
+    else storageWrite(STORAGE_KEY_CF_DRAFT, JSON.stringify(cfState), { silent: true });
   } catch (error) {
     console.warn("Brouillon de WOD non enregistré :", error);
   }
@@ -412,7 +412,7 @@ function updateCfScoreCompare() {
   const time = readCfTime(cfState.timeMin, cfState.timeSec).seconds || null;
   const rounds = /^\d+$/.test(cfState.rounds.trim()) ? Number(cfState.rounds) : null;
   const extra = /^\d+$/.test(cfState.extraReps.trim()) ? Number(cfState.extraReps) : 0;
-  const perfText = (p) => `${p.rounds} round${p.rounds > 1 ? "s" : ""}${p.extraReps ? ` + ${p.extraReps} reps` : ""}`;
+  const perfText = (p) => `${roundsText(p.rounds)}${p.extraReps ? ` + ${repsText(p.extraReps)}` : ""}`;
 
   if (!cfTimeBlock.hidden && bestTime !== null) {
     let text = `Record ${label} : ${formatSecondsToTime(bestTime)}`;
@@ -622,8 +622,19 @@ function renderCfForm() {
 function selectCfWod(name) {
   const previousName = getCfWodName();
   if (name === cfState.wod && name !== CF_CUSTOM_WOD) return; // pastille déjà choisie : on ne réécrit pas ta saisie
-  cfState.wod = name;
   const preset = BENCHMARK_WODS[name];
+  // v31 : un benchmark remplace les mouvements. S'il y en a déjà que tu as
+  // saisis (ou retouchés), on demande avant ; « Annuler » ne change rien.
+  if (preset && name !== CF_CUSTOM_WOD && !isSpeSession(name)) {
+    const typed = cfState.wodItems.filter((item) => item && (item.kind !== "text" || String(item.text || "").trim() !== ""));
+    const untouchedPreset = BENCHMARK_WODS[previousName]
+      && JSON.stringify(cfState.wodItems) === JSON.stringify(buildBenchmarkItems(previousName, cfState.level));
+    if (typed.length > 0 && !untouchedPreset) {
+      const what = typed.length > 1 ? `les ${typed.length} lignes déjà saisies` : "la ligne déjà saisie";
+      if (!confirm(`« ${name} » va remplacer ${what} dans ce WOD.\n\nContinuer ?`)) return;
+    }
+  }
+  cfState.wod = name;
   if (name !== CF_CUSTOM_WOD && !isSpeSession(name)) {
     if (preset) {
       // v29 : format, schéma, mouvements, reps et charges RX remplis tout seuls
@@ -678,6 +689,13 @@ cfLevelSeg.addEventListener("click", (event) => {
 });
 cfDateInput.addEventListener("change", () => {
   if (!isValidDateString(cfDateInput.value)) { cfDateInput.value = cfState.date; return; }
+  if (isFutureDate(cfDateInput.value)) { // v31 : pas de séance datée de demain
+    cfDateInput.value = isFutureDate(cfState.date) ? todayLocalDateString() : cfState.date;
+    cfState.date = cfDateInput.value;
+    saveCfDraft();
+    showCfFeedback(FUTURE_DATE_MESSAGE, true);
+    return;
+  }
   cfState.date = cfDateInput.value;
   cfState.dateTouched = cfState.date !== todayLocalDateString() || Boolean(cfState.editingId);
   saveCfDraft();
@@ -728,16 +746,6 @@ cfAddExerciseBtn.addEventListener("click", () => {
 // CONVERSION DU TEMPS "mm:ss" <-> secondes
 // --------------------------------------------------------------------------
 
-/** "6:42" → 402 ; "1:02:30" → 3750 (au-delà d'une heure, ex. Murph). Null si illisible. */
-function parseTimeToSeconds(text) {
-  if (!text || !text.trim()) return null;
-  const value = text.trim().replace(/[.,]/g, ":");
-  if (!/^\d+(:[0-5]\d){1,2}$/.test(value)) return null;
-  const parts = value.split(":").map(Number);
-  const total = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
-  return total > 0 ? total : null;
-}
-
 /** 402 → "6:42" ; 3750 → "1:02:30" */
 function formatSecondsToTime(totalSeconds) {
   const total = Math.round(totalSeconds);
@@ -757,6 +765,7 @@ function collectCfSession() {
   if (!wodName) return { error: "Merci d'indiquer un nom de WOD." };
   refreshCfDateIfStale();
   const date = isValidDateString(cfState.date) ? cfState.date : todayLocalDateString();
+  if (isFutureDate(date)) return { error: FUTURE_DATE_MESSAGE };
   const notes = cfState.notes.trim();
 
   if (isSpeSession(wodName)) {
@@ -877,9 +886,21 @@ function submitCfForm() {
     // Les exercices structurés sont comparés à la charge maximale déjà
     // connue pour cet exercice (voir la note dans stats.js).
     const structuredEntries = sessionData.exercises.filter((entry) => typeof entry === "object" && entry !== null);
-    const newLiftRecords = (typeof detectStructuredWeightRecords === "function" && structuredEntries.length > 0)
-      ? detectStructuredWeightRecords(muscuRecordsBefore, structuredEntries)
-      : [];
+    let newLiftRecords = [];
+    if (isSpe && typeof detectMuscuNewRecords === "function") {
+      // v31 : un cours de spé se fait en vraies séries, donc mêmes règles
+      // qu'en musculation (1RM estimé, reps au poids du corps, reps à charge égale).
+      const grouped = {};
+      structuredEntries.forEach((entry) => {
+        if (getEntryUnit(entry) !== "reps") return; // calories, mètres : pas de record
+        if (!grouped[entry.exercise]) grouped[entry.exercise] = { exercise: entry.exercise, sets: [] };
+        grouped[entry.exercise].sets.push({ reps: entry.reps, weight: entry.weight || 0, warmup: entry.warmup === true });
+      });
+      newLiftRecords = detectMuscuNewRecords(muscuRecordsBefore, Object.values(grouped), sessionData.date)
+        .map((hit) => (hit.kind === "load" ? { ...hit, text: `1RM estimé ${hit.text}` } : hit));
+    } else if (typeof detectStructuredWeightRecords === "function" && structuredEntries.length > 0) {
+      newLiftRecords = detectStructuredWeightRecords(muscuRecordsBefore, structuredEntries);
+    }
 
     if (newRecord || newLiftRecords.length > 0) {
       showCfRecordBadge(wodName, newRecord, newLiftRecords);
@@ -1024,7 +1045,7 @@ function showCfRecordBadge(wodName, wodRecord, liftRecords) {
     const label = wodRecord.type === "time" ? "meilleur temps" : "meilleure performance";
     parts.push(`${escapeHtml(wodName)} ${wodRecord.level} — ${label} : ${wodRecord.value}`);
   }
-  (liftRecords || []).forEach((r) => parts.push(`${escapeHtml(r.exercise)} : ${formatNumberFr(r.value)} kg`));
+  (liftRecords || []).forEach((r) => parts.push(`${escapeHtml(r.exercise)} : ${r.text ? escapeHtml(r.text) : `${formatNumberFr(r.value)} kg`}`));
 
   cfFeedback.innerHTML = `
     <span class="record-badge">
@@ -1085,14 +1106,14 @@ function renderCfLastSeen(sessions, query) {
   cfLastSeen.style.display = "flex";
 }
 
-/** Construit le texte de résultat à afficher : "6:42" ou "18 rounds + 5 reps" */
+/** Construit le texte de résultat à afficher : "6:42", "18 rounds + 5 reps" ou "1 round + 1 rep" */
 function formatWodResult(session) {
   if (session.timeSeconds !== null && session.timeSeconds !== undefined) {
     return formatSecondsToTime(session.timeSeconds);
   }
   if (session.rounds !== null && session.rounds !== undefined) {
-    const extra = session.extraReps ? ` + ${session.extraReps} reps` : "";
-    return `${session.rounds} rounds${extra}`;
+    const extra = session.extraReps ? ` + ${repsText(session.extraReps)}` : "";
+    return `${roundsText(session.rounds)}${extra}`;
   }
   return "—";
 }
@@ -1102,12 +1123,11 @@ function renderCfHistory() {
   const levelFilter = cfFilterLevelSelect.value || "all";
   const query = normalizeSearchText(cfHistorySearch.value);
 
-  const sessions = getAllSessions()
+  const sessions = sortSessionsNewestFirst(getAllSessions()
     .filter((s) => s.type === "crossfit")
     .filter((s) => filter === "all" || s.wodName === filter)
     .filter((s) => levelFilter === "all" || s.rxOrScaled === levelFilter)
-    .filter((s) => cfSessionMatchesSearch(s, query))
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+    .filter((s) => cfSessionMatchesSearch(s, query)));
 
   renderCfLastSeen(sessions, query);
   cfHistoryList.innerHTML = "";
@@ -1129,7 +1149,7 @@ function renderCfHistory() {
           const unit = getEntryUnit(entry);
           const totalReps = isAmrap ? entry.reps * session.rounds + (entry.extraReps || 0) : entry.reps;
           const repsDetail = isAmrap
-            ? `${formatAmount(entry.reps, unit)} × ${session.rounds} tours${entry.extraReps ? ` + ${formatNumberFr(entry.extraReps)}` : ""} = ${formatAmount(totalReps, unit)}`
+            ? `${formatAmount(entry.reps, unit)} × ${session.rounds} tour${session.rounds > 1 ? "s" : ""}${entry.extraReps ? ` + ${formatNumberFr(entry.extraReps)}` : ""} = ${formatAmount(totalReps, unit)}`
             : formatAmount(totalReps, unit);
           const weightText = entry.weight > 0 ? ` à ${formatNumberFr(entry.weight)} kg` : "";
           const volume = typeof computeCrossfitStructuredVolume === "function"

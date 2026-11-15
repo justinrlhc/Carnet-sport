@@ -324,7 +324,7 @@ function detectMuscuNewRecords(recordsBeforeSave, newExercises, sessionDate, car
     const previousLoad = Math.max(before && before.oneRM ? before.oneRM.value : 0, manualLoads[entry.exercise] ? Number(manualLoads[entry.exercise].weight) || 0 : 0);
     if (after.oneRM && after.oneRM.value > 0 && after.oneRM.date === sessionDate && after.oneRM.value > previousLoad) {
       const value = Math.round(after.oneRM.value);
-      hits.push({ exercise: entry.exercise, value, text: `${formatNumberFr(value)} kg` });
+      hits.push({ exercise: entry.exercise, value, text: `${formatNumberFr(value)} kg`, kind: "load" });
       return;
     }
     // v30 : plus de reps qu'avant à cette charge (40 kg × 12 après 40 kg × 10)
@@ -379,7 +379,9 @@ const btnCancel1rmForm = document.getElementById("btn-cancel-1rm-form");
 const manualCfForm = document.getElementById("manual-cf-record-form");
 const manualCfWodSelect = document.getElementById("manual-cf-wod-select");
 const manualCfWodCustom = document.getElementById("manual-cf-wod-custom");
-const manualCfTimeInput = document.getElementById("manual-cf-time");
+const manualCfTimeMinInput = document.getElementById("manual-cf-time-min");
+const manualCfTimeSecInput = document.getElementById("manual-cf-time-sec");
+const manualCfFeedback = document.getElementById("manual-cf-feedback");
 const manualCfRoundsInput = document.getElementById("manual-cf-rounds");
 const manualCfExtraRepsInput = document.getElementById("manual-cf-extra-reps");
 const manualCfDateInput = document.getElementById("manual-cf-date");
@@ -537,7 +539,7 @@ function buildExerciseRecord(exercise, data) {
     const date = manualRepsIsBest ? manualReps.date : sessionReps.date;
     const lest = !manualRepsIsBest && sessionReps.weight > 0 ? ` · lesté ${kg(sessionReps.weight)}` : "";
     Object.assign(entry, {
-      value: `${reps} reps`,
+      value: repsText(reps),
       big: String(reps),
       bigUnit: "reps",
       label: manualRepsIsBest ? "reps notées" : "en une série",
@@ -549,7 +551,7 @@ function buildExerciseRecord(exercise, data) {
   } else if (repsOnly) {
     Object.assign(entry, {
       group: "bw",
-      value: `${repsOnly.value} reps`,
+      value: repsText(repsOnly.value),
       big: String(repsOnly.value),
       bigUnit: "reps",
       label: "en une série",
@@ -579,10 +581,10 @@ function buildExerciseRecord(exercise, data) {
     entry.tiles.push({ v: `${kg(sessionRec.maxWeight.value)}${sessionRec.maxWeight.reps ? ` × ${sessionRec.maxWeight.reps}` : ""}`, l: `${isBW ? "Lest max" : "Charge max"}${fromWod}` });
   }
   if (sessionRec && sessionRec.maxReps && !showReps && !repsOnly) {
-    entry.tiles.push({ v: `${sessionRec.maxReps.value} reps`, l: sessionRec.maxReps.weight > 0 ? `Reps max (à ${kg(sessionRec.maxReps.weight)})` : "Reps max" });
+    entry.tiles.push({ v: repsText(sessionRec.maxReps.value), l: sessionRec.maxReps.weight > 0 ? `Reps max (à ${kg(sessionRec.maxReps.weight)})` : "Reps max" });
   }
-  if (showReps && manualRepsIsBest && sessionReps) entry.tiles.push({ v: `${sessionReps.value} reps`, l: "En séance" });
-  if (showReps && manualReps && !manualRepsIsBest) entry.tiles.push({ v: `${manualReps.reps} reps`, l: "Reps notées" });
+  if (showReps && manualRepsIsBest && sessionReps) entry.tiles.push({ v: repsText(sessionReps.value), l: "En séance" });
+  if (showReps && manualReps && !manualRepsIsBest) entry.tiles.push({ v: repsText(manualReps.reps), l: "Reps notées" });
   if (manual && isBW && showReps) entry.tiles.push({ v: kg(manual.weight), l: "Lest max noté (1 rep)" });
   else if (manual && estimate && headline && headline.source === "manual" && Math.round(estimate.value) !== Math.round(manual.weight)) {
     entry.tiles.push({ v: kg(Math.round(estimate.value)), l: "Estimé d'après tes séances" });
@@ -887,7 +889,7 @@ function openWodRecordSheet(entry) {
     const sessions = getAllSessions()
       .filter((s) => s.type === "crossfit" && s.wodName === entry.name)
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-    const score = (s) => (s.timeSeconds > 0 ? formatSecondsToTime(s.timeSeconds) : typeof s.rounds === "number" ? `${s.rounds}${s.extraReps ? ` + ${s.extraReps}` : ""} rounds` : "—");
+    const score = (s) => (s.timeSeconds > 0 ? formatSecondsToTime(s.timeSeconds) : typeof s.rounds === "number" ? roundsScoreText(s.rounds, s.extraReps) : "—");
     const isBest = (s) => {
       const rec = entry.byLevel[getCfLevel(s)];
       if (!rec) return false;
@@ -901,7 +903,7 @@ function openWodRecordSheet(entry) {
     });
     if (entry.manual) {
       const level = getCfLevel(entry.manual);
-      const value = entry.manual.timeSeconds > 0 ? formatSecondsToTime(entry.manual.timeSeconds) : `${entry.manual.rounds}${entry.manual.extraReps ? ` + ${entry.manual.extraReps}` : ""} rounds`;
+      const value = entry.manual.timeSeconds > 0 ? formatSecondsToTime(entry.manual.timeSeconds) : roundsScoreText(entry.manual.rounds, entry.manual.extraReps);
       rows.push(`<div><span>${entry.manual.date ? escapeHtml(recordDay(entry.manual.date)) : "—"}</span><b><span class="rc-lvl ${getLevelBadgeClass(level)}">${level}</span>${escapeHtml(value)}</b><em class="noted">noté</em></div>`);
     }
     sheet.insertAdjacentHTML("beforeend", `
@@ -936,7 +938,8 @@ if (recordsInfoBtn) {
   recordsInfoBtn.addEventListener("click", () => openSheet((sheet, close) => {
     sheet.insertAdjacentHTML("beforeend", `
       <h2>Comment sont calculés tes records ?</h2>
-      <p class="rc-info-p"><b>1RM estimé</b> : calculé à partir de tes séries avec la formule d'Epley, au-delà de 10 reps, une série compte comme une série de 10. Une estimation n'est jamais une valeur mesurée.</p>
+      <p class="rc-info-p"><b>1RM estimé</b> : calculé à partir de tes séries avec la formule d'Epley. Au-delà de 10 reps, une série compte comme une série de 10. Une estimation n'est jamais une valeur mesurée.</p>
+      <p class="rc-info-p"><b>Plus de reps à la même charge</b> : 40 kg × 12 après 40 kg × 10 est aussi un record, même si le 1RM estimé ne bouge pas. Il faut avoir déjà fait cette charge, et ne jamais avoir fait autant de reps à cette charge ou plus lourd.</p>
       <p class="rc-info-p"><b>1RM noté</b> : une charge que tu as vraiment testée et notée à la main. Elle est affichée si elle est plus haute que l'estimation.</p>
       <p class="rc-info-p"><b>Poids du corps</b> : le plus de reps d'affilée en une série. <b>Cardio</b> : ton meilleur temps. <b>WOD</b> : ton meilleur score, niveau par niveau (RX, Inter, Scaled) ; le « WOD du jour » n'a pas de record.</p>
       <p class="rc-info-p">Les séries d'échauffement ne comptent jamais.</p>
@@ -1028,7 +1031,7 @@ function computeRecordHistory() {
           gain = `−${formatDuration(previous - t.value)}`;
           detail = "test chrono";
         } else if (t.mode === "reps") {
-          value = `${t.value} reps`;
+          value = repsText(t.value);
           gain = `+${t.value - previous} rep${t.value - previous > 1 ? "s" : ""}`;
           detail = t.set.weight > 0 ? `lesté ${formatNumberFr(t.set.weight)} kg` : "";
         } else {
@@ -1074,8 +1077,8 @@ function computeRecordHistory() {
         const previous = best[key];
         if (previous !== undefined && isBetterPerformance(perf, previous)) {
           const roundGain = perf.rounds - previous.rounds;
-          const gain = roundGain > 0 ? `+${roundGain} round${roundGain > 1 ? "s" : ""}` : `+${perf.extraReps - previous.extraReps} reps`;
-          events.push({ date: session.date, title, value: `${perf.rounds}${perf.extraReps ? ` + ${perf.extraReps}` : ""} rounds`, gain, detail: "", target: { section: "wod", name: session.wodName } });
+          const gain = roundGain > 0 ? `+${roundGain} round${roundGain > 1 ? "s" : ""}` : `+${repsText(perf.extraReps - previous.extraReps)}`;
+          events.push({ date: session.date, title, value: roundsScoreText(perf.rounds, perf.extraReps), gain, detail: "", target: { section: "wod", name: session.wodName } });
         }
         if (previous === undefined || isBetterPerformance(perf, previous)) best[key] = perf;
       }
@@ -1276,6 +1279,7 @@ function fillManualPerfValues(existing) {
     } else if (manualPerfMode === "load") manual1rmWeightInput.value = entry.weight;
   }
   manual1rmDateInput.value = entry && entry.date ? entry.date : todayLocalDateString();
+  capDateInput(manual1rmDateInput);
   manual1rmNotesInput.value = entry ? entry.notes || "" : "";
 }
 
@@ -1364,6 +1368,10 @@ if (manual1rmForm) {
       return;
     }
     const date = manual1rmDateInput.value || todayLocalDateString();
+    if (isFutureDate(date)) { // v31
+      showManualFeedback(FUTURE_DATE_MESSAGE);
+      return;
+    }
     const notes = manual1rmNotesInput.value.trim();
     const rawValue = String(manual1rmWeightInput.value).trim().replace(",", ".");
 
@@ -1436,8 +1444,12 @@ function openCfRecordForm(wodToPrefill, existingManualEntry) {
     }
   }
 
-  manualCfTimeInput.value = existingManualEntry && existingManualEntry.timeSeconds != null
-    ? formatSecondsToTime(existingManualEntry.timeSeconds) : "";
+  // v31 : minutes et secondes dans deux cases (62 min 30 s pour un WOD de plus d'une heure)
+  const knownTime = existingManualEntry && existingManualEntry.timeSeconds > 0 ? Math.round(existingManualEntry.timeSeconds) : null;
+  manualCfTimeMinInput.value = knownTime !== null ? String(Math.floor(knownTime / 60)) : "";
+  manualCfTimeSecInput.value = knownTime !== null ? String(knownTime % 60) : "";
+  showManualCfFeedback("");
+  capDateInput(manualCfDateInput);
   manualCfRoundsInput.value = existingManualEntry && existingManualEntry.rounds != null ? existingManualEntry.rounds : "";
   manualCfExtraRepsInput.value = existingManualEntry && existingManualEntry.extraReps != null ? existingManualEntry.extraReps : "";
   manualCfDateInput.value = existingManualEntry ? existingManualEntry.date : todayLocalDateString();
@@ -1455,30 +1467,60 @@ if (manualCfWodSelect) {
   });
 }
 
+function showManualCfFeedback(message) {
+  if (manualCfFeedback) manualCfFeedback.textContent = message;
+}
+
 if (btnCancelCfForm) {
-  btnCancelCfForm.addEventListener("click", () => { manualCfForm.style.display = "none"; manualCfForm.reset(); });
+  btnCancelCfForm.addEventListener("click", () => { manualCfForm.style.display = "none"; manualCfForm.reset(); showManualCfFeedback(""); });
 }
 
 if (manualCfForm) {
   manualCfForm.addEventListener("submit", (event) => {
     event.preventDefault();
 
+    // v31 : chaque saisie refusée dit pourquoi (avant, le bouton ne faisait rien)
     const isCustom = manualCfWodSelect.value === "__custom__";
     const wodName = isCustom ? manualCfWodCustom.value.trim() : manualCfWodSelect.value;
-    if (!wodName) return;
+    if (!wodName) { showManualCfFeedback("Choisis ou écris le nom du WOD."); return; }
 
-    const timeSeconds = typeof parseTimeToSeconds === "function" ? parseTimeToSeconds(manualCfTimeInput.value) : null;
-    const rounds = manualCfRoundsInput.value ? Number(manualCfRoundsInput.value) : null;
-    const extraReps = manualCfExtraRepsInput.value ? Number(manualCfExtraRepsInput.value) : null;
+    const time = typeof readCfTime === "function"
+      ? readCfTime(manualCfTimeMinInput.value, manualCfTimeSecInput.value)
+      : { seconds: null };
+    if (time.error) { showManualCfFeedback(time.error); return; }
+    const timeSeconds = time.seconds;
 
-    if (timeSeconds === null && rounds === null) return;
+    const readCount = (input, label) => {
+      const text = String(input.value).trim();
+      if (!text) return { value: null };
+      return /^\d+$/.test(text) ? { value: Number(text) } : { error: `${label} : indique un nombre entier.` };
+    };
+    const roundsRead = readCount(manualCfRoundsInput, "Rounds");
+    if (roundsRead.error) { showManualCfFeedback(roundsRead.error); return; }
+    const extraRead = readCount(manualCfExtraRepsInput, "Reps en plus");
+    if (extraRead.error) { showManualCfFeedback(extraRead.error); return; }
+    const extraReps = extraRead.value;
+    // Des reps en plus sans round complet = 0 round + ces reps
+    const rounds = roundsRead.value === null && extraReps !== null && timeSeconds === null ? 0 : roundsRead.value;
+
+    if (timeSeconds === null && rounds === null) {
+      showManualCfFeedback("Indique ton temps (minutes et secondes) ou ton nombre de rounds.");
+      return;
+    }
+    if (timeSeconds === null && rounds === 0 && !(extraReps > 0)) {
+      showManualCfFeedback("Indique au moins un round ou quelques reps.");
+      return;
+    }
+    const date = manualCfDateInput.value || todayLocalDateString();
+    if (isFutureDate(date)) { showManualCfFeedback(FUTURE_DATE_MESSAGE); return; }
+    showManualCfFeedback("");
 
     setManualCfBest(wodName, {
       timeSeconds,
       rounds,
       extraReps,
       level: manualCfLevelSelect ? manualCfLevelSelect.value : "RX",
-      date: manualCfDateInput.value || todayLocalDateString(),
+      date,
       notes: manualCfNotesInput.value.trim(),
     });
 

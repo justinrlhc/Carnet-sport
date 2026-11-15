@@ -541,7 +541,7 @@ function getUnlockedAchievements() {
 }
 
 function saveUnlockedAchievements(unlocked) {
-  localStorage.setItem(STORAGE_KEY_ACHIEVEMENTS, JSON.stringify(unlocked));
+  storageWrite(STORAGE_KEY_ACHIEVEMENTS, JSON.stringify(unlocked));
 }
 
 // --------------------------------------------------------------------------
@@ -570,7 +570,7 @@ function syncRanksAndAchievements(options) {
       rankUps.push({ item, fromIndex: previous });
     }
   }));
-  localStorage.setItem(STORAGE_KEY_RANK_SNAPSHOT, JSON.stringify(newSnapshot));
+  storageWrite(STORAGE_KEY_RANK_SNAPSHOT, JSON.stringify(newSnapshot));
 
   const unlocked = getUnlockedAchievements();
   const newAchievements = [];

@@ -2659,3 +2659,9 @@ button.st-day:active { filter: brightness(1.3); }
   .hc-pr { padding: 3px 5px; }
   .hc-body { padding-left: 14px; }
 }
+
+/* ==========================================================================
+   v31 — « Noter un résultat de WOD » : temps en minutes + secondes
+   ========================================================================== */
+/* Deux champs côte à côte : alignés par le bas même si un libellé passe sur 2 lignes */
+.form-row-inline-end { align-items: end; }
